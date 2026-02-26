@@ -19,7 +19,12 @@ i32 main() {
 	//  neg ebx
 	//  and eax, ebx
 
+	// parse
 	so::arr<so::inst> parsed = so::parser::parse(snippet);
+	so::print("parsed {} instructions\n", parsed.size());
+	for(const so::inst& inst : parsed) {
+		so::print("{}\n", inst.to_string());
+	}
 
 	return 0;
 }

@@ -31,6 +31,8 @@ namespace so {
 	};
 
 	auto token_to_str(token tok) -> const char*;
+	auto token_is_reg(token tok) -> bool;
+	auto token_to_reg_index(token tok) -> u64;
 
 	struct tokenizer_result {
 		arr<token> value;

@@ -24,6 +24,19 @@ namespace so {
 		}
 	}
 
+	auto token_is_reg(token tok) -> bool {
+		switch(tok) {
+			case TOK_REG_EAX:
+			case TOK_REG_EBX: return true;
+			default: return false;
+		}
+	}
+
+	auto token_to_reg_index(token tok) -> u64 {
+		ASSERT(token_is_reg(tok), "token is not a register");
+		return tok - TOK_REG_EAX;
+	}
+
 	tokenizer::tokenizer(const str& source) : m_source(source) {}
 
 	auto tokenizer::next_tok() -> token {
