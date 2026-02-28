@@ -7,51 +7,90 @@ using namespace so::type;
 constexpr u32 NUM_TESTS = 256;
 constexpr u32 BLOCK_SIZE = 256;
 
-i32 main() {
-	// input
-	// program to optimize
-	so::str program_source =
-		"mov ebx, eax\n"
-		"sub ebx, 1\n"
-		"not ebx\n"
-		"and eax, ebx\n";
+so::arr<u8> ALL_REG_IDS = {
+	so::reg::EAX,
+	so::reg::EBX,
+	so::reg::ECX,
+	so::reg::EDX,
+	so::reg::ESI,
+	so::reg::EDI,
+};
 
-	// registers that have to match reference
-	so::reg_mask live_out =
-		(1u << so::reg::EAX);
+so::arr<so::inst_opcode> ALL_OPCODES = {
+	so::INST_MOV,
+	so::INST_SUB,
+	so::INST_NOT,
+	so::INST_AND,
+	so::INST_NEG
+};
 
-	// allowed registers
-	so::arr<u8> reg_ids = {
-		so::reg::EAX,
-		so::reg::EBX,
-		so::reg::ECX,
-		so::reg::EDX,
-		so::reg::ESI,
-		so::reg::EDI,
+void optimize(
+	const so::str& program,
+	so::reg_mask live_out,
+	const so::arr<u8>& allowed_regs = ALL_REG_IDS,
+	const so::arr<so::inst_opcode>& allowed_opcodes = ALL_OPCODES
+) {
+	// print info
+	so::print("> program:\n");
+	so::arr<so::inst> instructions = so::parser::parse(program);
 
-	};
-
-	// allowed opcodes
-	so::arr<so::inst_opcode> opcodes = {
-		so::INST_MOV,
-		so::INST_SUB,
-		so::INST_NOT,
-		so::INST_AND,
-		so::INST_NEG
-	};
-
-
-	// parse
-	so::arr<so::inst> program = so::parser::parse(program_source);
-	so::print("> original program:\n");
-
-	for(const so::inst& inst : program) {
+	for(const so::inst& inst : instructions) {
 		inst.print();
 	}
 
+	so::print("> live out: ");
+	bool first = true;
+
+	for(u8 r = 0; r < so::REG_COUNT; ++r) {
+		if(live_out & (1u << r)) {
+			if(!first) {
+				so::print(", ");
+			}
+
+			so::print("{}", so::reg(r).to_string());
+			first = false;
+		}
+	}
+
+	so::print("\n");
+	so::print("> allowed regs: ");
+	first = true;
+
+	for(u8 r : allowed_regs) {
+		if(!first) {
+			so::print(", ");
+		}
+
+		so::print("{}", so::reg(r).to_string());
+		first = false;
+	}
+
+	so::print("\n");
+	so::print("> allowed opcodes: ");
+	first = true;
+
+	for(so::inst_opcode op : allowed_opcodes) {
+		if(!first) {
+			so::print(", ");
+		}
+		// TODO:
+		// find name from INSTRUCTION_DB
+		for(u32 i = 0; i < so::INSTRUCTION_DB_SIZE; ++i) {
+			if(so::tag_opcode(so::INSTRUCTION_DB[i].tag) == op) {
+				so::print("{}", so::INSTRUCTION_DB[i].name);
+				break;
+			}
+		}
+
+		first = false;
+	}
+
+	so::print("\n\n");
+
+	// begin optimization
 	// TODO: allow setting explicitly, this is a safe default
 	so::reg_mask live_in = 0;
-	for(u8 r : reg_ids) {
+	for(u8 r : allowed_regs) {
 		live_in |= (1u << r);
 	}
 
@@ -66,7 +105,7 @@ i32 main() {
 		so::cpu_state state = h_test_inputs[t];
 
 		for(u32 i = 0; i < program.size(); ++i) {
-			so::execute_inst(state, program[i]);
+			so::execute_inst(state, instructions[i]);
 		}
 
 		h_ref_outputs[t] = state;
@@ -92,7 +131,7 @@ i32 main() {
 	for(u32 len = 1; len < baseline_len; ++len) {
 		so::arr<so::inst> current;
 		so::arr<so::inst> flat_buffer;
-		so::generate_candidates(current, len, opcodes, reg_ids, flat_buffer);
+		so::generate_candidates(current, len, allowed_opcodes, allowed_regs, flat_buffer);
 
 		u32 num_candidates = (u32)flat_buffer.size() / len;
 		so::print("> searching len {} ({} candidates)\n", len, num_candidates);
@@ -151,6 +190,22 @@ i32 main() {
 	cudaFree(d_test_inputs);
 	cudaFree(d_ref_outputs);
 	cudaFree(d_result);
+}
+
+i32 main() {
+	// input
+	// program to optimize
+	so::str program =
+		"mov ebx, eax\n"
+		"sub ebx, 1\n"
+		"not ebx\n"
+		"and eax, ebx\n";
+
+	// registers that have to match reference
+	so::reg_mask live_out =
+		(1u << so::reg::EAX);
+
+	optimize(program, live_out);
 	return 0;
 }
 
