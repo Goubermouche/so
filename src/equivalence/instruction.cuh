@@ -5,12 +5,29 @@
 
 namespace so {
 	// registers
-	constexpr u8 REG_COUNT = 2;
+	constexpr u8 REG_COUNT = 6;
 
-	enum register_type {
-		REG_EAX,
-		REG_EBX
+	struct reg {
+		enum type : u8 {
+			EAX = 0,
+			EBX,
+			ECX,
+			EDX,
+			ESI,
+			EDI,
+		};
+
+		reg() = default;
+		HD reg(u8 index) : m_type(static_cast<type>(index)) {}
+		HD operator u8() const { return static_cast<u8>(m_type); }
+		HD const char* to_string() const {
+			constexpr const char* names[] = { "eax", "ebx", "ecx", "edx", "esi", "edi" };
+			return names[m_type];
+		}
+	private:
+		type m_type;
 	};
+
 	enum inst_op : u8 {
 		OP_N = 0,
 		OP_R = 0b01,
@@ -118,12 +135,11 @@ namespace so {
 			for(u8 i = 0; i < operand_count; ++i) {
 				switch(tag_op(tag, i)) {
 					case OP_R: {
-						const char* regs[] = { "eax", "ebx" };
-						so::print("{}", regs[ops[i]]);
+						so::print("{}", ops[i].r.to_string());
 						break;
 					}
 					case OP_I: {
-						so::print("{}", ops[i]);
+						so::print("{}", ops[i].i);
 						break;
 					}
 					default: ASSERT(false, "");
@@ -137,7 +153,11 @@ namespace so {
 		}
 
 		inst_tag tag;
-		u64 ops[2];
+
+		union {
+			reg r;
+			u32 i;
+		} ops[2];
 	};
 } // namespace so
 

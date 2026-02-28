@@ -2,10 +2,74 @@
 
 namespace so {
 	bool is_valid_next(const arr<inst>& prog, const inst& next) {
-		// TODO: remove pointless candidates
+	inst_opcode op = tag_opcode(next.tag);
+	u32 op_count = tag_op_count(next.tag);
+
+	// identity no-ops
+	if(op_count == 2 && tag_op(next.tag, 0) == OP_R && tag_op(next.tag, 1) == OP_R) {
+		if(next.ops[0].r == next.ops[1].r) {
+			if(op == INST_MOV || op == INST_AND) {
+				return false;
+			}
+		}
+	}
+
+	// sub r, 0
+	if(op == INST_SUB && tag_op(next.tag, 1) == OP_I && next.ops[1].i == 0) {
+		return false;
+	}
+
+	if(prog.empty()) {
 		return true;
 	}
 
+	const inst& prev = prog.back();
+	inst_opcode prev_op = tag_opcode(prev.tag);
+	u32 prev_op_count = tag_op_count(prev.tag);
+
+	bool prev_has_dst = (prev_op_count > 0);
+	bool next_has_dst = (op_count > 0);
+
+	if(prev_has_dst && next_has_dst && prev.ops[0].r == next.ops[0].r) {
+		// dead write
+		if (op == INST_MOV && tag_op(next.tag, 1) == OP_R) {
+			return false;
+		}
+
+		// self-cancelling pairs
+		if(prev_op == INST_NOT && op == INST_NOT) {
+			return false;
+		}
+
+		if(prev_op == INST_NEG && op == INST_NEG) {
+			return false;
+		}
+
+		// neg + not or not + neg
+		if(prev_op == INST_NEG && op == INST_NOT) {
+			return false;
+		}
+
+		if(prev_op == INST_NOT && op == INST_NEG) {
+			return false;
+		}
+	}
+
+	// redundant mov chain
+	if(
+		prev_op == INST_MOV &&
+		op == INST_MOV &&
+		prev_op_count == 2 &&
+		op_count == 2 &&
+		tag_op(prev.tag, 1) == OP_R &&
+		tag_op(next.tag, 1) == OP_R &&
+		prev.ops[0].r == next.ops[1].r
+	) {
+		return false;
+	}
+
+	return true;
+}
 	void try_candidate(
 		arr<inst>& current,
 		u32 target_len,
@@ -45,7 +109,7 @@ namespace so {
 		for(u8 dst : regs) {
 			inst next{};
 			next.tag = tag;
-			next.ops[0] = dst;
+			next.ops[0].r = dst;
 			try_candidate(current, target_len, opcodes, regs, out_flat, next);
 		}
 	}
@@ -62,8 +126,8 @@ namespace so {
 			for(u8 src : regs) {
 				inst next{};
 				next.tag = tag;
-				next.ops[0] = dst;
-				next.ops[1] = src;
+				next.ops[0].r = dst;
+				next.ops[1].r = src;
 				try_candidate(current, target_len, opcodes, regs, out_flat, next);
 			}
 		}
@@ -82,8 +146,8 @@ namespace so {
 			for(u64 imm : immediates) {
 				inst next{};
 				next.tag = tag;
-				next.ops[0] = dst;
-				next.ops[1] = imm;
+				next.ops[0].r = dst;
+				next.ops[1].i = imm;
 				try_candidate(current, target_len, opcodes, regs, out_flat, next);
 			}
 		}

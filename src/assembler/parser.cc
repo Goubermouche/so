@@ -27,18 +27,18 @@ namespace so {
 			// operands
 			while(tok.curr != TOK_NEWLINE && operand_count < 2) {
 				if(token_is_reg(tok.curr)) {
-					curr_inst.ops[operand_count] = token_to_reg_index(tok.curr);
+					curr_inst.ops[operand_count].r = token_to_reg_index(tok.curr);
 					operands[operand_count] = OP_R;
 				}
 				else if(tok.curr == TOK_NUMBER) {
-					curr_inst.ops[operand_count] = tok.curr_imm;
+					curr_inst.ops[operand_count].i = tok.curr_imm;
 					operands[operand_count] = OP_I;
 				}
 				else {
 					ASSERT(false, "unrecognized operand type received");
 				}
 
-				operand_count++;
+	 			operand_count++;
 
 				if(tok.next_tok() != TOK_COMMA) {
 					break;

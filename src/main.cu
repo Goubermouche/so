@@ -9,14 +9,37 @@ constexpr u32 BLOCK_SIZE = 256;
 
 i32 main() {
 	// input
+	// program to optimize
 	so::str program_source =
 		"mov ebx, eax\n"
 		"sub ebx, 1\n"
 		"not ebx\n"
 		"and eax, ebx\n";
 
-	so::reg_mask live_in  = (1u << so::REG_EAX) | (1u << so::REG_EBX);
-	so::reg_mask live_out = (1u << so::REG_EAX);
+	// registers that have to match reference
+	so::reg_mask live_out =
+		(1u << so::reg::EAX);
+
+	// allowed registers
+	so::arr<u8> reg_ids = {
+		so::reg::EAX,
+		so::reg::EBX,
+		so::reg::ECX,
+		so::reg::EDX,
+		so::reg::ESI,
+		so::reg::EDI,
+
+	};
+
+	// allowed opcodes
+	so::arr<so::inst_opcode> opcodes = {
+		so::INST_MOV,
+		so::INST_SUB,
+		so::INST_NOT,
+		so::INST_AND,
+		so::INST_NEG
+	};
+
 
 	// parse
 	so::arr<so::inst> program = so::parser::parse(program_source);
@@ -24,6 +47,12 @@ i32 main() {
 
 	for(const so::inst& inst : program) {
 		inst.print();
+	}
+
+	// TODO: allow setting explicitly, this is a safe default
+	so::reg_mask live_in = 0;
+	for(u8 r : reg_ids) {
+		live_in |= (1u << r);
 	}
 
 	// generate test inputs
@@ -56,8 +85,6 @@ i32 main() {
 	so::check_cuda(cudaMalloc(&d_result, sizeof(i32)), "alloc result");
 
 	// bounded search
-	so::arr<so::inst_opcode> opcodes = {so::INST_MOV, so::INST_SUB, so::INST_NOT, so::INST_AND, so::INST_NEG};
-	so::arr<u8> reg_ids = {so::REG_EAX, so::REG_EBX};
 	u32 baseline_len = (u32)program.size();
 	auto search_start = std::chrono::high_resolution_clock::now();
 	bool found = false;
