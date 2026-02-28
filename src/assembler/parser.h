@@ -6,8 +6,6 @@
 namespace so {
 	struct parser {
 		static auto parse(const str& source) -> arr<inst>;
-	private:
-		static auto identifier_to_opcode(const str& ident) -> opcode;
 	};
 } // namespace so
 

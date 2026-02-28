@@ -1,17 +1,22 @@
 #ifndef TYPE_H
 #define TYPE_H
 
-#include<stdint.h>
-#include<cctype>
-#include<cstdio>
-#include<string>
-#include<vector>
-#include<unordered_map>
-#include<sstream>
+#include <stdint.h>
+#include <cctype>
+#include <cstdio>
+#include <cstring>
+#include <string>
+#include <vector>
+#include <unordered_map>
+#include <sstream>
+#include <chrono>
+#include <climits>
+#include <array>
+#include <cuda_runtime.h>
 
 namespace so {
 	namespace type {
-		using u8  = uint8_t;
+using u8  = uint8_t;
 		using u16 = uint16_t;
 		using u32 = uint32_t;
 		using u64 = uint64_t;
@@ -63,6 +68,14 @@ namespace so {
 
 	inline void flush() {
 		std::fflush(stdout);
+	}
+
+	inline void check_cuda(cudaError_t err, const char* msg) {
+		if(err != cudaSuccess) {
+			print_err("CUDA error [{}]: {}\n", msg, cudaGetErrorString(err));
+			flush();
+			exit(1);
+		}
 	}
 } // namespace so
 

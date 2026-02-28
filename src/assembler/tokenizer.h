@@ -1,8 +1,7 @@
 #ifndef TOKENIZER_H
 #define TOKENIZER_H
 
-#include "utility/type.h"
-#include "instruction.h"
+#include "equivalence/instruction.cuh"
 
 namespace so {
 	enum token {
