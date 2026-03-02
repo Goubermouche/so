@@ -40,6 +40,10 @@ namespace so {
 		INST_NOT,
 		INST_AND,
 		INST_NEG,
+		INST_OR,
+		INST_XOR,
+		INST_SHL,
+		INST_SHR,
 	};
 
 	enum inst_tag : u32;
@@ -88,6 +92,10 @@ namespace so {
 		INST_NOT_R  = encode_tag(INST_NOT, OP_R),
 		INST_AND_RR = encode_tag(INST_AND, OP_R, OP_R),
 		INST_NEG_R  = encode_tag(INST_NEG, OP_R),
+		INST_OR_RR  = encode_tag(INST_OR,  OP_R, OP_R),
+		INST_XOR_RR = encode_tag(INST_XOR, OP_R, OP_R),
+		INST_SHL_RI = encode_tag(INST_SHL, OP_R, OP_I),
+		INST_SHR_RI = encode_tag(INST_SHR, OP_R, OP_I),
 	};
 
 	constexpr inst_variant INSTRUCTION_DB[] = {
@@ -97,6 +105,10 @@ namespace so {
 		inst_variant("not", INST_NOT_R),
 		inst_variant("and", INST_AND_RR),
 		inst_variant("neg", INST_NEG_R),
+		inst_variant("or",  INST_OR_RR),
+		inst_variant("xor", INST_XOR_RR),
+		inst_variant("shl", INST_SHL_RI),
+		inst_variant("shr", INST_SHR_RI),
 	};
 
 	constexpr u32 INSTRUCTION_DB_SIZE = sizeof(INSTRUCTION_DB) / sizeof(INSTRUCTION_DB[0]);

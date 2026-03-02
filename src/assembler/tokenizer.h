@@ -13,6 +13,10 @@ namespace so {
 		// regs
 		TOK_REG_EAX,
 		TOK_REG_EBX,
+		TOK_REG_ECX,
+		TOK_REG_EDX,
+		TOK_REG_ESI,
+		TOK_REG_EDI,
 
 		// other
 		TOK_COMMA,

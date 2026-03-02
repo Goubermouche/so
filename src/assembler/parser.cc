@@ -35,7 +35,7 @@ namespace so {
 					operands[operand_count] = OP_I;
 				}
 				else {
-					ASSERT(false, "unrecognized operand type received");
+					ASSERT(false, "unrecognized operand type received ('{}')", token_to_str(tok.curr));
 				}
 
 	 			operand_count++;

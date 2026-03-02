@@ -1,5 +1,5 @@
-## so
-x86-64 Instruction superoptimizer
+## so [wip]
+x86-64 Instruction superoptimizer accelerated by CUDA.
 
 ## build
 ```

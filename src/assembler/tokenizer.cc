@@ -27,7 +27,11 @@ namespace so {
 	auto token_is_reg(token tok) -> bool {
 		switch(tok) {
 			case TOK_REG_EAX:
-			case TOK_REG_EBX: return true;
+			case TOK_REG_EBX:
+			case TOK_REG_ECX:
+			case TOK_REG_EDX:
+			case TOK_REG_ESI:
+			case TOK_REG_EDI: return true;
 			default: return false;
 		}
 	}
@@ -142,6 +146,10 @@ namespace so {
 		static const map<str, token> operand_map = {
 			{ "eax", TOK_REG_EAX },
 			{ "ebx", TOK_REG_EBX },
+			{ "ecx", TOK_REG_ECX },
+			{ "edx", TOK_REG_EDX },
+			{ "esi", TOK_REG_ESI },
+			{ "edi", TOK_REG_EDI },
 		};
 
 		const auto it = operand_map.find(string);

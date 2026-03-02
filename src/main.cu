@@ -1,3 +1,6 @@
+// TODO:
+// - imm list + user defined imm
+
 #include "equivalence/rough_equivalence.cuh"
 #include "candidate/generate.h"
 #include "assembler/parser.h"
@@ -21,7 +24,11 @@ so::arr<so::inst_opcode> ALL_OPCODES = {
 	so::INST_SUB,
 	so::INST_NOT,
 	so::INST_AND,
-	so::INST_NEG
+	so::INST_NEG,
+	so::INST_OR,
+	so::INST_XOR,
+	so::INST_SHL,
+	so::INST_SHR,
 };
 
 void optimize(
@@ -193,18 +200,13 @@ void optimize(
 }
 
 i32 main() {
-	// input
-	// program to optimize
 	so::str program =
 		"mov ebx, eax\n"
 		"sub ebx, 1\n"
 		"not ebx\n"
 		"and eax, ebx\n";
-
-	// registers that have to match reference
 	so::reg_mask live_out =
 		(1u << so::reg::EAX);
-
 	optimize(program, live_out);
 	return 0;
 }

@@ -17,6 +17,10 @@ namespace so {
 			case INST_NOT_R:  dst = ~dst;                            break;
 			case INST_AND_RR: dst = dst & state.regs[inst.ops[1].r]; break;
 			case INST_NEG_R:  dst = (u32)(-(i32)dst);                break;
+			case INST_OR_RR:  dst = dst | state.regs[inst.ops[1].r]; break;
+			case INST_XOR_RR: dst = dst ^ state.regs[inst.ops[1].r]; break;
+			case INST_SHL_RI: dst = dst << (inst.ops[1].i & 31);     break;
+			case INST_SHR_RI: dst = dst >> (inst.ops[1].i & 31);     break;
 			default:                                                 break;
 		}
 	}
