@@ -6,47 +6,56 @@
 namespace so {
 	using reg_mask = u32;
 
-	__global__ void equivalence_ref_kernel(
-		const inst* __restrict__ d_candidates,
-		u32 num_candidates,
-		u32 candidate_len,
-		const cpu_state* __restrict__ d_test_inputs,
-		const cpu_state* __restrict__ d_ref_outputs,
+	__global__ void search_kernel(
+		const inst* __restrict__ inst_table,
+		u32 inst_table_size,
+		u32 prog_len,
+		u64 total_programs,
+		const cpu_state* __restrict__ test_inputs,
+		const cpu_state* __restrict__ ref_outputs,
 		u32 num_tests,
 		reg_mask live_out,
-		i32* __restrict__ d_result
+		u64* __restrict__ result
 	) {
-		u32 idx = blockIdx.x * blockDim.x + threadIdx.x;
+		u64 idx = static_cast<u64>(blockIdx.x) * blockDim.x + threadIdx.x;
 
-		if(idx >= num_candidates) {
+		if(idx >= total_programs) {
 			return;
 		}
 
-		if(*d_result < static_cast<i32>(num_candidates)) {
+		if(*result < total_programs) {
 			return;
 		}
 
-		const inst* prog = d_candidates + idx * candidate_len;
+		inst prog[MAX_PROG_LEN];
+		u64 tmp = idx;
+
+		for(u32 i = 0; i < prog_len; ++i) {
+			prog[i] = inst_table[tmp % inst_table_size];
+			tmp /= inst_table_size;
+		}
 
 		for(u32 t = 0; t < num_tests; ++t) {
-			cpu_state state = d_test_inputs[t];
-			run_program(prog, candidate_len, state);
+			cpu_state state = test_inputs[t];
 
-			// check all live-out regs
+			for(u32 i = 0; i < prog_len; ++i) {
+				execute_inst(state, prog[i]);
+			}
+
 			reg_mask mask = live_out;
 
 			while(mask) {
-				u32 r = __ffs(mask) - 1; // find first set bit (1-indexed)
+				u32 r = __ffs(mask) - 1;
 
-				if(state.regs[r] != d_ref_outputs[t].regs[r]) {
+				if(state.regs[r] != ref_outputs[t].regs[r]) {
 					return;
 				}
 
-				mask &= mask - 1; // clear lowest bit
+				mask &= mask - 1;
 			}
 		}
 
-		atomicMin(d_result, (i32)idx);
+		atomicMin(reinterpret_cast<unsigned long long*>(result), static_cast<unsigned long long>(idx));
 	}
 
 	void generate_test_inputs(cpu_state* out, u32 count, reg_mask live_in) {
@@ -56,7 +65,7 @@ namespace so {
 			for(u32 r = 0; r < REG_COUNT; ++r) {
 				if(live_in & (1u << r)) {
 					seed = seed * 6364136223846793005ull + 1442695040888963407ull;
-					out[i].regs[r] = (u32)(seed >> 16);
+					out[i].regs[r] = static_cast<u32>(seed >> 16);
 				}
 				else {
 					out[i].regs[r] = 0; // dead

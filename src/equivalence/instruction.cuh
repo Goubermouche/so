@@ -6,6 +6,7 @@
 namespace so {
 	// registers
 	constexpr u8 REG_COUNT = 6;
+	constexpr u32 MAX_PROG_LEN = 8;
 
 	struct reg {
 		enum type : u8 {
@@ -125,6 +126,7 @@ namespace so {
 					// found match
 					return INSTRUCTION_DB[i].tag;
 				}
+				++i;
 			}
 
 			ASSERT(false, "unknown operand combination for '{}'\n", name);

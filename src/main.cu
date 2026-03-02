@@ -1,9 +1,8 @@
-// TODO:
-// - imm list + user defined imm
-
-#include "equivalence/rough_equivalence.cuh"
-#include "candidate/generate.h"
+#include "equivalence/search.cuh"
 #include "assembler/parser.h"
+#include <chrono>
+#include <climits>
+#include <limits>
 
 using namespace so::type;
 
@@ -31,13 +30,69 @@ so::arr<so::inst_opcode> ALL_OPCODES = {
 	so::INST_SHR,
 };
 
+so::arr<so::inst> build_inst_table(
+	const so::arr<so::inst_opcode>& opcodes,
+	const so::arr<u8>& regs
+) {
+	static const so::arr<u64> immediates = {0ull, 1ull, 2ull};
+	so::arr<so::inst> table;
+
+	for(so::inst_opcode op : opcodes) {
+		for(u32 v = 0; v < so::INSTRUCTION_DB_SIZE; ++v) {
+			if(so::tag_opcode(so::INSTRUCTION_DB[v].tag) != op) {
+				continue;
+			}
+
+			so::inst_tag tag = so::INSTRUCTION_DB[v].tag;
+			u32 op_count = so::tag_op_count(tag);
+
+			if(op_count == 0) {
+				so::inst next{};
+				next.tag = tag;
+				table.push_back(next);
+			}
+			else if(op_count == 1) {
+				for(u8 dst : regs) {
+					so::inst next{};
+					next.tag = tag;
+					next.ops[0].r = dst;
+					table.push_back(next);
+				}
+			}
+			else if(so::tag_op(tag, 1) == so::OP_R) {
+				for(u8 dst : regs) {
+					for(u8 src : regs) {
+						so::inst next{};
+						next.tag = tag;
+						next.ops[0].r = dst;
+						next.ops[1].r = src;
+						table.push_back(next);
+					}
+				}
+			}
+			else if(so::tag_op(tag, 1) == so::OP_I) {
+				for(u8 dst : regs) {
+					for(u64 imm : immediates) {
+						so::inst next{};
+						next.tag = tag;
+						next.ops[0].r = dst;
+						next.ops[1].i = imm;
+						table.push_back(next);
+					}
+				}
+			}
+		}
+	}
+
+	return table;
+}
+
 void optimize(
 	const so::str& program,
 	so::reg_mask live_out,
 	const so::arr<u8>& allowed_regs = ALL_REG_IDS,
 	const so::arr<so::inst_opcode>& allowed_opcodes = ALL_OPCODES
 ) {
-	// print info
 	so::print("> program:\n");
 	so::arr<so::inst> instructions = so::parser::parse(program);
 
@@ -47,78 +102,60 @@ void optimize(
 
 	so::print("> live out: ");
 	bool first = true;
-
 	for(u8 r = 0; r < so::REG_COUNT; ++r) {
 		if(live_out & (1u << r)) {
-			if(!first) {
-				so::print(", ");
-			}
-
+			if(!first) so::print(", ");
 			so::print("{}", so::reg(r).to_string());
 			first = false;
 		}
 	}
 
-	so::print("\n");
-	so::print("> allowed regs: ");
+	so::print("\n> allowed regs: ");
 	first = true;
-
 	for(u8 r : allowed_regs) {
-		if(!first) {
-			so::print(", ");
-		}
-
+		if(!first) so::print(", ");
 		so::print("{}", so::reg(r).to_string());
 		first = false;
 	}
 
-	so::print("\n");
-	so::print("> allowed opcodes: ");
+	so::print("\n> allowed opcodes: ");
 	first = true;
-
 	for(so::inst_opcode op : allowed_opcodes) {
-		if(!first) {
-			so::print(", ");
-		}
-		// TODO:
-		// find name from INSTRUCTION_DB
+		if(!first) so::print(", ");
 		for(u32 i = 0; i < so::INSTRUCTION_DB_SIZE; ++i) {
 			if(so::tag_opcode(so::INSTRUCTION_DB[i].tag) == op) {
 				so::print("{}", so::INSTRUCTION_DB[i].name);
 				break;
 			}
 		}
-
 		first = false;
 	}
-
 	so::print("\n\n");
 
-	// begin optimization
-	// TODO: allow setting explicitly, this is a safe default
+	so::arr<so::inst> table = build_inst_table(allowed_opcodes, allowed_regs);
+	so::print("> instruction table: {} entries\n", (u32)table.size());
+
 	so::reg_mask live_in = 0;
 	for(u8 r : allowed_regs) {
 		live_in |= (1u << r);
 	}
 
-	// generate test inputs
 	so::arr<so::cpu_state> h_test_inputs(NUM_TESTS);
 	so::generate_test_inputs(h_test_inputs.data(), NUM_TESTS, live_in);
 
-	// generate reference outputs
 	so::arr<so::cpu_state> h_ref_outputs(NUM_TESTS);
-
 	for(u32 t = 0; t < NUM_TESTS; ++t) {
 		so::cpu_state state = h_test_inputs[t];
-
-		for(u32 i = 0; i < program.size(); ++i) {
+		for(u32 i = 0; i < instructions.size(); ++i) {
 			so::execute_inst(state, instructions[i]);
 		}
-
 		h_ref_outputs[t] = state;
 	}
 
-	// upload to GPU
+	so::inst* d_table;
+	so::check_cuda(cudaMalloc(&d_table, table.size() * sizeof(so::inst)), "alloc inst table");
+	so::check_cuda(cudaMemcpy(d_table, table.data(), table.size() * sizeof(so::inst), cudaMemcpyHostToDevice), "copy inst table");
+
 	so::cpu_state* d_test_inputs;
 	so::check_cuda(cudaMalloc(&d_test_inputs, NUM_TESTS * sizeof(so::cpu_state)), "alloc test inputs");
 	so::check_cuda(cudaMemcpy(d_test_inputs, h_test_inputs.data(), NUM_TESTS * sizeof(so::cpu_state), cudaMemcpyHostToDevice), "copy test inputs");
@@ -127,60 +164,45 @@ void optimize(
 	so::check_cuda(cudaMalloc(&d_ref_outputs, NUM_TESTS * sizeof(so::cpu_state)), "alloc ref outputs");
 	so::check_cuda(cudaMemcpy(d_ref_outputs, h_ref_outputs.data(), NUM_TESTS * sizeof(so::cpu_state), cudaMemcpyHostToDevice), "copy ref outputs");
 
-	i32* d_result;
-	so::check_cuda(cudaMalloc(&d_result, sizeof(i32)), "alloc result");
+	u64* d_result;
+	so::check_cuda(cudaMalloc(&d_result, sizeof(u64)), "alloc result");
 
-	// bounded search
-	u32 baseline_len = (u32)program.size();
+	u32 baseline_len = static_cast<u32>(instructions.size());
 	auto search_start = std::chrono::high_resolution_clock::now();
 	bool found = false;
 
 	for(u32 len = 1; len < baseline_len; ++len) {
-		so::arr<so::inst> current;
-		so::arr<so::inst> flat_buffer;
-		so::generate_candidates(current, len, allowed_opcodes, allowed_regs, flat_buffer);
+		u64 total = 1;
 
-		u32 num_candidates = (u32)flat_buffer.size() / len;
-		so::print("> searching len {} ({} candidates)\n", len, num_candidates);
-
-		if(num_candidates == 0) {
-			continue;
+		for(u32 i = 0; i < len; ++i) {
+			total *= table.size();
 		}
 
-		so::inst* d_candidates;
-		so::check_cuda(cudaMalloc(&d_candidates, flat_buffer.size() * sizeof(so::inst)), "alloc candidates");
-		so::check_cuda(cudaMemcpy(d_candidates, flat_buffer.data(), flat_buffer.size() * sizeof(so::inst), cudaMemcpyHostToDevice), "copy candidates");
+		so::print("> searching len {} ({} programs)\n", len, total);
 
-		i32 no_result = INT_MAX;
-		so::check_cuda(cudaMemcpy(d_result, &no_result, sizeof(i32), cudaMemcpyHostToDevice), "reset result");
-
-		u32 grid_size = (num_candidates + BLOCK_SIZE - 1) / BLOCK_SIZE;
-		so::equivalence_ref_kernel<<<grid_size, BLOCK_SIZE>>>(
-			d_candidates, num_candidates, len,
+		u64 no_result = std::numeric_limits<u64>::max();
+		so::check_cuda(cudaMemcpy(d_result, &no_result, sizeof(u64), cudaMemcpyHostToDevice), "reset result");
+		u64 grid = (total + BLOCK_SIZE - 1) / BLOCK_SIZE;
+		search_kernel<<<grid, BLOCK_SIZE>>>(
+			d_table, static_cast<u32>(table.size()), len, total,
 			d_test_inputs, d_ref_outputs, NUM_TESTS,
-			live_out,
-			d_result
+			live_out, d_result
 		);
 
 		so::check_cuda(cudaDeviceSynchronize(), "kernel sync");
 
-		i32 h_result;
-		so::check_cuda(cudaMemcpy(&h_result, d_result, sizeof(i32), cudaMemcpyDeviceToHost), "read result");
+		u64 h_result;
+		so::check_cuda(cudaMemcpy(&h_result, d_result, sizeof(u64), cudaMemcpyDeviceToHost), "read result");
 
-		if(h_result < (i32)num_candidates) {
+		if(h_result < total) {
 			so::print("> optimization found ({} instructions):\n", len);
-			u32 base = (u32)h_result * len;
-
-			for(u32 j = 0; j < len; ++j) {
-				flat_buffer[base + j].print();
+			u64 tmp = h_result;
+			for(u32 i = 0; i < len; ++i) {
+				table[tmp % table.size()].print();
+				tmp /= table.size();
 			}
 
 			found = true;
-		}
-
-		cudaFree(d_candidates);
-
-		if(found) {
 			break;
 		}
 	}
@@ -191,23 +213,22 @@ void optimize(
 	if(!found) {
 		so::print("> no optimization found\n");
 	}
-
 	so::print("> search took {} ms\n", (long long)ms);
 
+	cudaFree(d_table);
 	cudaFree(d_test_inputs);
 	cudaFree(d_ref_outputs);
 	cudaFree(d_result);
 }
-
 i32 main() {
 	so::str program =
 		"mov ebx, eax\n"
-		"sub ebx, 1\n"
-		"not ebx\n"
-		"and eax, ebx\n";
+		"shl ebx, 1\n"
+		"mov ecx, eax\n"
+		"neg ecx\n"
+		"sub ebx, ecx\n";
 	so::reg_mask live_out =
-		(1u << so::reg::EAX);
+		(1u << so::reg::EBX);
 	optimize(program, live_out);
 	return 0;
 }
-
