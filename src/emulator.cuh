@@ -9,7 +9,7 @@ namespace so {
 	};
 
 	// generate handler functions
-#define X(id, name, op1, op2, body) \
+#define X(id, name, op1, op2, op3, op4, body) \
 	HD __forceinline__ void exec_##id(cpu_state& state, const inst& ins) { \
 		u32& dst = state.regs[ins.ops[0].r]; \
 		body \
@@ -20,7 +20,7 @@ namespace so {
 	HD __forceinline__ void execute_inst(cpu_state& state, const inst& ins) {
 		u32& dst = state.regs[ins.ops[0].r];
 		switch(ins.id) {
-#define X(id, name, op1, op2, body) case id: body break;
+#define X(id, name, op1, op2, op3, op4, body) case id: body break;
 			INST_LIST
 #undef X
 			default: break;

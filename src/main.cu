@@ -1,4 +1,5 @@
-#include "equivalence/search.cuh"
+#include "brute_force/brute_force.cuh"
+#include "mcmc/mcmc.cuh"
 #include "assembler/parser.h"
 
 using namespace so::type;
@@ -67,15 +68,50 @@ void verify(
 	}
 }
 
-so::arr<so::inst> build_inst_table(
-	const so::arr<u8>& regs
-) {
-	static const so::arr<u64> immediates = {0ull, 1ull, 2ull};
-	so::arr<so::inst> table;
+so::arr<u64> collect_immediates(const so::arr<so::inst>& program) {
+	// base set of useful constants
+	so::arr<u64> imms = {
+		0, 1, 2, 3, 4, 5, 7, 8, 15, 16, 31, 32,
+		0xFF, 0xFFFF, 0xFFFFFFFF,
+		0x80000000, 0x7FFFFFFF,
+	};
 
+	// extract immediates from the input program
+	for(const so::inst& ins : program) {
+		u32 op_count = so::INSTRUCTION_DB[ins.id].op_count();
+		for(u32 j = 0; j < op_count; ++j) {
+			if(so::INSTRUCTION_DB[ins.id].operands[j] == so::OP_I) {
+				u64 v = ins.ops[j].i;
+				bool found = false;
+				for(u64 existing : imms) {
+					if(existing == v) { found = true; break; }
+				}
+				if(!found) imms.push_back(v);
+				// add derived values
+				u64 derived[] = { v + 1, v - 1, v * 2, v / 2 };
+				for(u64 d : derived) {
+					bool dup = false;
+					for(u64 existing : imms) {
+						if(existing == d) { dup = true; break; }
+					}
+					if(!dup) imms.push_back(d);
+				}
+			}
+		}
+	}
+
+	return imms;
+}
+
+so::arr<so::inst> build_inst_table(
+	const so::arr<u8>& regs,
+	const so::arr<u64>& immediates
+) {
+	so::arr<so::inst> table;
 	for(u32 v = 0; v < so::INSTRUCTION_DB_SIZE; ++v) {
 		so::inst_id id = (so::inst_id)v;
 		u32 op_count = so::INSTRUCTION_DB[v].op_count();
+		const so::inst_op* ops = so::INSTRUCTION_DB[v].operands;
 
 		if(op_count == 0) {
 			so::inst next{};
@@ -90,7 +126,7 @@ so::arr<so::inst> build_inst_table(
 				table.push_back(next);
 			}
 		}
-		else if(so::INSTRUCTION_DB[v].operands[1] == so::OP_R) {
+		else if(op_count == 2 && ops[1] == so::OP_R) {
 			for(u8 dst : regs) {
 				for(u8 src : regs) {
 					so::inst next{};
@@ -101,7 +137,7 @@ so::arr<so::inst> build_inst_table(
 				}
 			}
 		}
-		else if(so::INSTRUCTION_DB[v].operands[1] == so::OP_I) {
+		else if(op_count == 2 && ops[1] == so::OP_I) {
 			for(u8 dst : regs) {
 				for(u64 imm : immediates) {
 					so::inst next{};
@@ -112,8 +148,69 @@ so::arr<so::inst> build_inst_table(
 				}
 			}
 		}
+		else if(op_count == 3 && ops[1] == so::OP_R && ops[2] == so::OP_I) {
+			for(u8 dst : regs) {
+				for(u8 src : regs) {
+					for(u64 imm : immediates) {
+						so::inst next{};
+						next.id = id;
+						next.ops[0].r = dst;
+						next.ops[1].r = src;
+						next.ops[2].i = imm;
+						table.push_back(next);
+					}
+				}
+			}
+		}
+		else if(op_count == 3 && ops[1] == so::OP_R && ops[2] == so::OP_R) {
+			for(u8 dst : regs) {
+				for(u8 s1 : regs) {
+					for(u8 s2 : regs) {
+						so::inst next{};
+						next.id = id;
+						next.ops[0].r = dst;
+						next.ops[1].r = s1;
+						next.ops[2].r = s2;
+						table.push_back(next);
+					}
+				}
+			}
+		}
+		else if(op_count == 4 && ops[1] == so::OP_R && ops[2] == so::OP_R && ops[3] == so::OP_I) {
+			for(u8 dst : regs) {
+				for(u8 s1 : regs) {
+					for(u8 s2 : regs) {
+						for(u64 imm : immediates) {
+							so::inst next{};
+							next.id = id;
+							next.ops[0].r = dst;
+							next.ops[1].r = s1;
+							next.ops[2].r = s2;
+							next.ops[3].i = imm;
+							table.push_back(next);
+						}
+					}
+				}
+			}
+		}
+		else if(op_count == 4 && ops[1] == so::OP_R && ops[2] == so::OP_I && ops[3] == so::OP_I) {
+			for(u8 dst : regs) {
+				for(u8 src : regs) {
+					for(u64 imm1 : immediates) {
+						for(u64 imm2 : immediates) {
+							so::inst next{};
+							next.id = id;
+							next.ops[0].r = dst;
+							next.ops[1].r = src;
+							next.ops[2].i = imm1;
+							next.ops[3].i = imm2;
+							table.push_back(next);
+						}
+					}
+				}
+			}
+		}
 	}
-
 	return table;
 }
 
@@ -147,9 +244,16 @@ void optimize(
 		first = false;
 	}
 
-	so::print("\n> instructions: {} variants\n\n", so::INSTRUCTION_DB_SIZE);
+	so::arr<u64> immediates = collect_immediates(instructions);
+	so::print("\n> immediates: {}", (u32)immediates.size());
+	for(u32 i = 0; i < immediates.size(); ++i) {
+		so::print("{}{}", i == 0 ? " [" : ", ", immediates[i]);
+	}
+	so::print("]\n");
 
-	so::arr<so::inst> table = build_inst_table(allowed_regs);
+	so::print("> instructions: {} variants\n\n", so::INSTRUCTION_DB_SIZE);
+
+	so::arr<so::inst> table = build_inst_table(allowed_regs, immediates);
 	so::print("> instruction table: {} entries\n", (u32)table.size());
 
 	so::reg_mask live_in = 0;
@@ -199,40 +303,65 @@ void optimize(
 
 		u64 no_result = std::numeric_limits<u64>::max();
 		so::check_cuda(cudaMemcpy(d_result, &no_result, sizeof(u64), cudaMemcpyHostToDevice), "reset result");
-		u64 grid = (total + BLOCK_SIZE - 1) / BLOCK_SIZE;
-		search_kernel<<<grid, BLOCK_SIZE>>>(
-			d_table, static_cast<u32>(table.size()), len, total,
-			d_test_inputs, d_ref_outputs, NUM_TESTS,
-			live_out, d_result
-		);
 
-		so::check_cuda(cudaDeviceSynchronize(), "kernel sync");
+		constexpr u64 BATCH_SIZE = 1ull << 24; // ~16M per batch
+		u64 offset = 0;
+		bool found_in_len = false;
 
-		u64 h_result;
-		so::check_cuda(cudaMemcpy(&h_result, d_result, sizeof(u64), cudaMemcpyDeviceToHost), "read result");
+		while(offset < total) {
+			u64 remaining = total - offset;
+			u64 batch = remaining < BATCH_SIZE ? remaining : BATCH_SIZE;
+			u64 grid = (batch + BLOCK_SIZE - 1) / BLOCK_SIZE;
 
-		if(h_result < total) {
-			so::print("> optimization found ({} instructions):\n", len);
-			so::arr<so::inst> optimized;
-			u64 tmp = h_result;
-			for(u32 i = 0; i < len; ++i) {
-				table[tmp % table.size()].print();
-				optimized.push_back(table[tmp % table.size()]);
-				tmp /= table.size();
+			brute_force_search<<<grid, BLOCK_SIZE>>>(
+				d_table, static_cast<u32>(table.size()), len, total,
+				d_test_inputs, d_ref_outputs, NUM_TESTS,
+				live_out, d_result, offset
+			);
+
+			so::check_cuda(cudaDeviceSynchronize(), "kernel sync");
+
+			u64 h_result;
+			so::check_cuda(cudaMemcpy(&h_result, d_result, sizeof(u64), cudaMemcpyDeviceToHost), "read result");
+
+			if(h_result < total) {
+				so::print("\r> len {}: 100.0%%\n", len);
+				so::print("> optimization found ({} instructions):\n", len);
+				so::arr<so::inst> optimized;
+				u64 tmp = h_result;
+				for(u32 i = 0; i < len; ++i) {
+					table[tmp % table.size()].print();
+					optimized.push_back(table[tmp % table.size()]);
+					tmp /= table.size();
+				}
+				auto search_end = std::chrono::high_resolution_clock::now();
+				auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(search_end - search_start).count();
+				so::print("> search took {} ms\n", (long long)ms);
+				verify(instructions, optimized, live_out);
+				found = true;
+				found_in_len = true;
+				break;
 			}
-			auto search_end = std::chrono::high_resolution_clock::now();
-			auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(search_end - search_start).count();
-			so::print("> search took {} ms\n", (long long)ms);
-			verify(instructions, optimized, live_out);
-			found = true;
-			break;
+
+			offset += batch;
+			double pct = 100.0 * (double)offset / (double)total;
+			if(pct > 100.0) pct = 100.0;
+			printf("\r> len %u: %.1f%%", len, pct);
+			fflush(stdout);
 		}
+
+		if(!found_in_len) {
+			printf("\r> len %u: 100.0%%\n", len);
+		}
+
+		if(found) break;
 	}
 
-
-
 	if(!found) {
+		auto search_end = std::chrono::high_resolution_clock::now();
+		auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(search_end - search_start).count();
 		so::print("> no optimization found\n");
+		so::print("> search took {} ms\n", (long long)ms);
 	}
 
 	cudaFree(d_table);

@@ -1,7 +1,7 @@
 #ifndef TOKENIZER_H
 #define TOKENIZER_H
 
-#include "equivalence/instruction.cuh"
+#include "instruction.cuh"
 
 namespace so {
 	enum token {

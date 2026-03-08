@@ -1,12 +1,12 @@
-#ifndef ROUGH_EQUIVALENCE_CUH
-#define ROUGH_EQUIVALENCE_CUH
+#ifndef BRUTE_FORCE_CUH
+#define BRUTE_FORCE_CUH
 
 #include "emulator.cuh"
 
 namespace so {
 	using reg_mask = u32;
 
-	__global__ void search_kernel(
+	__global__ void brute_force_search(
 		const inst* __restrict__ inst_table,
 		u32 inst_table_size,
 		u32 prog_len,
@@ -15,46 +15,36 @@ namespace so {
 		const cpu_state* __restrict__ ref_outputs,
 		u32 num_tests,
 		reg_mask live_out,
-		u64* __restrict__ result
+		u64* __restrict__ result,
+		u64 offset
 	) {
-		u64 idx = static_cast<u64>(blockIdx.x) * blockDim.x + threadIdx.x;
-
+		u64 idx = static_cast<u64>(blockIdx.x) * blockDim.x + threadIdx.x + offset;
 		if(idx >= total_programs) {
 			return;
 		}
-
 		if(*result < total_programs) {
 			return;
 		}
-
 		inst prog[MAX_PROG_LEN];
 		u64 tmp = idx;
-
 		for(u32 i = 0; i < prog_len; ++i) {
 			prog[i] = inst_table[tmp % inst_table_size];
 			tmp /= inst_table_size;
 		}
-
 		for(u32 t = 0; t < num_tests; ++t) {
 			cpu_state state = test_inputs[t];
-
 			for(u32 i = 0; i < prog_len; ++i) {
 				execute_inst(state, prog[i]);
 			}
-
 			reg_mask mask = live_out;
-
 			while(mask) {
 				u32 r = __ffs(mask) - 1;
-
 				if(state.regs[r] != ref_outputs[t].regs[r]) {
 					return;
 				}
-
 				mask &= mask - 1;
 			}
 		}
-
 		atomicMin(reinterpret_cast<unsigned long long*>(result), static_cast<unsigned long long>(idx));
 	}
 
@@ -81,4 +71,4 @@ namespace so {
 	}
 } // namespace so
 
-#endif // #ifndef ROUGH_EQUIVALENCE_CUH
+#endif // #ifndef BRUTE_FORCE_CUH

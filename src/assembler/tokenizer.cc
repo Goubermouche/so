@@ -164,21 +164,18 @@ namespace so {
 	auto tokenizer::string_to_number(const str& string) -> token {
 		i32 base = 10;
 		char* data = curr_string.data();
-
 		if(curr_string[0] == '0' && curr_string.size() > 1) {
 			switch(curr_string[1]) {
-				case 'x':         base = 16; data += 2; break; // hex
-				case '0' ... '7': base = 8;  data += 1; break; // oct
-				case 'b':         base = 2;  data += 2; break; // bin
+				case 'x':         base = 16; data += 2; break;
+				case '0' ... '7': base = 8;  data += 1; break;
+				case 'b':         base = 2;  data += 2; break;
 				default: ASSERT(false, "unknown literal type\n");
 			}
 		}
-
+		errno = 0;
 		const u64 number = strtoull(data, nullptr, base);
 		ASSERT(errno == 0, "strtoull failed for '{}'\n", curr_string);
-
 		curr_imm = number;
-
 		return curr = TOK_NUMBER;
 	}
 } // namespace so
