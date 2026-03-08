@@ -48,7 +48,7 @@ namespace so {
 				}
 			}
 
-			curr_inst.tag = find_inst_tag(curr_name, operands, operand_count);
+			curr_inst.id = find_inst_tag(curr_name, operands, operand_count);
 
 			ASSERT(tok.curr == TOK_NEWLINE, "expected newline");
 			result.push_back(curr_inst);

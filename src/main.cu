@@ -1,8 +1,5 @@
 #include "equivalence/search.cuh"
 #include "assembler/parser.h"
-#include <chrono>
-#include <climits>
-#include <limits>
 
 using namespace so::type;
 
@@ -18,67 +15,100 @@ so::arr<u8> ALL_REG_IDS = {
 	so::reg::EDI,
 };
 
-so::arr<so::inst_opcode> ALL_OPCODES = {
-	so::INST_MOV,
-	so::INST_SUB,
-	so::INST_NOT,
-	so::INST_AND,
-	so::INST_NEG,
-	so::INST_OR,
-	so::INST_XOR,
-	so::INST_SHL,
-	so::INST_SHR,
-};
+void verify(
+	const so::arr<so::inst>& original,
+	const so::arr<so::inst>& optimized,
+	so::reg_mask live_out,
+	u32 num_tests = 1000000
+) {
+	u64 seed = 0xA5A5A5A5A5A5A5A5ull;
+	u32 failures = 0;
+
+	for(u32 t = 0; t < num_tests; ++t) {
+		so::cpu_state input{};
+		for(u8 r = 0; r < so::REG_COUNT; ++r) {
+			seed = seed * 6364136223846793005ull + 1442695040888963407ull;
+			input.regs[r] = static_cast<u32>(seed >> 16);
+		}
+
+		so::cpu_state state_orig = input;
+		so::cpu_state state_opt = input;
+
+		for(const so::inst& i : original) {
+			so::execute_inst(state_orig, i);
+		}
+		for(const so::inst& i : optimized) {
+			so::execute_inst(state_opt, i);
+		}
+
+		so::reg_mask mask = live_out;
+		while(mask) {
+			u32 r = __builtin_ctz(mask);
+			if(state_orig.regs[r] != state_opt.regs[r]) {
+				if(failures < 3) {
+					printf("> mismatch test %u:\n  input:     ", t);
+					for(u8 i = 0; i < so::REG_COUNT; ++i) {
+						printf("%s=0x%08X ", so::reg(i).to_string(), input.regs[i]);
+					}
+					printf("\n  original:  %s=0x%08X\n", so::reg(r).to_string(), state_orig.regs[r]);
+					printf("  optimized: %s=0x%08X\n", so::reg(r).to_string(), state_opt.regs[r]);
+				}
+				++failures;
+				break;
+			}
+			mask &= mask - 1;
+		}
+	}
+
+	if(failures == 0) {
+		so::print("> verified: {}/{} tests passed\n", num_tests, num_tests);
+	} else {
+		so::print("> failed: {}/{} tests failed (showing first 3)\n", failures, num_tests);
+	}
+}
 
 so::arr<so::inst> build_inst_table(
-	const so::arr<so::inst_opcode>& opcodes,
 	const so::arr<u8>& regs
 ) {
 	static const so::arr<u64> immediates = {0ull, 1ull, 2ull};
 	so::arr<so::inst> table;
 
-	for(so::inst_opcode op : opcodes) {
-		for(u32 v = 0; v < so::INSTRUCTION_DB_SIZE; ++v) {
-			if(so::tag_opcode(so::INSTRUCTION_DB[v].tag) != op) {
-				continue;
-			}
+	for(u32 v = 0; v < so::INSTRUCTION_DB_SIZE; ++v) {
+		so::inst_id id = (so::inst_id)v;
+		u32 op_count = so::INSTRUCTION_DB[v].op_count();
 
-			so::inst_tag tag = so::INSTRUCTION_DB[v].tag;
-			u32 op_count = so::tag_op_count(tag);
-
-			if(op_count == 0) {
+		if(op_count == 0) {
+			so::inst next{};
+			next.id = id;
+			table.push_back(next);
+		}
+		else if(op_count == 1) {
+			for(u8 dst : regs) {
 				so::inst next{};
-				next.tag = tag;
+				next.id = id;
+				next.ops[0].r = dst;
 				table.push_back(next);
 			}
-			else if(op_count == 1) {
-				for(u8 dst : regs) {
+		}
+		else if(so::INSTRUCTION_DB[v].operands[1] == so::OP_R) {
+			for(u8 dst : regs) {
+				for(u8 src : regs) {
 					so::inst next{};
-					next.tag = tag;
+					next.id = id;
 					next.ops[0].r = dst;
+					next.ops[1].r = src;
 					table.push_back(next);
 				}
 			}
-			else if(so::tag_op(tag, 1) == so::OP_R) {
-				for(u8 dst : regs) {
-					for(u8 src : regs) {
-						so::inst next{};
-						next.tag = tag;
-						next.ops[0].r = dst;
-						next.ops[1].r = src;
-						table.push_back(next);
-					}
-				}
-			}
-			else if(so::tag_op(tag, 1) == so::OP_I) {
-				for(u8 dst : regs) {
-					for(u64 imm : immediates) {
-						so::inst next{};
-						next.tag = tag;
-						next.ops[0].r = dst;
-						next.ops[1].i = imm;
-						table.push_back(next);
-					}
+		}
+		else if(so::INSTRUCTION_DB[v].operands[1] == so::OP_I) {
+			for(u8 dst : regs) {
+				for(u64 imm : immediates) {
+					so::inst next{};
+					next.id = id;
+					next.ops[0].r = dst;
+					next.ops[1].i = imm;
+					table.push_back(next);
 				}
 			}
 		}
@@ -90,8 +120,7 @@ so::arr<so::inst> build_inst_table(
 void optimize(
 	const so::str& program,
 	so::reg_mask live_out,
-	const so::arr<u8>& allowed_regs = ALL_REG_IDS,
-	const so::arr<so::inst_opcode>& allowed_opcodes = ALL_OPCODES
+	const so::arr<u8>& allowed_regs = ALL_REG_IDS
 ) {
 	so::print("> program:\n");
 	so::arr<so::inst> instructions = so::parser::parse(program);
@@ -118,21 +147,9 @@ void optimize(
 		first = false;
 	}
 
-	so::print("\n> allowed opcodes: ");
-	first = true;
-	for(so::inst_opcode op : allowed_opcodes) {
-		if(!first) so::print(", ");
-		for(u32 i = 0; i < so::INSTRUCTION_DB_SIZE; ++i) {
-			if(so::tag_opcode(so::INSTRUCTION_DB[i].tag) == op) {
-				so::print("{}", so::INSTRUCTION_DB[i].name);
-				break;
-			}
-		}
-		first = false;
-	}
-	so::print("\n\n");
+	so::print("\n> instructions: {} variants\n\n", so::INSTRUCTION_DB_SIZE);
 
-	so::arr<so::inst> table = build_inst_table(allowed_opcodes, allowed_regs);
+	so::arr<so::inst> table = build_inst_table(allowed_regs);
 	so::print("> instruction table: {} entries\n", (u32)table.size());
 
 	so::reg_mask live_in = 0;
@@ -196,30 +213,34 @@ void optimize(
 
 		if(h_result < total) {
 			so::print("> optimization found ({} instructions):\n", len);
+			so::arr<so::inst> optimized;
 			u64 tmp = h_result;
 			for(u32 i = 0; i < len; ++i) {
 				table[tmp % table.size()].print();
+				optimized.push_back(table[tmp % table.size()]);
 				tmp /= table.size();
 			}
-
+			auto search_end = std::chrono::high_resolution_clock::now();
+			auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(search_end - search_start).count();
+			so::print("> search took {} ms\n", (long long)ms);
+			verify(instructions, optimized, live_out);
 			found = true;
 			break;
 		}
 	}
 
-	auto search_end = std::chrono::high_resolution_clock::now();
-	auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(search_end - search_start).count();
+
 
 	if(!found) {
 		so::print("> no optimization found\n");
 	}
-	so::print("> search took {} ms\n", (long long)ms);
 
 	cudaFree(d_table);
 	cudaFree(d_test_inputs);
 	cudaFree(d_ref_outputs);
 	cudaFree(d_result);
 }
+
 i32 main() {
 	so::str program =
 		"mov ebx, eax\n"
