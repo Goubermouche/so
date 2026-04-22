@@ -1,7 +1,7 @@
-#ifndef TOKENIZER_H
-#define TOKENIZER_H
+#ifndef PROGRAM_H
+#define PROGRAM_H
 
-#include "instruction.cuh"
+#include "interpreter/instruction.h"
 
 namespace so {
 	enum token {
@@ -37,11 +37,6 @@ namespace so {
 	auto token_is_reg(token tok) -> bool;
 	auto token_to_reg_index(token tok) -> u64;
 
-	struct tokenizer_result {
-		arr<token> value;
-		bool ok = false;
-	};
-
 	struct tokenizer {
 		tokenizer(const str& source);
 
@@ -67,6 +62,18 @@ namespace so {
 		str curr_string;
 		u64 curr_imm;
 	};
+
+	struct program {
+		static program parse(const str& source);
+
+		str to_string();
+	private:
+		str operand_to_string(inst::operand op, inst_spec::operand ty);
+	public:
+
+		arr<inst> instructions;
+	};
 } // namespace so
 
-#endif // #ifndef TOKENIZER_H
+#endif // PROGRAM_H
+

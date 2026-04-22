@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <cstring>
 #include <string>
+#include <algorithm>
 #include <vector>
 #include <unordered_map>
 #include <sstream>
@@ -77,6 +78,11 @@ namespace so {
 			exit(1);
 		}
 	}
+
+	inline str pad_to_length(const str& s, char pad, u64 target_len) {
+		u64 pad_len = (target_len > s.size()) ? (target_len - s.size()) : 0;
+		return s + str(pad_len, pad);
+	}
 } // namespace so
 
 #define HD __host__ __device__
@@ -118,4 +124,5 @@ namespace so {
 // #endif
 
 #endif // #ifndef TYPE_H
+
 

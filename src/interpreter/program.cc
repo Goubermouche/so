@@ -1,4 +1,6 @@
-#include "tokenizer.h"
+#include "program.h"
+#include "interpreter/instruction.h"
+#include <string>
 
 namespace so {
 	auto token_to_str(token tok) -> const char* {
@@ -49,7 +51,7 @@ namespace so {
 		// get rid of leading space-like characters
 		consume_spaces();
 
-		// special characters
+// special characters
 		switch(m_current_char) {
 			case '_':
 			case '.':
@@ -177,6 +179,95 @@ namespace so {
 		ASSERT(errno == 0, "strtoull failed for '{}'\n", curr_string);
 		curr_imm = number;
 		return curr = TOK_NUMBER;
+	}
+
+	program program::parse(const str& source) {
+		arr<inst> result;
+		tokenizer tok(source);
+		str curr_name;
+
+		tok.next_char();
+		tok.next_tok();
+
+		while(tok.curr != token::TOK_EOF) {
+			// leading empty lines
+			while(tok.curr == TOK_NEWLINE) {
+				tok.next_tok();
+			}
+
+			// mnemonic
+			inst curr_inst;
+			inst_spec::operand operands[4] = {};
+			u8 operand_count = 0;
+
+			curr_name = tok.curr_string;
+			tok.next_tok();
+
+			// operands
+			while(tok.curr != TOK_NEWLINE && operand_count < 2) {
+				if(token_is_reg(tok.curr)) {
+					curr_inst.operands[operand_count].reg = static_cast<reg_index>(token_to_reg_index(tok.curr));
+					operands[operand_count] = inst_spec::R64;
+				}
+				else if(tok.curr == TOK_NUMBER) {
+					curr_inst.operands[operand_count].i = tok.curr_imm;
+					operands[operand_count] = inst_spec::I64;
+				}
+				else {
+					ASSERT(false, "unrecognized operand type received ('{}')", token_to_str(tok.curr));
+				}
+
+				operand_count++;
+
+				if(tok.next_tok() != TOK_COMMA) {
+					break;
+				}
+				else {
+					tok.next_tok();
+				}
+			}
+
+			curr_inst.op = find_inst_op(curr_name, operands, operand_count);
+
+			ASSERT(tok.curr == TOK_NEWLINE, "expected newline");
+			result.push_back(curr_inst);
+			tok.next_tok(); // consume newline
+		}
+
+		return { result };
+	}
+
+	str program::to_string() {
+		str result = "";
+
+		for(const inst& i : instructions) {
+			const inst_spec& spec = find_spec(i.op);
+			result += pad_to_length(spec.name, ' ', 8);
+
+			for(u8 j = 0; j < spec.get_operand_count(); ++j) {
+				result += operand_to_string(i.operands[j], spec.operands[j]);
+				if(j + 1 < spec.get_operand_count()) {
+					result += ", ";
+				}
+			}
+
+			result += '\n';
+		}
+
+		return result;
+	};
+
+	str program::operand_to_string(inst::operand op, inst_spec::operand ty) {
+		switch(ty) {
+			case inst_spec::R64: {
+				const char* names[] = { "rax", "rbx", "rcx", "rdx", "rsi", "rdi", "rbp", "rsp", "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15" };
+				return names[op.reg];
+			}
+			case inst_spec::I64: {
+				return std::to_string(op.i);
+			}
+			default: return "?";
+		}
 	}
 } // namespace so
 

@@ -4,6 +4,7 @@ pkgs.mkShell {
 		cudaPackages.cudatoolkit
 		gcc
 		bear
+		python3
 	];
 
 	shellHook = ''
