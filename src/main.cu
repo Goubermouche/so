@@ -1,20 +1,18 @@
-#include "interpreter/cpu_state.h"
-#include "interpreter/instruction.h"
-#include "interpreter/interpreter.h"
-#include "interpreter/program.h"
+#include "opt/optimize.h"
 
-using namespace so::type;
+so::i32 main() {
+	if(so::device_init()) {
+		return 1;
+	}
 
-i32 main() {
-	so::str program_source =
-		"mov ebx, eax\n"
-		"mov ecx, eax\n"
-		"neg ecx\n";
+	so::print("\n");
 
-	so::program program = so::program::parse(program_source);
-	so::print("{}", program.to_string());
-	so::cpu_state cpu = {0};
+	so::optimize(
+		"mov rbx, rax\n"
+		"shl rbx, 2\n"
+		"add rbx, rax\n"
+	);
 
-	so::run_program(&cpu, program.instructions.data(), program.instructions.size());
 	return 0;
 }
+

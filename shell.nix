@@ -5,6 +5,7 @@ pkgs.mkShell {
 		gcc
 		bear
 		python3
+		z3
 	];
 
 	shellHook = ''

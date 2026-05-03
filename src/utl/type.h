@@ -3,9 +3,10 @@
 
 #include <stdint.h>
 #include <cctype>
+#include <cctype>
 #include <cstdio>
 #include <cstring>
-#include <string>
+#include <cmath>
 #include <algorithm>
 #include <vector>
 #include <unordered_map>
@@ -13,7 +14,6 @@
 #include <chrono>
 #include <climits>
 #include <array>
-#include <cuda_runtime.h>
 
 namespace so {
 	namespace type {
@@ -26,6 +26,9 @@ namespace so {
 		using i16 = int16_t;
 		using i32 = int32_t;
 		using i64 = int64_t;
+
+		using f32 = float;
+		using f64 = double;
 
 		using str = std::string;
 
@@ -69,14 +72,6 @@ namespace so {
 
 	inline void flush() {
 		std::fflush(stdout);
-	}
-
-	inline void check_cuda(cudaError_t err, const char* msg) {
-		if(err != cudaSuccess) {
-			print_err("CUDA error [{}]: {}\n", msg, cudaGetErrorString(err));
-			flush();
-			exit(1);
-		}
 	}
 
 	inline str pad_to_length(const str& s, char pad, u64 target_len) {
@@ -124,5 +119,4 @@ namespace so {
 // #endif
 
 #endif // #ifndef TYPE_H
-
 
