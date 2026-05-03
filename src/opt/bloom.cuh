@@ -53,12 +53,12 @@ namespace so {
 	}
 
 #ifdef __CUDACC__
-	__device__ inline bool bloom_check_and_insert(u32* __restrict__ filter, u32 block_mask, u64 hash) {
+	__device__ inline b32 bloom_check_and_insert(u32* __restrict__ filter, u32 block_mask, u64 hash) {
 		const u32 hash_hi = (u32)(hash >> 32);
 		const u32 hash_lo = (u32)(hash);
 		u32* block = filter + ((hash_hi & block_mask) * BLOOM_BLOCK_WORDS);
 		u32 mix = hash_lo ? hash_lo : 0xdeadbeefu; // avoid zero LCG lock
-		bool all_set = true;
+		b32 all_set = true;
 
 		#pragma unroll
 		for(u32 k = 0; k < BLOOM_K; ++k) {

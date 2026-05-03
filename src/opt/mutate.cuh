@@ -33,7 +33,7 @@ namespace so {
 	};
 
 	namespace detail {
-		SO_HD constexpr bool same_signature(const inst_spec& a, const inst_spec& b) {
+		SO_HD constexpr b32 same_signature(const inst_spec& a, const inst_spec& b) {
 			for(u32 k = 0; k < 4; ++k) {
 				if(a.operands[k] != b.operands[k]) {
 					return false;
@@ -48,7 +48,7 @@ namespace so {
 			u32 n = 0;
 
 			for(u32 i = 0; i < (u32)OP_COUNT; ++i) {
-				bool seen = false;
+				b32 seen = false;
 
 				for(u32 j = 0; j < i; ++j) {
 					if(same_signature(db.row[i], db.row[j])) {
@@ -107,7 +107,7 @@ namespace so {
 			return t;
 		}
 
-		SO_HD constexpr bool check_group_sizes() {
+		SO_HD constexpr b32 check_group_sizes() {
 			const mutation_tables_t t = build_mutation_tables();
 
 			for(u32 g = 0; g < MUTATE_N_GROUPS; ++g) {

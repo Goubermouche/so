@@ -30,6 +30,8 @@ namespace so {
 		using f32 = float;
 		using f64 = double;
 
+		using b32 = bool;
+
 		using str = std::string;
 
 		template<typename type>

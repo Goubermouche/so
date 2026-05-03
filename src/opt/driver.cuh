@@ -19,8 +19,8 @@ namespace so {
 		u32 correct_weight;
 		u32 n_chains;
 		u32 test_weights[MCMC_N_TESTS];
-		bool use_bloom;
-		bool seed_from_target;
+		b32 use_bloom;
+		b32 seed_from_target;
 	};
 
 	struct mcmc_result {

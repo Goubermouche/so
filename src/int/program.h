@@ -44,7 +44,7 @@ namespace so {
 	};
 
 	const char* token_to_str(token tok);
-	bool token_is_reg(token tok);
+	b32 token_is_reg(token tok);
 	u64 token_to_reg_index(token tok);
 
 	struct tokenizer {
@@ -57,10 +57,10 @@ namespace so {
 		token next_tok_char();
 
 		char next_char();
-		bool is_at_end();
+		b32 is_at_end();
 
 		void consume_spaces();
-		bool is_whitespace(char c);
+		b32 is_whitespace(char c);
 		token string_to_token(const str& string);
 		token string_to_number(const str& string);
 	private:

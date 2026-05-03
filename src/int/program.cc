@@ -38,7 +38,7 @@ namespace so {
 		}
 	}
 
-	bool token_is_reg(token tok) {
+	b32 token_is_reg(token tok) {
 		return tok >= TOK_REG_RAX && tok <= TOK_REG_R15;
 	}
 
@@ -133,7 +133,7 @@ namespace so {
 		return m_current_char = m_source[m_index++];
 	}
 
-	bool tokenizer::is_at_end() {
+	b32 tokenizer::is_at_end() {
 		return m_index >= m_source.size();
 	}
 
@@ -144,7 +144,7 @@ namespace so {
 		}
 	}
 
-	bool tokenizer::is_whitespace(char c) {
+	b32 tokenizer::is_whitespace(char c) {
 		return (c == '\t' || c == '\v' || c == '\f' || c == '\r' || c == ' ');
 	}
 
@@ -210,7 +210,7 @@ namespace so {
 				continue;
 			}
 
-			bool ok = true;
+			b32 ok = true;
 
 			for(u8 k = 0; k < operand_count; ++k) {
 				if(spec.operands[k] != operands[k]) {

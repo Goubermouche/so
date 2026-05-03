@@ -56,7 +56,7 @@ namespace so {
 		i8 dst_slot;
 		i8 src_slot;
 		i8 src2_slot;
-		bool rmw; // dst is also a read
+		b32 rmw; // dst is also a read
 
 		SO_HD constexpr u8 get_operand_count() const {
 			u8 i = 0;
@@ -117,7 +117,7 @@ namespace so {
 	}
 
 	namespace detail {
-		SO_HD constexpr bool check_inst_db_alignment() {
+		SO_HD constexpr b32 check_inst_db_alignment() {
 			const inst_db_t d = build_inst_db();
 			for(u32 i = 0; i < (u32)OP_COUNT; ++i) {
 				if((u32)d.row[i].op != i) return false;
