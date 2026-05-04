@@ -3,7 +3,7 @@
 
 #include "int/instruction.cuh"
 
-namespace so {
+namespace sup {
 	SO_HD u64 compute_live_in(const inst* prog, u32 prog_len) {
 		u64 written = 0;
 		u64 live_in = 0;
@@ -83,7 +83,7 @@ namespace so {
 			}
 		}
 	}
-} // namespace so
+} // namespace sup
 
 #endif // #ifndef CANON_CUH
 

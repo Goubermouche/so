@@ -3,7 +3,7 @@
 
 #include "int/instruction.cuh"
 
-namespace so {
+namespace sup {
 	static constexpr u32 BLOOM_BLOCK_BITS  = 512;
 	static constexpr u32 BLOOM_BLOCK_WORDS = BLOOM_BLOCK_BITS / 32; // 16
 	static constexpr u32 BLOOM_K           = 7;
@@ -97,7 +97,7 @@ namespace so {
 
 		return (u32)n;
 	}
-} // namespace so
+} // namespace sup
 
 #endif // #ifndef BLOOM_CUH
 

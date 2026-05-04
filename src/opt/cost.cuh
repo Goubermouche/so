@@ -4,7 +4,7 @@
 #include "int/instruction.cuh"
 #include "int/program.h"
 
-namespace so {
+namespace sup {
 	SO_HD u32 perf_cost(const inst* prog, u32 prog_len, u64 live_mask) {
 		u64 live = live_mask;
 		u32 count = 0;
@@ -40,7 +40,7 @@ namespace so {
 
 		return count;
 	}
-} // namespace so
+} // namespace sup
 
 #endif // #ifndef COST_CUH
 

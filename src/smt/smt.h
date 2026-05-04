@@ -4,7 +4,7 @@
 #include "int/instruction.cuh"
 #include "int/cpu.cuh"
 
-namespace so {
+namespace sup {
 	enum verify_result {
 		VERIFY_EQUIVALENT,
 		VERIFY_COUNTEREXAMPLE,
@@ -27,7 +27,7 @@ namespace so {
 		u64 live_outs,
 		u32 timeout_ms = 10'000
 	);
-} // namespace so
+} // namespace sup
 
 #endif // #ifndef SMT_H
 

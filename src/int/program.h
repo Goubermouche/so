@@ -3,7 +3,7 @@
 
 #include "int/instruction.cuh"
 
-namespace so {
+namespace sup {
 	enum token {
 		TOK_UNKNOWN = 0,
 
@@ -86,7 +86,7 @@ namespace so {
 	public:
 		arr<inst> instructions;
 	};
-} // namespace so
+} // namespace sup
 
 #endif // #ifndef PROGRAM_H
 

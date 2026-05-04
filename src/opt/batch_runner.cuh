@@ -3,7 +3,7 @@
 
 #include "int/instruction.cuh"
 
-namespace so {
+namespace sup {
 	SO_HD void run_program_lane(u64 regs[16], const inst* prog, u32 prog_len) {
 		for(u32 i = 0; i < prog_len; ++i) {
 			const inst& in = prog[i];
@@ -61,7 +61,7 @@ namespace so {
 			}
 		}
 	}
-} // namespace so
+} // namespace sup
 
 #endif // #ifndef BATCH_RUNNER_CUH
 

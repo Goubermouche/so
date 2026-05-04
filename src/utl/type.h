@@ -15,7 +15,7 @@
 #include <climits>
 #include <array>
 
-namespace so {
+namespace sup {
 	namespace type {
 		using u8  = uint8_t;
 		using u16 = uint16_t;
@@ -80,7 +80,7 @@ namespace so {
 		u64 pad_len = (target_len > s.size()) ? (target_len - s.size()) : 0;
 		return s + str(pad_len, pad);
 	}
-} // namespace so
+} // namespace sup
 
 #define HD __host__ __device__
 
@@ -111,8 +111,8 @@ namespace so {
 #define ASSERT(__condition, __message, ...)    \
   do {                                         \
     if(!(__condition)) {                       \
-      so::print_err(__message,## __VA_ARGS__); \
-      so::flush();                             \
+      sup::print_err(__message,## __VA_ARGS__); \
+      sup::flush();                             \
       DEBUG_BREAK();                           \
     }                                          \
   } while(false)

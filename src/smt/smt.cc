@@ -2,7 +2,7 @@
 #include "int/instruction.cuh"
 #include <z3++.h>
 
-namespace so {
+namespace sup {
 	namespace detail {
 		using state_array = std::array<z3::expr, 16>;
 
@@ -211,5 +211,5 @@ namespace so {
 			return r;
 		}
 	}
-} // namespace so
+} // namespace sup
 

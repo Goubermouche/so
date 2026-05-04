@@ -4,7 +4,7 @@
 #include <cuda_runtime.h>
 #include "type.h"
 
-namespace so {
+namespace sup {
 	inline void check_cuda(cudaError_t err, const char* msg) {
 		if(err != cudaSuccess) {
 			print_err("error: [{}]: {}\n", msg, cudaGetErrorString(err));
@@ -42,7 +42,7 @@ namespace so {
 
 		return 0;
 	}
-} // namespace so
+} // namespace sup
 
 #ifdef __CUDACC__
 	#define SO_HD __host__ __device__ __forceinline__

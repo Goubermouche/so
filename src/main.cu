@@ -1,13 +1,13 @@
 #include "opt/optimize.h"
 
-so::i32 main() {
-	if(so::device_init()) {
+sup::i32 main() {
+	if(sup::device_init()) {
 		return 1;
 	}
 
-	so::print("\n");
+	sup::print("\n");
 
-	so::optimize(
+	sup::optimize(
 		"mov rbx, rax\n"
 		"shl rbx, 2\n"
 		"add rbx, rax\n"

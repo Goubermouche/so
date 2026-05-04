@@ -1,6 +1,6 @@
 #include "int/program.h"
 
-namespace so {
+namespace sup {
 	const char* token_to_str(token tok) {
 		switch(tok) {
 			case TOK_UNKNOWN:    return "unknown";
@@ -464,5 +464,5 @@ namespace so {
 			default:             return "?";
 		}
 	}
-} // namespace so
+} // namespace sup
 

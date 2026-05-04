@@ -3,7 +3,7 @@
 
 #include "int/cpu.cuh"
 
-namespace so {
+namespace sup {
 	enum opcode : u16 {
 		OP_MOV_R64_R64 = 0,
 		OP_MOV_R64_I64,
@@ -126,7 +126,7 @@ namespace so {
 		}
 		static_assert(check_inst_db_alignment(), "INST_DB rows must be in opcode-enum order");
 	} //namespace detail
-} // namespace so
+} // namespace sup
 
 #endif // #ifndef INSTRUCTION_CUH
 

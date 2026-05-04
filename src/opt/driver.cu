@@ -5,7 +5,7 @@
 #include "opt/canon.cuh"
 #include "opt/cost.cuh"
 
-namespace so {
+namespace sup {
 	struct warp_state {
 		inst current[MCMC_PROG_LEN];
 		inst candidate[MCMC_PROG_LEN];
@@ -436,6 +436,6 @@ namespace so {
 
 		return results;
 	}
-} // namespace so
+} // namespace sup
 
 

@@ -5,7 +5,7 @@
 #include "int/program.h"
 #include "smt/smt.h"
 
-namespace so {
+namespace sup {
 	struct config {
 		u64 live_mask = 0;
 		u64 max_steps = 200'000;
@@ -47,7 +47,7 @@ namespace so {
 			f64 m_total_gpu_ms = 0.0;
 		};
 	} // namespace detail
-} // namespace so
+} // namespace sup
 
 #endif // #ifndef OPTIMIZE_H
 

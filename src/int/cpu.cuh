@@ -3,7 +3,7 @@
 
 #include "utl/device.h"
 
-namespace so {
+namespace sup {
 	enum reg_index {
 		REG_RAX = 0,
 		REG_RBX,
@@ -48,7 +48,7 @@ namespace so {
 	struct cpu_state {
 		u64 regs[16];
 	};
-} // namespace so
+} // namespace sup
 
 #endif // #ifndef CPU_CUH
 

@@ -3,7 +3,7 @@
 
 #include "int/instruction.cuh"
 
-namespace so {
+namespace sup {
 	struct rng {
 		u64 s;
 	};
@@ -272,7 +272,7 @@ namespace so {
 
 		return which;
 	}
-} // namespace so
+} // namespace sup
 
 #endif // #ifndef MUTATE_CUH
 

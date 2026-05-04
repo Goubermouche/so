@@ -1,8 +1,9 @@
-## so [wip]
-x86-64 Instruction superoptimizer accelerated by CUDA.
+## sup [wip]
+Instruction superoptimizer accelerated with CUDA.
 
 ## build
 ```
 nix-shell
 ./build
+./out/sup
 ```

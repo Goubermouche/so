@@ -1,9 +1,9 @@
 #include "opt/optimize.h"
 #include <chrono>
 
-namespace so {
+namespace sup {
 	void optimize(const str& prog, const config& cfg) {
-		so::program parsed = so::program::parse(prog);
+		sup::program parsed = sup::program::parse(prog);
 		optimize(parsed, cfg);
 	}
 
@@ -178,15 +178,15 @@ namespace so {
 
 			// smt outcome
 			switch(m_rep.kind) {
-				case so::VERIFY_EQUIVALENT: print("smt: VERIFIED equivalent to target ({}ms total smt)\n", m_total_smt_ms); break;
-				case so::VERIFY_TIMEOUT: print("smt: TIMEOUT after {}ms\n", m_rep.solve_ms); break;
-				case so::VERIFY_ERROR: print("smt: ERROR: {}\n", m_rep.error ? m_rep.error : "(unknown)"); break;
-				case so::VERIFY_COUNTEREXAMPLE: {
+				case sup::VERIFY_EQUIVALENT: print("smt: VERIFIED equivalent to target ({}ms total smt)\n", m_total_smt_ms); break;
+				case sup::VERIFY_TIMEOUT: print("smt: TIMEOUT after {}ms\n", m_rep.solve_ms); break;
+				case sup::VERIFY_ERROR: print("smt: ERROR: {}\n", m_rep.error ? m_rep.error : "(unknown)"); break;
+				case sup::VERIFY_COUNTEREXAMPLE: {
 					print("smt: UNVERIFIED after {} hardening iterations: last counterexample:\n", m_iter_count);
 					for(u32 i = 0; i < 16; ++i) {
 						u64 v = m_rep.counterexample.regs[i];
 						if(v) {
-							print("  {} = {}\n", so::reg_name(i), v);
+							print("  {} = {}\n", sup::reg_name(i), v);
 						}
 					}
 					break;
@@ -194,5 +194,5 @@ namespace so {
 			}
 		}
 	} // namespace detail
-} // namespace so
+} // namespace sup
 

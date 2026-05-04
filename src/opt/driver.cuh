@@ -4,7 +4,7 @@
 #include "int/cpu.cuh"
 #include "int/instruction.cuh"
 
-namespace so {
+namespace sup {
 	static constexpr u32 MCMC_PROG_LEN = 16;
 	static constexpr u32 MCMC_N_TESTS = 32;
 	static constexpr u32 N_WARPS_PER_BLOCK = 8;
@@ -33,7 +33,7 @@ namespace so {
 	};
 
 	mcmc_result* mcmc_run_gpu(const inst* target_prog, u32 target_len, const cpu_state* test_in, const mcmc_config& cfg);
-} // namespace so
+} // namespace sup
 
 #endif // #ifndef DRIVER_CUH
 
