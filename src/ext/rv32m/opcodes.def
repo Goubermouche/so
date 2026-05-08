@@ -1,0 +1,9 @@
+#define EXT_RV32M_OPCODES(X)        \
+	X(MUL,    "mul",    SHAPE_RRR, 1) \
+	X(MULH,   "mulh",   SHAPE_RRR, 1) \
+	X(MULHSU, "mulhsu", SHAPE_RRR, 0) \
+	X(MULHU,  "mulhu",  SHAPE_RRR, 1) \
+	X(DIV,    "div",    SHAPE_RRR, 0) \
+	X(DIVU,   "divu",   SHAPE_RRR, 0) \
+	X(REM,    "rem",    SHAPE_RRR, 0) \
+	X(REMU,   "remu",   SHAPE_RRR, 0)

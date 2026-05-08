@@ -1,0 +1,10 @@
+#define EXT_RV64I_OPCODES(X)      \
+	X(ADDIW, "addiw", SHAPE_RRI, 0) \
+	X(SLLIW, "slliw", SHAPE_RRI, 0) \
+	X(SRLIW, "srliw", SHAPE_RRI, 0) \
+	X(SRAIW, "sraiw", SHAPE_RRI, 0) \
+	X(ADDW,  "addw",  SHAPE_RRR, 1) \
+	X(SUBW,  "subw",  SHAPE_RRR, 0) \
+	X(SLLW,  "sllw",  SHAPE_RRR, 0) \
+	X(SRLW,  "srlw",  SHAPE_RRR, 0) \
+	X(SRAW,  "sraw",  SHAPE_RRR, 0)

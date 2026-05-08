@@ -25,7 +25,7 @@ namespace sup {
 		const inst* rewrite,
 		u32 rewrite_len,
 		u64 live_outs,
-		u32 timeout_ms = 10'000
+		u32 timeout_ms = 10000
 	);
 } // namespace sup
 

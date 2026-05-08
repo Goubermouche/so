@@ -3,33 +3,49 @@
 
 #include "int/cpu.cuh"
 
+// to add a new extension:
+// - create src/ext/<name>/ext.cuh defining the X-macro and the run handler
+// - #include it below and append it to the EXT_OPCODE_LIST and ext_bits enum
+// - add a Z3.cc file that exposes ext_<name>_smt(...)
+// - wire those into smt/smt.cc and opt/batch_runner.cuh's dispatcher
+
 namespace sup {
+	enum inst_shape : u8 {
+		SHAPE_NONE = 0, // nop
+		SHAPE_RRR,      // rd, rs1, rs2
+		SHAPE_RRI,      // rd, rs1, imm
+		SHAPE_RR,       // rd, rs1
+		SHAPE_RI,       // rd, imm
+	};
+
+	// EXT_RV32I is the base ISA and is always implied
+	// rv64-prefixed extensions extend their rv32 counterpart and require
+	// it to be enabled. The optimizer's pool builder enforces this implicitly
+	enum ext_bits : u32 {
+		EXT_RV32I = 1u << 0,
+		EXT_RV64I = 1u << 1,
+		EXT_RV32M = 1u << 2,
+		EXT_RV64M = 1u << 3,
+	};
+} // namespace sup
+
+// extensions
+#include "ext/rv32i/opcodes.def"
+#include "ext/rv64i/opcodes.def"
+#include "ext/rv32m/opcodes.def"
+#include "ext/rv64m/opcodes.def"
+
+namespace sup {
+#define EXT_OPCODE_LIST(X) \
+	EXT_RV32I_OPCODES(X)     \
+	EXT_RV64I_OPCODES(X)     \
+	EXT_RV32M_OPCODES(X)     \
+	EXT_RV64M_OPCODES(X)
+
 	enum opcode : u16 {
-		OP_MOV_R64_R64 = 0,
-		OP_MOV_R64_I64,
-		OP_ADD_R64_R64,
-		OP_ADD_R64_I64,
-		OP_SUB_R64_R64,
-		OP_SUB_R64_I64,
-		OP_NEG_R64,
-		OP_IMUL_R64_R64,
-		OP_IMUL_R64_I64,
-		OP_AND_R64_R64,
-		OP_AND_R64_I64,
-		OP_OR_R64_R64,
-		OP_OR_R64_I64,
-		OP_XOR_R64_R64,
-		OP_XOR_R64_I64,
-		OP_NOT_R64,
-		OP_SHL_R64_I64,
-		OP_SHR_R64_I64,
-		OP_SAR_R64_I64,
-		OP_ROL_R64_I64,
-		OP_ROR_R64_I64,
-		OP_LEA_R64_R64_R64_S1,
-		OP_LEA_R64_R64_R64_S2,
-		OP_LEA_R64_R64_R64_S4,
-		OP_LEA_R64_R64_R64_S8,
+#define X(TAG, mnemonic, shape, comm) OP_##TAG,
+		EXT_OPCODE_LIST(X)
+#undef X
 		OP_NOP,
 		OP_COUNT,
 	};
@@ -46,8 +62,8 @@ namespace sup {
 	struct inst_spec {
 		enum operand : u8 {
 			NONE = 0,
-			R64,
-			I64,
+			REG,
+			IMM,
 		};
 
 		const char* name;
@@ -56,13 +72,18 @@ namespace sup {
 		i8 dst_slot;
 		i8 src_slot;
 		i8 src2_slot;
-		b32 rmw; // dst is also a read
+		u32 ext;
+		u8 commutative;
 
 		SO_HD constexpr u8 get_operand_count() const {
 			u8 i = 0;
+
 			for(; i < 4; ++i) {
-				if(operands[i] == NONE) break;
+				if(operands[i] == NONE) {
+					break;
+				}
 			}
+
 			return i;
 		}
 	};
@@ -71,34 +92,75 @@ namespace sup {
 		inst_spec row[OP_COUNT];
 	};
 
+	SO_HD constexpr inst_spec::operand shape_op0(inst_shape s) {
+		return s == SHAPE_NONE ? inst_spec::NONE : inst_spec::REG;
+	}
+
+	SO_HD constexpr inst_spec::operand shape_op1(inst_shape s) {
+		switch(s) {
+			case SHAPE_RRR: case SHAPE_RRI: case SHAPE_RR: return inst_spec::REG;
+			case SHAPE_RI:                                 return inst_spec::IMM;
+			default:                                       return inst_spec::NONE;
+		}
+	}
+
+	SO_HD constexpr inst_spec::operand shape_op2(inst_shape s) {
+		switch(s) {
+			case SHAPE_RRR: return inst_spec::REG;
+			case SHAPE_RRI: return inst_spec::IMM;
+			default:        return inst_spec::NONE;
+		}
+	}
+
+	SO_HD constexpr i8 shape_dst_slot(inst_shape s) {
+		return s == SHAPE_NONE ? (i8)-1 : (i8)0;
+	}
+
+	SO_HD constexpr i8 shape_src_slot(inst_shape s) {
+		switch(s) {
+			case SHAPE_RRR: case SHAPE_RRI: case SHAPE_RR: return 1;
+			default:                                       return -1;
+		}
+	}
+
+	SO_HD constexpr i8 shape_src2_slot(inst_shape s) {
+		return s == SHAPE_RRR ? (i8)2 : (i8)-1;
+	}
+
 	SO_HD constexpr inst_db_t build_inst_db() {
 		inst_db_t d = {};
-		d.row[OP_MOV_R64_R64       ] = { "mov",  { inst_spec::R64, inst_spec::R64,  inst_spec::NONE, inst_spec::NONE }, OP_MOV_R64_R64,        0,  1, -1, false };
-		d.row[OP_MOV_R64_I64       ] = { "mov",  { inst_spec::R64, inst_spec::I64,  inst_spec::NONE, inst_spec::NONE }, OP_MOV_R64_I64,        0, -1, -1, false };
-		d.row[OP_ADD_R64_R64       ] = { "add",  { inst_spec::R64, inst_spec::R64,  inst_spec::NONE, inst_spec::NONE }, OP_ADD_R64_R64,        0,  1, -1, true  };
-		d.row[OP_ADD_R64_I64       ] = { "add",  { inst_spec::R64, inst_spec::I64,  inst_spec::NONE, inst_spec::NONE }, OP_ADD_R64_I64,        0, -1, -1, true  };
-		d.row[OP_SUB_R64_R64       ] = { "sub",  { inst_spec::R64, inst_spec::R64,  inst_spec::NONE, inst_spec::NONE }, OP_SUB_R64_R64,        0,  1, -1, true  };
-		d.row[OP_SUB_R64_I64       ] = { "sub",  { inst_spec::R64, inst_spec::I64,  inst_spec::NONE, inst_spec::NONE }, OP_SUB_R64_I64,        0, -1, -1, true  };
-		d.row[OP_NEG_R64           ] = { "neg",  { inst_spec::R64, inst_spec::NONE, inst_spec::NONE, inst_spec::NONE }, OP_NEG_R64,            0, -1, -1, true  };
-		d.row[OP_IMUL_R64_R64      ] = { "imul", { inst_spec::R64, inst_spec::R64,  inst_spec::NONE, inst_spec::NONE }, OP_IMUL_R64_R64,       0,  1, -1, true  };
-		d.row[OP_IMUL_R64_I64      ] = { "imul", { inst_spec::R64, inst_spec::I64,  inst_spec::NONE, inst_spec::NONE }, OP_IMUL_R64_I64,       0, -1, -1, true  };
-		d.row[OP_AND_R64_R64       ] = { "and",  { inst_spec::R64, inst_spec::R64,  inst_spec::NONE, inst_spec::NONE }, OP_AND_R64_R64,        0,  1, -1, true  };
-		d.row[OP_AND_R64_I64       ] = { "and",  { inst_spec::R64, inst_spec::I64,  inst_spec::NONE, inst_spec::NONE }, OP_AND_R64_I64,        0, -1, -1, true  };
-		d.row[OP_OR_R64_R64        ] = { "or",   { inst_spec::R64, inst_spec::R64,  inst_spec::NONE, inst_spec::NONE }, OP_OR_R64_R64,         0,  1, -1, true  };
-		d.row[OP_OR_R64_I64        ] = { "or",   { inst_spec::R64, inst_spec::I64,  inst_spec::NONE, inst_spec::NONE }, OP_OR_R64_I64,         0, -1, -1, true  };
-		d.row[OP_XOR_R64_R64       ] = { "xor",  { inst_spec::R64, inst_spec::R64,  inst_spec::NONE, inst_spec::NONE }, OP_XOR_R64_R64,        0,  1, -1, true  };
-		d.row[OP_XOR_R64_I64       ] = { "xor",  { inst_spec::R64, inst_spec::I64,  inst_spec::NONE, inst_spec::NONE }, OP_XOR_R64_I64,        0, -1, -1, true  };
-		d.row[OP_NOT_R64           ] = { "not",  { inst_spec::R64, inst_spec::NONE, inst_spec::NONE, inst_spec::NONE }, OP_NOT_R64,            0, -1, -1, true  };
-		d.row[OP_SHL_R64_I64       ] = { "shl",  { inst_spec::R64, inst_spec::I64,  inst_spec::NONE, inst_spec::NONE }, OP_SHL_R64_I64,        0, -1, -1, true  };
-		d.row[OP_SHR_R64_I64       ] = { "shr",  { inst_spec::R64, inst_spec::I64,  inst_spec::NONE, inst_spec::NONE }, OP_SHR_R64_I64,        0, -1, -1, true  };
-		d.row[OP_SAR_R64_I64       ] = { "sar",  { inst_spec::R64, inst_spec::I64,  inst_spec::NONE, inst_spec::NONE }, OP_SAR_R64_I64,        0, -1, -1, true  };
-		d.row[OP_ROL_R64_I64       ] = { "rol",  { inst_spec::R64, inst_spec::I64,  inst_spec::NONE, inst_spec::NONE }, OP_ROL_R64_I64,        0, -1, -1, true  };
-		d.row[OP_ROR_R64_I64       ] = { "ror",  { inst_spec::R64, inst_spec::I64,  inst_spec::NONE, inst_spec::NONE }, OP_ROR_R64_I64,        0, -1, -1, true  };
-		d.row[OP_LEA_R64_R64_R64_S1] = { "lea",  { inst_spec::R64, inst_spec::R64,  inst_spec::R64,  inst_spec::NONE }, OP_LEA_R64_R64_R64_S1, 0,  1,  2, false };
-		d.row[OP_LEA_R64_R64_R64_S2] = { "lea",  { inst_spec::R64, inst_spec::R64,  inst_spec::R64,  inst_spec::NONE }, OP_LEA_R64_R64_R64_S2, 0,  1,  2, false };
-		d.row[OP_LEA_R64_R64_R64_S4] = { "lea",  { inst_spec::R64, inst_spec::R64,  inst_spec::R64,  inst_spec::NONE }, OP_LEA_R64_R64_R64_S4, 0,  1,  2, false };
-		d.row[OP_LEA_R64_R64_R64_S8] = { "lea",  { inst_spec::R64, inst_spec::R64,  inst_spec::R64,  inst_spec::NONE }, OP_LEA_R64_R64_R64_S8, 0,  1,  2, false };
-		d.row[OP_NOP               ] = { "nop",  { inst_spec::NONE,inst_spec::NONE, inst_spec::NONE, inst_spec::NONE }, OP_NOP,               -1, -1, -1, false };
+
+#define ROW(TAG, MN, SHAPE, COMM, EXT_BIT)                                     \
+	d.row[OP_##TAG] = inst_spec{                                                 \
+		MN,                                                                        \
+		{ shape_op0(SHAPE), shape_op1(SHAPE), shape_op2(SHAPE), inst_spec::NONE }, \
+		OP_##TAG,                                                                  \
+		shape_dst_slot(SHAPE),                                                     \
+		shape_src_slot(SHAPE),                                                     \
+		shape_src2_slot(SHAPE),                                                    \
+		(u32)(EXT_BIT),                                                            \
+		(u8)(COMM)                                                                 \
+	};
+
+#define X(TAG, MN, SHAPE, COMM) ROW(TAG, MN, SHAPE, COMM, EXT_RV32I)
+		EXT_RV32I_OPCODES(X)
+#undef X
+#define X(TAG, MN, SHAPE, COMM) ROW(TAG, MN, SHAPE, COMM, EXT_RV64I)
+		EXT_RV64I_OPCODES(X)
+#undef X
+#define X(TAG, MN, SHAPE, COMM) ROW(TAG, MN, SHAPE, COMM, EXT_RV32M)
+		EXT_RV32M_OPCODES(X)
+#undef X
+#define X(TAG, MN, SHAPE, COMM) ROW(TAG, MN, SHAPE, COMM, EXT_RV64M)
+		EXT_RV64M_OPCODES(X)
+#undef X
+
+#undef ROW
+		d.row[OP_NOP] = inst_spec{
+			"nop",
+			{ inst_spec::NONE, inst_spec::NONE, inst_spec::NONE, inst_spec::NONE },
+			OP_NOP, -1, -1, -1, EXT_RV32I, 0
+		};
 		return d;
 	}
 
@@ -119,13 +181,18 @@ namespace sup {
 	namespace detail {
 		SO_HD constexpr b32 check_inst_db_alignment() {
 			const inst_db_t d = build_inst_db();
+
 			for(u32 i = 0; i < (u32)OP_COUNT; ++i) {
-				if((u32)d.row[i].op != i) return false;
+				if((u32)d.row[i].op != i) {
+					return false;
+				}
 			}
+
 			return true;
 		}
+
 		static_assert(check_inst_db_alignment(), "INST_DB rows must be in opcode-enum order");
-	} //namespace detail
+	} // namespace detail
 } // namespace sup
 
 #endif // #ifndef INSTRUCTION_CUH
