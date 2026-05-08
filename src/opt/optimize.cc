@@ -1,4 +1,5 @@
 #include "opt/optimize.h"
+#include "opt/batch_runner.cuh"
 #include <chrono>
 
 namespace sup {
@@ -13,48 +14,77 @@ namespace sup {
 	}
 
 	namespace detail {
+		static cpu_state host_run(const inst* prog, u32 prog_len, const cpu_state& in) {
+			cpu_state out = in;
+			out.regs[0] = 0;
+			run_program_lane(out.regs, prog, prog_len);
+			return out;
+		}
+
 		optimizer::optimizer(const program& prog, const config& cfg) :
 			m_prog(prog),
 			m_cfg(cfg),
-			m_live_mask(cfg.live_mask ? cfg.live_mask : prog.live_outs()),
-			m_results(nullptr),
-			m_best(0),
-			m_rep({}),
-			m_iter_count(0),
+			m_live_in(0),
+			m_live_out(cfg.live_mask ? cfg.live_mask : prog.live_outs()),
+			m_best_len(0),
+			m_total_candidates(0),
+			m_total_gpu_passes(0),
+			m_total_gpu_ms(0.0),
 			m_total_smt_ms(0.0),
-			m_total_gpu_ms(0.0)
-		{}
-
-		optimizer::~optimizer() {
-			if(m_results) {
-				free(m_results);
-			}
+			m_total_smt_calls(0)
+		{
+			m_live_in = compute_live_in(prog.instructions.data(), (u32)prog.instructions.size());
 		}
+
+		optimizer::~optimizer() {}
 
 		void optimizer::run() {
 			log_startup();
 			seed_test_vectors();
-			setup_mcmc_config();
-			run_search_loop();
-			log_results();
+
+			if(m_gpu.init(m_cfg.gpu_chunk_size) != 0) {
+				print("error: gpu_runner::init failed\n");
+				return;
+			}
+
+			b32 found = false;
+			for(u32 L = 1; L <= m_cfg.max_prog_len; ++L) {
+				print("> searching length\n", L);
+				if(run_length(L)) {
+					found = true;
+					m_best_len = L;
+					break;
+				}
+			}
+
+			log_results(found);
 		}
 
 		void optimizer::log_startup() const {
-			print("source ({} instructions):\n", m_prog.instructions.size());
+			print("> source ({} instructions):\n", m_prog.instructions.size());
 			print("{}", m_prog.to_string());
-			print("live mask: { ");
-			print_reg_mask(m_live_mask);
-			print(" }\n");
-			print("chains: {}\n", m_cfg.n_chains);
-			print("steps/chain: {}\n", m_cfg.max_steps);
-			print("mode: {}\n", m_cfg.seed_from_target ? "optimize" : "synthesize");
+			print("> live-in:  { "); print_reg_mask(m_live_in);  print(" }\n");
+			print("> live-out: { "); print_reg_mask(m_live_out); print(" }\n");
+			u32 effective_mask = m_cfg.ext_mask | EXT_RV32I;
+
+			if(effective_mask & EXT_RV64M) {
+				effective_mask |= EXT_RV32M;
+			}
+
+			print("> ext mask: 0x{} (RV32I{}{}{})\n",
+				effective_mask,
+				(effective_mask & EXT_RV64I) ? "+RV64I" : "",
+				(effective_mask & EXT_RV32M) ? "+RV32M" : "",
+				(effective_mask & EXT_RV64M) ? "+RV64M" : "");
+			print("> max prog len: {}\n", m_cfg.max_prog_len);
+			print("> batch size:   {}\n", m_cfg.batch_size);
 		}
 
 		void optimizer::print_reg_mask(u64 mask) const {
 			b32 first = true;
 
-			for(u32 r = 0; r < 16; ++r) {
-				if(mask & (1ull << r)) {
+			for(u32 r = 0; r < 32; ++r) {
+				if(mask & (1ULL << r)) {
 					print("{}{}", first ? "" : ",", reg_name(r));
 					first = false;
 				}
@@ -66,131 +96,196 @@ namespace sup {
 		}
 
 		void optimizer::seed_test_vectors() {
+			// 32 random test vectors at start. The CEGIS loop adds counterexamples
+			// in subsequent slots.
+			const u32 n_initial = 32;
 			u64 s = m_cfg.seed ^ 0x9E3779B97F4A7C15ULL;
 
-			for(u32 t = 0; t < MCMC_N_TESTS; ++t) {
-				for(u32 i = 0; i < 16; ++i) {
+			for(u32 t = 0; t < n_initial; ++t) {
+				cpu_state in = {};
+
+				for(u32 i = 0; i < 32; ++i) {
 					s ^= s >> 30; s *= 0xBF58476D1CE4E5B9ULL;
 					s ^= s >> 27; s *= 0x94D049BB133111EBULL;
 					s ^= s >> 31;
-					m_test_in[t].regs[i] = s;
-				}
-			}
-		}
-
-		void optimizer::setup_mcmc_config() {
-			m_mcfg = {
-				.max_steps = m_cfg.max_steps,
-				.beta = 0.1f,
-				.live_mask = m_live_mask,
-				.master_seed = m_cfg.seed,
-				.perf_weight = 10,
-				.correct_weight = (u32)(m_cfg.seed_from_target ? 4096 : 1),
-				.n_chains = m_cfg.n_chains,
-				.seed_from_target =m_cfg.seed_from_target
-			};
-
-			for(u32 i = 0; i < MCMC_N_TESTS; ++i) {
-				m_mcfg.test_weights[i] = 1;
-			}
-		}
-
-		void optimizer::run_search_loop() {
-			using clk = std::chrono::steady_clock;
-			using ms = std::chrono::duration<f64, std::milli>;
-
-			const auto t_start = clk::now();
-
-			for(u32 iter = 0; iter <= m_cfg.max_hardening_iters; ++iter) {
-				m_mcfg.master_seed = m_cfg.seed + iter;
-				m_results = mcmc_run_gpu(m_prog.instructions.data(), (u32)m_prog.instructions.size(), m_test_in, m_mcfg);
-				m_total_gpu_ms += ms(clk::now() - t_start).count();
-				m_iter_count++;
-				m_best = argmin_cost();
-
-				// verify program equivalence via smt
-				m_rep = verify_equivalent(m_prog.instructions.data(), (u32)m_prog.instructions.size(), m_results[m_best].best_prog, MCMC_PROG_LEN, m_live_mask);
-				m_total_smt_ms += m_rep.solve_ms;
-
-				if(m_rep.kind != VERIFY_COUNTEREXAMPLE) {
-					break; // optimized or timeout
+					in.regs[i] = s;
 				}
 
-				// smt counterexample
-				if(iter < m_cfg.max_hardening_iters) {
-					const u32 slot = iter % MCMC_N_TESTS;
-					m_test_in[slot] = m_rep.counterexample;
-					m_mcfg.test_weights[slot] = 4096;
-					print("hardening iter: {}\n", iter);
-
-					// free the unverified batch of results to prepare for the next iteration
-					free(m_results);
-					m_results = nullptr;
-				}
+				in.regs[0] = 0; // x0 invariant
+				m_test_in[t] = in;
+				m_target_out[t] = host_run(m_prog.instructions.data(), (u32)m_prog.instructions.size(), in);
 			}
+
+			m_n_tests = n_initial;
 		}
 
-		u32 optimizer::argmin_cost() const {
-			u32 best_idx = 0;
+		struct survivor_set {
+			arr<u32> indices;
+		};
 
-			for(u32 i = 1; i < m_cfg.n_chains; ++i) {
-				if(m_results[i].best_cost < m_results[best_idx].best_cost) {
-					best_idx = i;
-				}
+		void optimizer::filter_batch(const arr<candidate<SYNTH_PROG_LEN>>& cands) {
+			const u64 N = cands.size();
+
+			if(N == 0) {
+				return;
 			}
 
-			return best_idx;
-		}
+			arr<inst> flat;
+			flat.resize(N * SYNTH_PROG_LEN);
 
-		void optimizer::log_results() const {
-			print("\n");
-			u64 total_accepted = 0;
-			u64 total_skipped_bloom = 0;
+			for(u64 i = 0; i < N; ++i) {
+				const candidate<SYNTH_PROG_LEN>& c = cands[i];
 
-			for(u32 i = 0; i < m_cfg.n_chains; ++i) {
-				total_accepted += m_results[i].accepted;
-				total_skipped_bloom += m_results[i].skipped_bloom;
-			}
-
-			const u64 total_proposed = (u64)m_cfg.n_chains * m_cfg.max_steps;
-			const f64 cands_per_sec = (f64)total_proposed / (m_total_gpu_ms / 1000.0 / m_iter_count);
-
-			if(m_iter_count > 1) {
-				print("hardened in {} iterations: {}ms gpu + {}ms smt\n", m_iter_count, m_total_gpu_ms, m_total_smt_ms);
-			}
-			else {
-				print("optimized in {}ms {} candidates {}M cand/sec\n", m_total_gpu_ms, total_proposed, cands_per_sec / 1e6);
-			}
-
-			if(m_mcfg.use_bloom) {
-				f64 accept = 100.0 * (f64)total_accepted / (f64)total_proposed;
-				f64 skip = 100.0 * (f64)total_skipped_bloom / (f64)total_proposed;
-				print("accept {}% bloom-skip {}%\n", accept, skip);
-			}
-			else {
-				print("accept {}%\n", 100.0 * (f64)total_accepted / (f64)total_proposed);
-			}
-
-			// result program
-			program live_prog = program::dce(m_results[m_best].best_prog, MCMC_PROG_LEN, m_live_mask);
-			print("best program ({} live insn):\n", live_prog.instructions.size());
-			print("{}\n", live_prog.to_string());
-
-			// smt outcome
-			switch(m_rep.kind) {
-				case sup::VERIFY_EQUIVALENT: print("smt: VERIFIED equivalent to target ({}ms total smt)\n", m_total_smt_ms); break;
-				case sup::VERIFY_TIMEOUT: print("smt: TIMEOUT after {}ms\n", m_rep.solve_ms); break;
-				case sup::VERIFY_ERROR: print("smt: ERROR: {}\n", m_rep.error ? m_rep.error : "(unknown)"); break;
-				case sup::VERIFY_COUNTEREXAMPLE: {
-					print("smt: UNVERIFIED after {} hardening iterations: last counterexample:\n", m_iter_count);
-					for(u32 i = 0; i < 16; ++i) {
-						u64 v = m_rep.counterexample.regs[i];
-						if(v) {
-							print("  {} = {}\n", sup::reg_name(i), v);
-						}
+				for(u32 j = 0; j < SYNTH_PROG_LEN; ++j) {
+					if(j < c.len) {
+						flat[i * SYNTH_PROG_LEN + j] = c.code[j];
 					}
-					break;
+					else {
+						inst nop = {};
+						nop.op = OP_NOP;
+						flat[i * SYNTH_PROG_LEN + j] = nop;
+					}
 				}
+			}
+
+			synth_config gcfg;
+			gcfg.live_mask = m_live_out;
+			gcfg.n_tests = m_n_tests;
+			gcfg.prog_len = cands[0].len;
+			arr<synth_result> results;
+			results.resize(N);
+			f64 ms = 0.0;
+			m_gpu.run(flat.data(), N, m_test_in, m_target_out, gcfg, results.data(), &ms);
+			m_total_gpu_ms += ms;
+			m_total_candidates += N;
+			++m_total_gpu_passes;
+
+			// any candidate that passed all tests is forwarded to SMT
+			u64 ok_count = 0;
+			for(u64 i = 0; i < N; ++i) {
+				if(results[i].pass_count == m_n_tests) {
+					++ok_count;
+					// SMT-verify
+					const inst* rw = flat.data() + i * SYNTH_PROG_LEN;
+					const u32 rw_len = cands[i].len;
+					const auto t0 = std::chrono::steady_clock::now();
+					verify_report rep = verify_equivalent(
+						m_prog.instructions.data(), (u32)m_prog.instructions.size(),
+						rw, rw_len,
+						m_live_out
+					);
+					const auto t1 = std::chrono::steady_clock::now();
+					m_total_smt_ms += std::chrono::duration<f64, std::milli>(t1 - t0).count();
+					++m_total_smt_calls;
+
+					if(rep.kind == VERIFY_EQUIVALENT) {
+						m_rep = rep;
+						m_best_prog.assign(rw, rw + rw_len);
+						return;
+					}
+					else if(rep.kind == VERIFY_COUNTEREXAMPLE) {
+						// add the counterexample, then ABORT this batch
+						if(m_n_tests < SYNTH_N_TESTS) {
+							const u32 slot = m_n_tests++;
+							m_test_in[slot]    = rep.counterexample;
+							m_target_out[slot] = host_run(m_prog.instructions.data(), (u32)m_prog.instructions.size(), rep.counterexample);
+							print("  smt counterexample added (now {} tests)\n", m_n_tests);
+						}
+						else {
+							print("  smt counterexample dropped (test buffer full)\n");
+						}
+
+						print("  batch: {} cands -> {} passed GPU -> aborting (counterexample)\n", N, ok_count);
+						return;
+					}
+					else {
+						print("  smt {}: dropping candidate\n", rep.kind == VERIFY_TIMEOUT ? "TIMEOUT" : "ERROR");
+					}
+				}
+			}
+
+			print("  batch: {} cands -> {} passed GPU -> 0 verified\n", N, ok_count);
+		}
+
+		b32 optimizer::run_length(u32 L) {
+			u32 effective_mask = m_cfg.ext_mask | EXT_RV32I;
+
+			if(effective_mask & EXT_RV64M) {
+				effective_mask |= EXT_RV32M;
+			}
+
+			const opcode_pool pool = build_opcode_pool(effective_mask);
+			const imm_pool imms = build_default_imm_pool();
+			print("  opcode pool: {} ops\n", pool.n_ops);
+			u32 max_scratch = 5 + L; if(max_scratch > 32) max_scratch = 32;
+
+			using clk = std::chrono::steady_clock;
+
+			// regenerate candidates if the test set grows
+			u32 cegis_iter = 0;
+
+			while(cegis_iter < m_cfg.max_cegis_iters) {
+				const u32 prev_n_tests = m_n_tests;
+
+				// enumerate in chunks.
+				arr<candidate<SYNTH_PROG_LEN>> cands;
+				cands.reserve(m_cfg.batch_size);
+
+				const auto t_start = clk::now();
+				enumerate_programs<SYNTH_PROG_LEN>(
+					pool, imms,
+					m_live_in, m_live_out,
+					L, max_scratch,
+					cands, m_cfg.batch_size
+				);
+
+				print("  cegis iter {}: enumerated {} candidates ({}ms)\n",
+					cegis_iter, cands.size(),
+					std::chrono::duration<f64, std::milli>(clk::now() - t_start).count());
+
+				if(cands.empty()) {
+					return false;
+				}
+
+				filter_batch(cands);
+
+				if(!m_best_prog.empty()) {
+					return true;
+				}
+
+				// if no new counterexample was added, we exhausted the
+				// candidate space at this L without finding equivalence
+				if(m_n_tests == prev_n_tests) {
+					print("  no counterexamples found and no equivalent program - length {} is insufficient\n", L);
+					return false;
+				}
+
+				++cegis_iter;
+			}
+
+			print("  cegis iter limit hit at length {}\n", L);
+			return false;
+		}
+
+		void optimizer::log_results(b32 found) const {
+			print("> finished\n");
+			print("  total candidates evaluated: {}\n", m_total_candidates);
+			print("  total gpu time:             {}ms\n", m_total_gpu_ms);
+			print("  total smt time:             {}ms ({} calls)\n", m_total_smt_ms, m_total_smt_calls);
+
+			if(m_total_gpu_ms > 0) {
+				const f64 cps = (f64)m_total_candidates / (m_total_gpu_ms / 1000.0);
+				print("  gpu throughput:             {}M cand/sec\n", cps / 1e6);
+			}
+
+			if(found) {
+				program live_prog;
+				live_prog.instructions.assign(m_best_prog.begin(), m_best_prog.end());
+				print("> best program ({} instructions, SMT VERIFIED equivalent):\n", m_best_len);
+				print("{}", live_prog.to_string());
+			}
+			else {
+				print("> no equivalent program found within length {}\n", m_cfg.max_prog_len);
 			}
 		}
 	} // namespace detail

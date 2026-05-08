@@ -31,14 +31,14 @@ namespace sup {
 		const i32 max_threads = p.multiProcessorCount * p.maxThreadsPerMultiProcessor;
 		const i32 max_warps   = max_threads / 32;
 
-		print("device: {} (sm_{}{})\n", p.name, p.major, p.minor);
-		print("        threads: {}\n", max_threads);
-		print("        warps: {}\n", max_warps);
-		print("        dram: {} GB @ {} GB/s\n", std::ceil(p.totalGlobalMem / (1024.0 * 1024.0 * 1024.0)), (i32)mem_bw_gbs);
-		print("        L2: {}\n", p.l2CacheSize / 1024);
-		print("        shared memory per block: {} KB\n", (int)p.sharedMemPerBlock / 1024);
-		print("        SM clock: {} MHz\n", p.clockRate / 1000);
-		print("        mem clock: {} MHz\n", p.memoryClockRate / 1000.0);
+		print("> device: {} (sm_{}{})\n", p.name, p.major, p.minor);
+		print("          threads: {}\n", max_threads);
+		print("          warps: {}\n", max_warps);
+		print("          dram: {} GB @ {} GB/s\n", std::ceil(p.totalGlobalMem / (1024.0 * 1024.0 * 1024.0)), (i32)mem_bw_gbs);
+		print("          L2: {}\n", p.l2CacheSize / 1024);
+		print("          shared memory per block: {} KB\n", (int)p.sharedMemPerBlock / 1024);
+		print("          SM clock: {} MHz\n", p.clockRate / 1000);
+		print("          mem clock: {} MHz\n", p.memoryClockRate / 1000.0);
 
 		return 0;
 	}

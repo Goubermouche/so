@@ -6,22 +6,6 @@ namespace sup {
 			case TOK_UNKNOWN:    return "unknown";
 			case TOK_IDENTIFIER: return "identifier";
 			case TOK_NUMBER:     return "number";
-			case TOK_REG_RAX:    return "rax";
-			case TOK_REG_RBX:    return "rbx";
-			case TOK_REG_RCX:    return "rcx";
-			case TOK_REG_RDX:    return "rdx";
-			case TOK_REG_RSI:    return "rsi";
-			case TOK_REG_RDI:    return "rdi";
-			case TOK_REG_RBP:    return "rbp";
-			case TOK_REG_RSP:    return "rsp";
-			case TOK_REG_R8:     return "r8";
-			case TOK_REG_R9:     return "r9";
-			case TOK_REG_R10:    return "r10";
-			case TOK_REG_R11:    return "r11";
-			case TOK_REG_R12:    return "r12";
-			case TOK_REG_R13:    return "r13";
-			case TOK_REG_R14:    return "r14";
-			case TOK_REG_R15:    return "r15";
 			case TOK_COMMA:      return ",";
 			case TOK_LBRACKET:   return "[";
 			case TOK_RBRACKET:   return "]";
@@ -34,17 +18,22 @@ namespace sup {
 			case TOK_COLON:      return ":";
 			case TOK_NEWLINE:    return "newline";
 			case TOK_EOF:        return "eof";
-			default:             return "?";
+			default:
+				if(tok >= TOK_REG_X0 && tok <= TOK_REG_X31) {
+					return reg_name((u32)(tok - TOK_REG_X0));
+				}
+
+				return "?";
 		}
 	}
 
 	b32 token_is_reg(token tok) {
-		return tok >= TOK_REG_RAX && tok <= TOK_REG_R15;
+		return tok >= TOK_REG_X0 && tok <= TOK_REG_X31;
 	}
 
 	u64 token_to_reg_index(token tok) {
 		ASSERT(token_is_reg(tok), "token is not a register");
-		return tok - TOK_REG_RAX;
+		return tok - TOK_REG_X0;
 	}
 
 	tokenizer::tokenizer(const str& source) : m_source(source) {}
@@ -63,15 +52,16 @@ namespace sup {
 			case 'a' ... 'z':
 			case 'A' ... 'Z': return next_tok_identifier();
 
-			case ';':  return next_tok_comment();
+			case ';':
+			case '#':  return next_tok_comment();
 			case '"':  return next_tok_string();
 			case '\'': return next_tok_char();
 
 			case ',':  next_char(); return curr = TOK_COMMA;
 			case '[':  next_char(); return curr = TOK_LBRACKET;
 			case ']':  next_char(); return curr = TOK_RBRACKET;
-			case '{':  next_char(); return curr = TOK_LBRACE;
-			case '}':  next_char(); return curr = TOK_RBRACE;
+			case '(':  next_char(); return curr = TOK_LBRACE;
+			case ')':  next_char(); return curr = TOK_RBRACE;
 			case '+':  next_char(); return curr = TOK_PLUS;
 			case '-':  next_char(); return curr = TOK_MINUS;
 			case '*':  next_char(); return curr = TOK_ASTERISK;
@@ -86,6 +76,7 @@ namespace sup {
 	}
 
 	token tokenizer::next_tok_identifier() {
+		// '.' is allowed inside mnemonics like sext.b / zext.h. dashes don't appear.
 		while(isalnum(m_current_char) || m_current_char == '_' || m_current_char == '.') {
 			curr_string += m_current_char;
 			next_char();
@@ -106,7 +97,8 @@ namespace sup {
 	}
 
 	token tokenizer::next_tok_comment() {
-		// skip over comments
+		// skip over comments (both ';' and '#' style supported - '#' is the
+		// gas/clang convention for RISC-V)
 		do {
 			next_char();
 		} while(!is_at_end() && m_current_char != '\n');
@@ -150,22 +142,26 @@ namespace sup {
 
 	token tokenizer::string_to_token(const str& string) {
 		static const map<str, token> operand_map = {
-			{ "rax", TOK_REG_RAX }, { "eax",  TOK_REG_RAX },
-			{ "rbx", TOK_REG_RBX }, { "ebx",  TOK_REG_RBX },
-			{ "rcx", TOK_REG_RCX }, { "ecx",  TOK_REG_RCX },
-			{ "rdx", TOK_REG_RDX }, { "edx",  TOK_REG_RDX },
-			{ "rsi", TOK_REG_RSI }, { "esi",  TOK_REG_RSI },
-			{ "rdi", TOK_REG_RDI }, { "edi",  TOK_REG_RDI },
-			{ "rbp", TOK_REG_RBP }, { "ebp",  TOK_REG_RBP },
-			{ "rsp", TOK_REG_RSP }, { "esp",  TOK_REG_RSP },
-			{ "r8",  TOK_REG_R8  }, { "r8d",  TOK_REG_R8  },
-			{ "r9",  TOK_REG_R9  }, { "r9d",  TOK_REG_R9  },
-			{ "r10", TOK_REG_R10 }, { "r10d", TOK_REG_R10 },
-			{ "r11", TOK_REG_R11 }, { "r11d", TOK_REG_R11 },
-			{ "r12", TOK_REG_R12 }, { "r12d", TOK_REG_R12 },
-			{ "r13", TOK_REG_R13 }, { "r13d", TOK_REG_R13 },
-			{ "r14", TOK_REG_R14 }, { "r14d", TOK_REG_R14 },
-			{ "r15", TOK_REG_R15 }, { "r15d", TOK_REG_R15 },
+			// numeric
+			{ "x0",  TOK_REG_X0  }, { "x1",  TOK_REG_X1  }, { "x2",  TOK_REG_X2  }, { "x3",  TOK_REG_X3  },
+			{ "x4",  TOK_REG_X4  }, { "x5",  TOK_REG_X5  }, { "x6",  TOK_REG_X6  }, { "x7",  TOK_REG_X7  },
+			{ "x8",  TOK_REG_X8  }, { "x9",  TOK_REG_X9  }, { "x10", TOK_REG_X10 }, { "x11", TOK_REG_X11 },
+			{ "x12", TOK_REG_X12 }, { "x13", TOK_REG_X13 }, { "x14", TOK_REG_X14 }, { "x15", TOK_REG_X15 },
+			{ "x16", TOK_REG_X16 }, { "x17", TOK_REG_X17 }, { "x18", TOK_REG_X18 }, { "x19", TOK_REG_X19 },
+			{ "x20", TOK_REG_X20 }, { "x21", TOK_REG_X21 }, { "x22", TOK_REG_X22 }, { "x23", TOK_REG_X23 },
+			{ "x24", TOK_REG_X24 }, { "x25", TOK_REG_X25 }, { "x26", TOK_REG_X26 }, { "x27", TOK_REG_X27 },
+			{ "x28", TOK_REG_X28 }, { "x29", TOK_REG_X29 }, { "x30", TOK_REG_X30 }, { "x31", TOK_REG_X31 },
+			// ABI names
+			{ "zero", TOK_REG_X0 },  { "ra",  TOK_REG_X1  }, { "sp", TOK_REG_X2 },
+			{ "gp",   TOK_REG_X3 },  { "tp",  TOK_REG_X4  },
+			{ "t0",   TOK_REG_X5 },  { "t1",  TOK_REG_X6  }, { "t2", TOK_REG_X7 },
+			{ "s0",   TOK_REG_X8 },  { "fp",  TOK_REG_X8  }, { "s1", TOK_REG_X9 },
+			{ "a0",   TOK_REG_X10 }, { "a1",  TOK_REG_X11 }, { "a2", TOK_REG_X12 }, { "a3", TOK_REG_X13 },
+			{ "a4",   TOK_REG_X14 }, { "a5",  TOK_REG_X15 }, { "a6", TOK_REG_X16 }, { "a7", TOK_REG_X17 },
+			{ "s2",   TOK_REG_X18 }, { "s3",  TOK_REG_X19 }, { "s4", TOK_REG_X20 }, { "s5", TOK_REG_X21 },
+			{ "s6",   TOK_REG_X22 }, { "s7",  TOK_REG_X23 }, { "s8", TOK_REG_X24 }, { "s9", TOK_REG_X25 },
+			{ "s10",  TOK_REG_X26 }, { "s11", TOK_REG_X27 },
+			{ "t3",   TOK_REG_X28 }, { "t4",  TOK_REG_X29 }, { "t5", TOK_REG_X30 }, { "t6", TOK_REG_X31 },
 		};
 
 		const auto it = operand_map.find(string);
@@ -194,7 +190,7 @@ namespace sup {
 		const u64 number = strtoull(data, nullptr, base);
 		ASSERT(errno == 0, "strtoull failed for '{}'\n", curr_string);
 		(void)string;
-		curr_imm = number;
+		curr_imm = (i64)number;
 		return curr = TOK_NUMBER;
 	}
 
@@ -238,96 +234,76 @@ namespace sup {
 			while(tok.curr == TOK_NEWLINE) tok.next_tok();
 			if(tok.curr == TOK_EOF) break;
 
-			// mnemonic
-			inst curr_inst = {};
-			inst_spec::operand operand_types[4] = {};
-			u8 operand_count = 0;
-			const str curr_name = tok.curr_string;
-			tok.next_tok();
-
-			// TODO: lea takes memory-operand syntax; handle it separately for now
-			if(curr_name == "lea") {
-				ASSERT(token_is_reg(tok.curr), "lea: expected destination register, got '{}'", token_to_str(tok.curr));
-				curr_inst.operands[0].reg = static_cast<reg_index>(token_to_reg_index(tok.curr));
+			if(tok.curr == TOK_IDENTIFIER) {
+				str saved = tok.curr_string;
 				tok.next_tok();
-				ASSERT(tok.curr == TOK_COMMA, "lea: expected ',' after destination");
-				tok.next_tok();
-				ASSERT(tok.curr == TOK_LBRACKET, "lea: expected '[' to start memory operand");
-				tok.next_tok();
-				ASSERT(token_is_reg(tok.curr), "lea: expected base register inside brackets");
-				curr_inst.operands[1].reg = static_cast<reg_index>(token_to_reg_index(tok.curr));
-				tok.next_tok();
-				ASSERT(tok.curr == TOK_PLUS, "lea: expected '+' between base and index");
-				tok.next_tok();
-				ASSERT(token_is_reg(tok.curr), "lea: expected index register after '+'");
-				curr_inst.operands[2].reg = static_cast<reg_index>(token_to_reg_index(tok.curr));
-				tok.next_tok();
-
-				// optional scale:
-				u32 scale = 1;
-
-				if(tok.curr == TOK_ASTERISK) {
+				if(tok.curr == TOK_COLON) {
 					tok.next_tok();
-					ASSERT(tok.curr == TOK_NUMBER, "lea: expected scale after '*'");
-					scale = (u32)tok.curr_imm;
-					ASSERT(scale == 1 || scale == 2 || scale == 4 || scale == 8, "lea: scale must be 1, 2, 4, or 8 (got {})", (int)scale);
+					if(tok.curr == TOK_NEWLINE) tok.next_tok();
+					continue;
+				}
+				// not a label after all - rewind by re-parsing as a mnemonic
+				inst curr_inst = {};
+				inst_spec::operand operand_types[4] = {};
+				u8 operand_count = 0;
+
+				while(tok.curr != TOK_NEWLINE && tok.curr != TOK_EOF && operand_count < 4) {
+					if(token_is_reg(tok.curr)) {
+						curr_inst.operands[operand_count].reg = static_cast<reg_index>(token_to_reg_index(tok.curr));
+						operand_types[operand_count] = inst_spec::REG;
+					}
+					else if(tok.curr == TOK_NUMBER) {
+						curr_inst.operands[operand_count].i = (u64)tok.curr_imm;
+						operand_types[operand_count] = inst_spec::IMM;
+					}
+					else if(tok.curr == TOK_MINUS) {
+						tok.next_tok();
+						ASSERT(tok.curr == TOK_NUMBER, "expected number after '-'");
+						curr_inst.operands[operand_count].i = (u64)(-tok.curr_imm);
+						operand_types[operand_count] = inst_spec::IMM;
+					}
+					else {
+						ASSERT(false, "unrecognized operand type received ('{}')", token_to_str(tok.curr));
+					}
+
+					operand_count++;
+
+					if(tok.next_tok() != TOK_COMMA) break;
 					tok.next_tok();
 				}
 
-				ASSERT(tok.curr == TOK_RBRACKET, "lea: expected ']' to close memory operand");
-				tok.next_tok();
-
-				switch(scale) {
-					case 1: curr_inst.op = OP_LEA_R64_R64_R64_S1; break;
-					case 2: curr_inst.op = OP_LEA_R64_R64_R64_S2; break;
-					case 4: curr_inst.op = OP_LEA_R64_R64_R64_S4; break;
-					case 8: curr_inst.op = OP_LEA_R64_R64_R64_S8; break;
+				// pseudo-op rewriting
+				//   sext.w rd, rs1   ->   addiw rd, rs1, 0
+				if(saved == "sext.w" && operand_count == 2 &&
+				   operand_types[0] == inst_spec::REG &&
+				   operand_types[1] == inst_spec::REG)
+				{
+					saved = "addiw";
+					curr_inst.operands[2].i = 0;
+					operand_types[2] = inst_spec::IMM;
+					operand_count = 3;
 				}
 
+				curr_inst.op = find_inst_op(saved, operand_types, operand_count);
+				ASSERT(curr_inst.op != OP_COUNT, "no opcode matches mnemonic '{}' with {} operand(s)\n", saved, (int)operand_count);
 				result.push_back(curr_inst);
 
 				if(tok.curr == TOK_NEWLINE) {
 					tok.next_tok();
 				}
-
 				continue;
 			}
 
-			while(tok.curr != TOK_NEWLINE && tok.curr != TOK_EOF && operand_count < 2) {
-				if(token_is_reg(tok.curr)) {
-					curr_inst.operands[operand_count].reg = static_cast<reg_index>(token_to_reg_index(tok.curr));
-					operand_types[operand_count] = inst_spec::R64;
-				}
-				else if(tok.curr == TOK_NUMBER) {
-					curr_inst.operands[operand_count].i = tok.curr_imm;
-					operand_types[operand_count] = inst_spec::I64;
-				}
-				else {
-					ASSERT(false, "unrecognized operand type received ('{}')", token_to_str(tok.curr));
-				}
-
-				operand_count++;
-
-				if(tok.next_tok() != TOK_COMMA) break;
-				tok.next_tok(); // consume the comma
-			}
-
-			curr_inst.op = find_inst_op(curr_name, operand_types, operand_count);
-			ASSERT(curr_inst.op != OP_COUNT, "no opcode matches mnemonic '{}' with {} operand(s)\n", curr_name, (int)operand_count);
-			result.push_back(curr_inst);
-
-			// tolerate either newline or EOF as an instruction terminator
-			if(tok.curr == TOK_NEWLINE) {
-				tok.next_tok();
-			}
+			ASSERT(false, "expected mnemonic, got '{}'", token_to_str(tok.curr));
 		}
 
 		return { result };
 	}
 
 	program program::dce(const inst* prog, u32 prog_len, u64 live_mask) {
-		u64 live = live_mask;
-		u32 live_bits_by_slot = 0;
+		// x0 is never live in the user-facing sense (writes are dropped)
+		u64 live = live_mask & ~1ULL;
+		u64 live_bits_by_slot = 0;
 		u32 count = 0;
 
 		for(i32 i = (i32)prog_len - 1; i >= 0; --i) {
@@ -338,15 +314,20 @@ namespace sup {
 			}
 
 			const u32 dst = (u32)prog[i].operands[spec.dst_slot].reg;
+
+			// writes to x0 are nops
+			if(dst == 0) {
+				continue;
+			}
+
 			const u64 dst_bit = 1ULL << dst;
 
 			if(live & dst_bit) {
 				++count;
-				live_bits_by_slot |= (1u << i);
+				live_bits_by_slot |= (1ULL << i);
 
-				if(!spec.rmw) {
-					live &= ~dst_bit;
-				}
+				// no rmw semantics
+				live &= ~dst_bit;
 
 				if(spec.src_slot >= 0) {
 					const u32 src = (u32)prog[i].operands[spec.src_slot].reg;
@@ -363,7 +344,7 @@ namespace sup {
 		program out;
 
 		for(u32 i = 0; i < prog_len; ++i) {
-			if(live_bits_by_slot & (1u << i)) {
+			if(live_bits_by_slot & (1ULL << i)) {
 				out.instructions.push_back(prog[i]);
 			}
 		}
@@ -371,38 +352,12 @@ namespace sup {
 		return out;
 	}
 
-	static u32 lea_scale_for(opcode op) {
-		switch(op) {
-			case OP_LEA_R64_R64_R64_S1: return 1;
-			case OP_LEA_R64_R64_R64_S2: return 2;
-			case OP_LEA_R64_R64_R64_S4: return 4;
-			case OP_LEA_R64_R64_R64_S8: return 8;
-			default: return 0;
-		}
-	}
-
 	str program::to_string() const {
 		str result;
 
 		for(const inst& i : instructions) {
 			const inst_spec& spec = find_spec(i.op);
-			result += "  " + pad_to_length(spec.name, ' ', 8);
-
-			if(const u32 scale = lea_scale_for(i.op)) {
-				result += reg_name((u32)i.operands[0].reg);
-				result += ", [";
-				result += reg_name((u32)i.operands[1].reg);
-				result += " + ";
-				result += reg_name((u32)i.operands[2].reg);
-
-				if(scale != 1) {
-					result += "*";
-					result += std::to_string(scale);
-				}
-
-				result += "]\n";
-				continue;
-			}
+			result += "    " + pad_to_length(spec.name, ' ', 8);
 
 			for(u8 j = 0; j < spec.get_operand_count(); ++j) {
 				result += operand_to_string(i.operands[j], spec.operands[j]);
@@ -429,11 +384,15 @@ namespace sup {
 			// write side first
 			if(spec.dst_slot >= 0) {
 				const u32 r = (u32)in.operands[spec.dst_slot].reg;
-				const u64 bit = 1ULL << r;
 
-				if(!(touched & bit)) {
-					live_out |= bit;
-					touched  |= bit;
+				// x0 writes don't define anything
+				if(r != 0) {
+					const u64 bit = 1ULL << r;
+
+					if(!(touched & bit)) {
+						live_out |= bit;
+						touched  |= bit;
+					}
 				}
 			}
 
@@ -447,11 +406,6 @@ namespace sup {
 				const u32 r = (u32)in.operands[spec.src2_slot].reg;
 				touched |= 1ULL << r;
 			}
-
-			if(spec.rmw && spec.dst_slot >= 0) {
-				const u32 r = (u32)in.operands[spec.dst_slot].reg;
-				touched |= 1ULL << r;
-			}
 		}
 
 		return live_out;
@@ -459,8 +413,8 @@ namespace sup {
 
 	str program::operand_to_string(inst::operand op, inst_spec::operand ty) const {
 		switch(ty) {
-			case inst_spec::R64: return reg_name((u32)op.reg);
-			case inst_spec::I64: return std::to_string((i64)op.i);
+			case inst_spec::REG: return reg_name((u32)op.reg);
+			case inst_spec::IMM: return std::to_string((i64)op.i);
 			default:             return "?";
 		}
 	}

@@ -11,22 +11,38 @@ namespace sup {
 		TOK_NUMBER,
 
 		// regs
-		TOK_REG_RAX,
-		TOK_REG_RBX,
-		TOK_REG_RCX,
-		TOK_REG_RDX,
-		TOK_REG_RSI,
-		TOK_REG_RDI,
-		TOK_REG_RBP,
-		TOK_REG_RSP,
-		TOK_REG_R8,
-		TOK_REG_R9,
-		TOK_REG_R10,
-		TOK_REG_R11,
-		TOK_REG_R12,
-		TOK_REG_R13,
-		TOK_REG_R14,
-		TOK_REG_R15,
+		TOK_REG_X0,
+		TOK_REG_X1,
+		TOK_REG_X2,
+		TOK_REG_X3,
+		TOK_REG_X4,
+		TOK_REG_X5,
+		TOK_REG_X6,
+		TOK_REG_X7,
+		TOK_REG_X8,
+		TOK_REG_X9,
+		TOK_REG_X10,
+		TOK_REG_X11,
+		TOK_REG_X12,
+		TOK_REG_X13,
+		TOK_REG_X14,
+		TOK_REG_X15,
+		TOK_REG_X16,
+		TOK_REG_X17,
+		TOK_REG_X18,
+		TOK_REG_X19,
+		TOK_REG_X20,
+		TOK_REG_X21,
+		TOK_REG_X22,
+		TOK_REG_X23,
+		TOK_REG_X24,
+		TOK_REG_X25,
+		TOK_REG_X26,
+		TOK_REG_X27,
+		TOK_REG_X28,
+		TOK_REG_X29,
+		TOK_REG_X30,
+		TOK_REG_X31,
 
 		// other
 		TOK_COMMA,
@@ -70,7 +86,7 @@ namespace sup {
 	public:
 		token curr;
 		str curr_string;
-		u64 curr_imm;
+		i64 curr_imm; // signed
 	};
 
 	opcode find_inst_op(const str& name, const inst_spec::operand* operands, u8 operand_count);

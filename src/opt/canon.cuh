@@ -27,30 +27,27 @@ namespace sup {
 				}
 			}
 
-			if(spec.rmw && spec.dst_slot >= 0) {
-				const u32 r = (u32)prog[i].operands[spec.dst_slot].reg;
-
-				if(!(written & (1ULL << r))) {
-					live_in |= 1ULL << r;
-				}
-			}
-
 			if(spec.dst_slot >= 0) {
 				const u32 r = (u32)prog[i].operands[spec.dst_slot].reg;
 				written |= 1ULL << r;
 			}
 		}
 
-		return live_in;
+		return live_in & ~1ULL; // remove x0
 	}
 
 	SO_HD void canonicalize(inst* prog, u32 prog_len, u64 preserved_mask) {
-		u8 rename[16];
+		u8 rename[32];
 		u32 assigned_mask = 0;
 		u32 resolved_mask = 0;
-		u32 next_scratch = 0;
+		u32 next_scratch = 5; // x5 = first non-ABI scratch
 
-		for(u32 r = 0; r < 16; ++r) {
+		rename[0] = 0; // pin x0
+		resolved_mask |= 1u;
+		assigned_mask |= 1u;
+
+		// preserved registers map to themselves
+		for(u32 r = 1; r < 32; ++r) {
 			if(preserved_mask & (1ULL << r)) {
 				rename[r] = (u8)r;
 				resolved_mask |= (1u << r);
@@ -63,25 +60,65 @@ namespace sup {
 			const inst_spec& spec = find_spec(in.op);
 
 			for(u32 k = 0; k < 4; ++k) {
-				if(spec.operands[k] != inst_spec::R64) {
+				if(spec.operands[k] != inst_spec::REG) {
 					continue;
 				}
 
 				const u32 old = (u32)in.operands[k].reg;
 
 				if(!(resolved_mask & (1u << old))) {
-					while(assigned_mask & (1u << next_scratch)) {
+					while(next_scratch < 32 && (assigned_mask & (1u << next_scratch))) {
 						++next_scratch;
 					}
-
-					rename[old] = (u8)next_scratch;
+					if(next_scratch >= 32) {
+						rename[old] = (u8)old;
+					}
+					else {
+						rename[old] = (u8)next_scratch;
+						assigned_mask |= (1u << next_scratch);
+					}
 					resolved_mask |= (1u << old);
-					assigned_mask |= (1u << next_scratch);
 				}
 
 				in.operands[k].reg = (reg_index)rename[old];
 			}
 		}
+	}
+
+	SO_HD b32 has_live_writes(const inst* prog, u32 prog_len, u64 live_mask) {
+		u64 live = live_mask & ~1ULL;
+		u32 useful = 0;
+
+		for(i32 i = (i32)prog_len - 1; i >= 0; --i) {
+			const inst_spec& spec = find_spec(prog[i].op);
+
+			if(spec.dst_slot < 0) {
+				continue;
+			}
+
+			const u32 dst = (u32)prog[i].operands[spec.dst_slot].reg;
+
+			if(dst == 0) {
+				continue;
+			}
+
+			const u64 dst_bit = 1ULL << dst;
+
+			if(live & dst_bit) {
+				++useful;
+				live &= ~dst_bit;
+
+				if(spec.src_slot  >= 0) {
+					live |= 1ULL << (u32)prog[i].operands[spec.src_slot ].reg;
+				}
+
+				if(spec.src2_slot >= 0) {
+					live |= 1ULL << (u32)prog[i].operands[spec.src2_slot].reg;
+				}
+			}
+		}
+
+		return useful == prog_len;
 	}
 } // namespace sup
 

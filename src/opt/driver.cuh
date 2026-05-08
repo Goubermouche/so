@@ -5,34 +5,48 @@
 #include "int/instruction.cuh"
 
 namespace sup {
-	static constexpr u32 MCMC_PROG_LEN = 16;
-	static constexpr u32 MCMC_N_TESTS = 32;
-	static constexpr u32 N_WARPS_PER_BLOCK = 8;
-	static constexpr u32 THREADS_PER_BLOCK = N_WARPS_PER_BLOCK * MCMC_N_TESTS;
+	static constexpr u32 SYNTH_PROG_LEN = 8;
+	static constexpr u32 SYNTH_N_TESTS = 64;
+	static constexpr u32 N_WARPS_PER_BLOCK = 4;
+	static constexpr u32 THREADS_PER_BLOCK = N_WARPS_PER_BLOCK * 32;
 
-	struct mcmc_config {
-		u64 max_steps;
-		f32 beta;
+	struct synth_config {
 		u64 live_mask;
-		u64 master_seed;
-		u32 perf_weight;
-		u32 correct_weight;
-		u32 n_chains;
-		u32 test_weights[MCMC_N_TESTS];
-		b32 use_bloom;
-		b32 seed_from_target;
+		u32 n_tests;
+		u32 prog_len;
 	};
 
-	struct mcmc_result {
-		inst best_prog[MCMC_PROG_LEN];
-		u32 best_cost;
-		u32 best_correctness;
-		u32 best_perf;
-		u64 accepted;
-		u64 skipped_bloom;
+	struct synth_result {
+		u32 fail_mask;
+		u32 pass_count;
 	};
 
-	mcmc_result* mcmc_run_gpu(const inst* target_prog, u32 target_len, const cpu_state* test_in, const mcmc_config& cfg);
+	struct gpu_runner {
+		gpu_runner();
+		~gpu_runner();
+
+		i32 init(u64 requested_max_chunk_cands = 0);
+		u64 chunk_size() const { return m_max_chunk_cands; }
+
+		void run(
+			const inst* candidates,
+			u64 n_candidates,
+			const cpu_state* test_in,
+			const cpu_state* target_out,
+			const synth_config& cfg,
+			synth_result* results,
+			f64* elapsed_ms_total);
+
+	private:
+		u64 m_max_chunk_cands;
+		void* m_d_cands;
+		void* m_d_test_in;
+		void* m_d_target_out;
+		void* m_d_fail_mask;
+		void* m_d_pass_count;
+		void* m_h_fail_mask;
+		void* m_h_pass_count;
+	};
 } // namespace sup
 
 #endif // #ifndef DRIVER_CUH
