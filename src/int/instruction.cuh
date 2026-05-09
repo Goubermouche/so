@@ -215,4 +215,36 @@ SO_HD constexpr b32 int_check_inst_db_alignment() {
 
 static_assert(int_check_inst_db_alignment(), "INST_DB rows must be in opcode-enum order");
 
+inline int_opcode int_find_inst_op(const str& name, const int_inst_spec::operand* operands,
+																	 u8 operand_count) {
+	for(u32 i = 0; i < (u32)OP_COUNT; ++i) {
+		const int_inst_spec& spec = INT_INST_DB_HOST.row[i];
+
+		if(name != spec.name) { continue; }
+
+		if(spec.get_operand_count() != operand_count) { continue; }
+
+		b32 ok = true;
+
+		for(u8 k = 0; k < operand_count; ++k) {
+			if(spec.operands[k] != operands[k]) {
+				ok = false;
+				break;
+			}
+		}
+
+		if(ok) { return (int_opcode)i; }
+	}
+
+	return OP_COUNT; // sentinel: "no match"
+}
+
+inline str int_operand_to_string(int_inst::operand op, int_inst_spec::operand ty) {
+	switch(ty) {
+		case int_inst_spec::REG: return int_reg_name((u32)op.reg);
+		case int_inst_spec::IMM: return std::to_string((i64)op.i);
+		default: return "?";
+	}
+}
+
 #endif // #ifndef INSTRUCTION_CUH
