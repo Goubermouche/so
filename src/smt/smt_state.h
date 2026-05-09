@@ -43,7 +43,7 @@ void smt_wr(Z3_context ctx, smt_state* state, u32 d, Z3_ast v);
 void smt_pin_x0(Z3_context ctx, smt_state* state);
 
 smt_state smt_make_input_state(Z3_context ctx);
-void smt_free_state(Z3_context ctx, smt_state* state);
 smt_state smt_clone_state(Z3_context ctx, const smt_state* src);
+void smt_free_state(Z3_context ctx, smt_state* state);
 
 #endif // SMT_STATE_H

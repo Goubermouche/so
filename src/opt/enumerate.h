@@ -14,7 +14,7 @@ typedef struct opt_imm_pool {
 	u32 n;
 } opt_imm_pool;
 
-typedef strusct opt_candidate {
+typedef struct opt_candidate {
 	int_inst code[SYNTH_PROG_LEN];
 	u32 len;
 } opt_candidate;
