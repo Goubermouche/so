@@ -13,8 +13,6 @@ opt_opcode_pool opt_build_opcode_pool(u32 ext_mask) {
 	return p;
 }
 
-b32 opt_op_is_commutative(int_opcode op) { return INT_INST_DB_HOST.row[op].commutative != 0; }
-
 opt_imm_pool opt_build_default_imm_pool() {
 	opt_imm_pool p = {};
 
@@ -138,7 +136,7 @@ void opt_try_place(opt_enumerator* e, opt_candidate* cur, u32 prog_len, i32 idx,
 	}
 
 	// for R-type with two register sources, force rs1 <= rs2
-	if(!is_imm && spec.src2_slot >= 0 && opt_op_is_commutative(op)) {
+	if(!is_imm && spec.src2_slot >= 0 && int_op_is_commutative(op)) {
 		if(rs1 > rs2_or_imm_idx) { return; }
 	}
 

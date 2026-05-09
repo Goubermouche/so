@@ -1,6 +1,10 @@
 #ifndef INSTRUCTION_CUH
 #define INSTRUCTION_CUH
 
+#include "ext/rv32i/opcodes.def"
+#include "ext/rv32m/opcodes.def"
+#include "ext/rv64i/opcodes.def"
+#include "ext/rv64m/opcodes.def"
 #include "int/cpu.cuh"
 
 // to add a new extension:
@@ -10,6 +14,18 @@
 // - add a Z3.cc file that exposes ext_<name>_smt(...)
 // - wire those into smt/smt.cc and opt/batch_runner.cuh's dispatcher
 
+#define EXTENSION_LIST(X)                                                                          \
+	X(RV32I, "rv32i", 0)                                                                             \
+	X(RV64I, "rv64i", 1)                                                                             \
+	X(RV32M, "rv32m", 2)                                                                             \
+	X(RV64M, "rv64m", 3)
+
+#define EXT_OPCODE_LIST(X)                                                                         \
+	EXT_RV32I_OPCODES(X)                                                                             \
+	EXT_RV64I_OPCODES(X)                                                                             \
+	EXT_RV32M_OPCODES(X)                                                                             \
+	EXT_RV64M_OPCODES(X)
+
 typedef enum int_inst_shape : u8 {
 	SHAPE_NONE = 0, // nop
 	SHAPE_RRR,			// rd, rs1, rs2
@@ -17,12 +33,6 @@ typedef enum int_inst_shape : u8 {
 	SHAPE_RR,				// rd, rs1
 	SHAPE_RI,				// rd, imm
 } int_inst_shape;
-
-#define EXTENSION_LIST(X)                                                                          \
-	X(RV32I, "rv32i", 0)                                                                             \
-	X(RV64I, "rv64i", 1)                                                                             \
-	X(RV32M, "rv32m", 2)                                                                             \
-	X(RV64M, "rv64m", 3)
 
 // EXT_RV32I is the base ISA and is always implied
 // rv64-prefixed extensions extend their rv32 counterpart and require
@@ -46,29 +56,7 @@ inline constexpr u32 INT_EXT_BITS[] = {
 #undef X
 };
 
-constexpr u64 INT_EXT_COUNT = sizeof(INT_EXT_NAMES) / sizeof(INT_EXT_NAMES[0]);
-
-inline void int_print_enabled_extensions(u32 mask) {
-	bool first = true;
-	for(u32 i = 0; i < INT_EXT_COUNT; ++i) {
-		if(mask & INT_EXT_BITS[i]) {
-			std::printf("%s%s", first ? "" : ", ", INT_EXT_NAMES[i]);
-			first = false;
-		}
-	}
-}
-
-// extensions
-#include "ext/rv32i/opcodes.def"
-#include "ext/rv32m/opcodes.def"
-#include "ext/rv64i/opcodes.def"
-#include "ext/rv64m/opcodes.def"
-
-#define EXT_OPCODE_LIST(X)                                                                         \
-	EXT_RV32I_OPCODES(X)                                                                             \
-	EXT_RV64I_OPCODES(X)                                                                             \
-	EXT_RV32M_OPCODES(X)                                                                             \
-	EXT_RV64M_OPCODES(X)
+#define INT_EXT_COUNT sizeof(INT_EXT_NAMES) / sizeof(INT_EXT_NAMES[0])
 
 typedef enum int_opcode : u16 {
 #define X(TAG, mnemonic, shape, comm) OP_##TAG,
@@ -79,20 +67,20 @@ typedef enum int_opcode : u16 {
 } int_opcode;
 
 typedef struct int_inst {
-	union operand {
+	typedef union operand {
 		int_reg_index reg;
 		u64 i;
-	};
+	} operand;
 	int_opcode op;
 	operand operands[4];
 } int_inst;
 
 typedef struct int_inst_spec {
-	enum operand : u8 {
+	typedef enum operand : u8 {
 		NONE = 0,
 		REG,
 		IMM,
-	};
+	} operand;
 
 	const char* name;
 	operand operands[4];
@@ -102,16 +90,6 @@ typedef struct int_inst_spec {
 	i8 src2_slot;
 	u32 ext;
 	u8 commutative;
-
-	SO_HD constexpr u8 get_operand_count() const {
-		u8 i = 0;
-
-		for(; i < 4; ++i) {
-			if(operands[i] == NONE) { break; }
-		}
-
-		return i;
-	}
 } int_inst_spec;
 
 typedef struct int_inst_db {
@@ -203,48 +181,10 @@ SO_HD const int_inst_spec* int_find_spec(int_opcode op) {
 #endif // #ifdef __CUDA_ARCH__
 }
 
-SO_HD constexpr b32 int_check_inst_db_alignment() {
-	const int_inst_db d = int_build_inst_db();
-
-	for(u32 i = 0; i < (u32)OP_COUNT; ++i) {
-		if((u32)d.row[i].op != i) { return false; }
-	}
-
-	return true;
-}
-
-static_assert(int_check_inst_db_alignment(), "INST_DB rows must be in opcode-enum order");
-
-inline int_opcode int_find_inst_op(const str& name, const int_inst_spec::operand* operands,
-																	 u8 operand_count) {
-	for(u32 i = 0; i < (u32)OP_COUNT; ++i) {
-		const int_inst_spec& spec = INT_INST_DB_HOST.row[i];
-
-		if(name != spec.name) { continue; }
-
-		if(spec.get_operand_count() != operand_count) { continue; }
-
-		b32 ok = true;
-
-		for(u8 k = 0; k < operand_count; ++k) {
-			if(spec.operands[k] != operands[k]) {
-				ok = false;
-				break;
-			}
-		}
-
-		if(ok) { return (int_opcode)i; }
-	}
-
-	return OP_COUNT; // sentinel: "no match"
-}
-
-inline str int_operand_to_string(int_inst::operand op, int_inst_spec::operand ty) {
-	switch(ty) {
-		case int_inst_spec::REG: return int_reg_name((u32)op.reg);
-		case int_inst_spec::IMM: return std::to_string((i64)op.i);
-		default: return "?";
-	}
-}
+u8 int_spec_get_operand_count(const int_inst_spec* spec);
+b32 int_op_is_commutative(int_opcode op);
+int_opcode int_find_inst_op(const str& name, const int_inst_spec::operand* operands, u8 op_count);
+str int_operand_to_string(int_inst::operand op, int_inst_spec::operand ty);
+void int_print_enabled_extensions(u32 mask);
 
 #endif // #ifndef INSTRUCTION_CUH

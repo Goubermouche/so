@@ -29,8 +29,6 @@ typedef struct opt_enumerator {
 	u64 cap;
 } opt_enumerator;
 
-b32 opt_op_is_commutative(int_opcode op);
-
 opt_opcode_pool opt_build_opcode_pool(u32 ext_mask);
 opt_imm_pool opt_build_default_imm_pool();
 

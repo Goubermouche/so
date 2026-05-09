@@ -20,7 +20,6 @@ const char* int_token_to_str(int_token tok) {
 		case TOK_EOF: return "eof";
 		default:
 			if(tok >= TOK_REG_X0 && tok <= TOK_REG_X31) { return int_reg_name((u32)(tok - TOK_REG_X0)); }
-
 			return "?";
 	}
 }

@@ -27,8 +27,7 @@ int_program int_parse(const str& source) {
 
 			while(lex.curr != TOK_NEWLINE && lex.curr != TOK_EOF && operand_count < 4) {
 				if(int_token_is_reg(lex.curr)) {
-					curr_inst.operands[operand_count].reg =
-						static_cast<int_reg_index>(int_token_to_reg_index(lex.curr));
+					curr_inst.operands[operand_count].reg = (int_reg_index)(int_token_to_reg_index(lex.curr));
 					operand_types[operand_count] = int_inst_spec::REG;
 				} else if(lex.curr == TOK_NUMBER) {
 					curr_inst.operands[operand_count].i = (u64)lex.curr_imm;
@@ -136,10 +135,9 @@ str int_program_to_string(const int_program* program) {
 		const int_inst_spec* spec = int_find_spec(inst.op);
 		result += "    " + pad_to_length(spec->name, ' ', 8);
 
-		for(u8 j = 0; j < spec->get_operand_count(); ++j) {
+		for(u8 j = 0; j < int_spec_get_operand_count(spec); ++j) {
 			result += int_operand_to_string(inst.operands[j], spec->operands[j]);
-
-			if(j + 1 < spec->get_operand_count()) { result += ", "; }
+			if(j + 1 < int_spec_get_operand_count(spec)) { result += ", "; }
 		}
 
 		result += '\n';
