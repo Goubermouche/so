@@ -3,6 +3,7 @@
 
 #include "int/cpu.cuh"
 #include "int/program.h"
+#include "smt/smt_state.h"
 
 #define SMT_TIMEOUT_MS 10000
 
@@ -20,6 +21,7 @@ typedef struct smt_verify_report {
 	const char* error;
 } smt_verify_report;
 
+smt_state smt_run(Z3_context ctx, const smt_state* in, const program_slice* prog);
 smt_verify_report smt_eq(const program_slice* a, const program_slice* b, u64 live_outs);
 
 #endif // #ifndef SMT_H

@@ -9,48 +9,9 @@
 #include <cstring>
 #include <z3.h>
 
-static Z3_ast mk_bv64_const(Z3_context ctx, const char* name) {
-	Z3_sort s64 = Z3_mk_bv_sort(ctx, 64);
-	Z3_symbol sym = Z3_mk_string_symbol(ctx, name);
-	Z3_ast c = Z3_mk_const(ctx, sym, s64);
-	Z3_inc_ref(ctx, c);
-	return c;
-}
-
-smt_state make_input_state(Z3_context ctx) {
-	static const char* names[32] = {
-		"s_x0",	 "s_x1",	"s_x2",	 "s_x3",	"s_x4",	 "s_x5",	"s_x6",	 "s_x7",
-		"s_x8",	 "s_x9",	"s_x10", "s_x11", "s_x12", "s_x13", "s_x14", "s_x15",
-		"s_x16", "s_x17", "s_x18", "s_x19", "s_x20", "s_x21", "s_x22", "s_x23",
-		"s_x24", "s_x25", "s_x26", "s_x27", "s_x28", "s_x29", "s_x30", "s_x31",
-	};
-	smt_state a = {};
-	for(u32 i = 0; i < 32; ++i) { a[i] = mk_bv64_const(ctx, names[i]); }
-	return a;
-}
-
-// pin x0 = 0; replaces whatever's currently in slot 0, managing refs
-static void pin_x0(Z3_context ctx, smt_state& regs) {
-	Z3_sort s64 = Z3_mk_bv_sort(ctx, 64);
-	Z3_ast zero = Z3_mk_unsigned_int64(ctx, 0, s64);
-	Z3_inc_ref(ctx, zero);
-	if(regs[0]) Z3_dec_ref(ctx, regs[0]);
-	regs[0] = zero;
-}
-
-static smt_state clone_state(Z3_context ctx, const smt_state& src) {
-	smt_state out = {};
-	for(u32 i = 0; i < 32; ++i) {
-		out[i] = src[i];
-		if(out[i]) Z3_inc_ref(ctx, out[i]);
-	}
-	return out;
-}
-
-smt_state symbolic_run(Z3_context ctx, const smt_state& in, const program_slice* prog,
-											 const char** unsupported_opcode) {
-	smt_state regs = clone_state(ctx, in);
-	pin_x0(ctx, regs);
+smt_state smt_run(Z3_context ctx, const smt_state* in, const program_slice* prog) {
+	smt_state regs = smt_clone_state(ctx, in);
+	smt_pin_x0(ctx, &regs);
 	Z3_sort s64 = Z3_mk_bv_sort(ctx, 64);
 
 	for(u32 i = 0; i < prog->size; ++i) {
@@ -78,19 +39,14 @@ smt_state symbolic_run(Z3_context ctx, const smt_state& in, const program_slice*
 		}
 
 		bool handled = false;
-		if(!handled) handled = ext_rv32i_smt(ctx, regs, op, d, s1, s2, imm);
-		if(!handled) handled = ext_rv64i_smt(ctx, regs, op, d, s1, s2, imm);
-		if(!handled) handled = ext_rv32m_smt(ctx, regs, op, d, s1, s2, imm);
-		if(!handled) handled = ext_rv64m_smt(ctx, regs, op, d, s1, s2, imm);
+		if(!handled) handled = ext_rv32i_smt(ctx, &regs, op, d, s1, s2, imm);
+		if(!handled) handled = ext_rv64i_smt(ctx, &regs, op, d, s1, s2, imm);
+		if(!handled) handled = ext_rv32m_smt(ctx, &regs, op, d, s1, s2, imm);
+		if(!handled) handled = ext_rv64m_smt(ctx, &regs, op, d, s1, s2, imm);
 
 		Z3_dec_ref(ctx, imm);
-
-		if(!handled) {
-			if(unsupported_opcode) { *unsupported_opcode = "opcode not handled by any extension"; }
-			break;
-		}
-
-		pin_x0(ctx, regs);
+		ASSERT(handled, "smt: unknown opcode\n");
+		smt_pin_x0(ctx, &regs);
 	}
 
 	return regs;
@@ -101,7 +57,7 @@ static thread_local char g_err_buf[512];
 static thread_local bool g_err_set = false;
 static void z3_error_cb(Z3_context c, Z3_error_code ec) {
 	Z3_string msg = Z3_get_error_msg(c, ec);
-	std::snprintf(g_err_buf, sizeof(g_err_buf), "%s", msg ? msg : "z3 error");
+	snprintf(g_err_buf, sizeof(g_err_buf), "%s", msg ? msg : "z3 error");
 	g_err_set = true;
 }
 
@@ -119,28 +75,29 @@ smt_verify_report smt_eq(const program_slice* a, const program_slice* b, u64 liv
 	Z3_symbol timeout_sym = Z3_mk_string_symbol(ctx, "timeout");
 	Z3_params_set_uint(ctx, params, timeout_sym, SMT_TIMEOUT_MS);
 
-	smt_state in = make_input_state(ctx);
-	pin_x0(ctx, in);
+	smt_state in = smt_make_input_state(ctx);
+	smt_pin_x0(ctx, &in);
 
-	const char* err = nullptr;
-	smt_state out_target = symbolic_run(ctx, in, a, &err);
-	if(err || g_err_set) {
+	// run first program
+	smt_state out_target = smt_run(ctx, &in, a);
+	if(g_err_set) {
 		r.kind = VERIFY_ERROR;
-		r.error = err ? err : g_err_buf;
-		smt_free_state(ctx, in);
-		smt_free_state(ctx, out_target);
+		r.error = g_err_buf;
+		smt_free_state(ctx, &in);
+		smt_free_state(ctx, &out_target);
 		Z3_params_dec_ref(ctx, params);
 		Z3_del_context(ctx);
 		return r;
 	}
 
-	smt_state out_rewrite = symbolic_run(ctx, in, b, &err);
-	if(err || g_err_set) {
+	// run second program
+	smt_state out_rewrite = smt_run(ctx, &in, b);
+	if(g_err_set) {
 		r.kind = VERIFY_ERROR;
-		r.error = err ? err : g_err_buf;
-		smt_free_state(ctx, in);
-		smt_free_state(ctx, out_target);
-		smt_free_state(ctx, out_rewrite);
+		r.error = g_err_buf;
+		smt_free_state(ctx, &in);
+		smt_free_state(ctx, &out_target);
+		smt_free_state(ctx, &out_rewrite);
 		Z3_params_dec_ref(ctx, params);
 		Z3_del_context(ctx);
 		return r;
@@ -152,7 +109,7 @@ smt_verify_report smt_eq(const program_slice* a, const program_slice* b, u64 liv
 	for(u32 reg = 0; reg < 32; ++reg) {
 		if(reg == 0) continue;
 		if(live_outs & (1ULL << reg)) {
-			Z3_ast eq = Z3_mk_eq(ctx, out_target[reg], out_rewrite[reg]);
+			Z3_ast eq = Z3_mk_eq(ctx, out_target.r[reg], out_rewrite.r[reg]);
 			Z3_ast neq = Z3_mk_not(ctx, eq);
 			Z3_inc_ref(ctx, neq);
 			disjuncts[n_disj++] = neq;
@@ -162,9 +119,9 @@ smt_verify_report smt_eq(const program_slice* a, const program_slice* b, u64 liv
 	if(n_disj == 0) {
 		r.kind = VERIFY_EQUIVALENT;
 		r.solve_ms = 0;
-		smt_free_state(ctx, in);
-		smt_free_state(ctx, out_target);
-		smt_free_state(ctx, out_rewrite);
+		smt_free_state(ctx, &in);
+		smt_free_state(ctx, &out_target);
+		smt_free_state(ctx, &out_rewrite);
 		Z3_params_dec_ref(ctx, params);
 		Z3_del_context(ctx);
 		return r;
@@ -191,7 +148,7 @@ smt_verify_report smt_eq(const program_slice* a, const program_slice* b, u64 liv
 		Z3_model_inc_ref(ctx, m);
 		for(u32 i = 0; i < 32; ++i) {
 			Z3_ast v = nullptr;
-			if(Z3_model_eval(ctx, m, in[i], true, &v) && v) {
+			if(Z3_model_eval(ctx, m, in.r[i], true, &v) && v) {
 				Z3_inc_ref(ctx, v);
 				uint64_t raw = 0;
 				r.counterexample.regs[i] = Z3_get_numeral_uint64(ctx, v, &raw) ? raw : 0;
@@ -216,9 +173,9 @@ smt_verify_report smt_eq(const program_slice* a, const program_slice* b, u64 liv
 
 	Z3_dec_ref(ctx, formula);
 	Z3_solver_dec_ref(ctx, solver);
-	smt_free_state(ctx, in);
-	smt_free_state(ctx, out_target);
-	smt_free_state(ctx, out_rewrite);
+	smt_free_state(ctx, &in);
+	smt_free_state(ctx, &out_target);
+	smt_free_state(ctx, &out_rewrite);
 	Z3_params_dec_ref(ctx, params);
 	Z3_del_context(ctx);
 	return r;
