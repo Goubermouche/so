@@ -1,69 +1,81 @@
 #ifndef EXT_RV32M_SMT_CUH
 #define EXT_RV32M_SMT_CUH
 
-#include "int/instruction.cuh"
-#include "ext/rv32i/smt.cuh"
-#include <z3++.h>
+#include "smt/smt_state.h"
 
-namespace sup {
-	inline bool ext_rv32m_smt(z3::context& ctx, smt_state& regs, u32 op, u32 d, u32 s1, u32 s2, const z3::expr& /*imm*/) {
-		using namespace ext_smt;
-		switch(op) {
-			case OP_MUL: wr(regs, d, regs[s1] * regs[s2]); return true;
-			case OP_MULH: {
-				z3::expr a = z3::sext(regs[s1], 64);
-				z3::expr b = z3::sext(regs[s2], 64);
-				wr(regs, d, (a * b).extract(127, 64));
-				return true;
-			}
-			case OP_MULHSU: {
-				z3::expr a = z3::sext(regs[s1], 64);
-				z3::expr b = z3::zext(regs[s2], 64);
-				wr(regs, d, (a * b).extract(127, 64));
-				return true;
-			}
-			case OP_MULHU: {
-				z3::expr a = z3::zext(regs[s1], 64);
-				z3::expr b = z3::zext(regs[s2], 64);
-				wr(regs, d, (a * b).extract(127, 64));
-				return true;
-			}
-			case OP_DIV: {
-				z3::expr a = regs[s1];
-				z3::expr b = regs[s2];
-				z3::expr is_zero = (b == ctx.bv_val((u64)0, 64));
-				z3::expr is_ovf  = (a == ctx.bv_val((u64)0x8000000000000000ULL, 64)) && (b == ctx.bv_val((u64)-1, 64));
-				z3::expr q = z3::ite(is_zero, ctx.bv_val((u64)-1, 64), z3::ite(is_ovf,  a, a / b));
-				wr(regs, d, q);
-				return true;
-			}
-			case OP_DIVU: {
-				z3::expr a = regs[s1];
-				z3::expr b = regs[s2];
-				z3::expr is_zero = (b == ctx.bv_val((u64)0, 64));
-				wr(regs, d, z3::ite(is_zero, ctx.bv_val((u64)-1, 64), z3::udiv(a, b)));
-				return true;
-			}
-			case OP_REM: {
-				z3::expr a = regs[s1];
-				z3::expr b = regs[s2];
-				z3::expr is_zero = (b == ctx.bv_val((u64)0, 64));
-				z3::expr is_ovf  = (a == ctx.bv_val((u64)0x8000000000000000ULL, 64)) && (b == ctx.bv_val((u64)-1, 64));
-				z3::expr q = z3::ite(is_zero, a, z3::ite(is_ovf,  ctx.bv_val((u64)0, 64), z3::srem(a, b)));
-				wr(regs, d, q);
-				return true;
-			}
-			case OP_REMU: {
-				z3::expr a = regs[s1];
-				z3::expr b = regs[s2];
-				z3::expr is_zero = (b == ctx.bv_val((u64)0, 64));
-				wr(regs, d, z3::ite(is_zero, a, z3::urem(a, b)));
-				return true;
-			}
-		}
-		return false;
+inline bool ext_rv32m_smt(Z3_context ctx, smt_state& regs, u32 op, u32 d, u32 s1, u32 s2,
+													Z3_ast /*imm*/) {
+	switch(op) {
+	case OP_MUL: smt_wr(ctx, regs, d, Z3_mk_bvmul(ctx, regs[s1], regs[s2])); return true;
+	case OP_MULH: {
+		Z3_ast a = Z3_mk_sign_ext(ctx, 64, regs[s1]);
+		Z3_ast b = Z3_mk_sign_ext(ctx, 64, regs[s2]);
+		Z3_ast m = Z3_mk_bvmul(ctx, a, b);
+		smt_wr(ctx, regs, d, Z3_mk_extract(ctx, 127, 64, m));
+		return true;
 	}
-} // namespace sup
+	case OP_MULHSU: {
+		Z3_ast a = Z3_mk_sign_ext(ctx, 64, regs[s1]);
+		Z3_ast b = Z3_mk_zero_ext(ctx, 64, regs[s2]);
+		Z3_ast m = Z3_mk_bvmul(ctx, a, b);
+		smt_wr(ctx, regs, d, Z3_mk_extract(ctx, 127, 64, m));
+		return true;
+	}
+	case OP_MULHU: {
+		Z3_ast a = Z3_mk_zero_ext(ctx, 64, regs[s1]);
+		Z3_ast b = Z3_mk_zero_ext(ctx, 64, regs[s2]);
+		Z3_ast m = Z3_mk_bvmul(ctx, a, b);
+		smt_wr(ctx, regs, d, Z3_mk_extract(ctx, 127, 64, m));
+		return true;
+	}
+	case OP_DIV: {
+		Z3_ast a = regs[s1];
+		Z3_ast b = regs[s2];
+		Z3_ast zero = smt_bv64(ctx, 0);
+		Z3_ast minus_one = smt_bv64(ctx, (u64)-1);
+		Z3_ast int_min = smt_bv64(ctx, 0x8000000000000000ULL);
+		Z3_ast is_zero = Z3_mk_eq(ctx, b, zero);
+		Z3_ast eq_min = Z3_mk_eq(ctx, a, int_min);
+		Z3_ast eq_m1 = Z3_mk_eq(ctx, b, minus_one);
+		Z3_ast ovf_args[2] = {eq_min, eq_m1};
+		Z3_ast is_ovf = Z3_mk_and(ctx, 2, ovf_args);
+		Z3_ast inner = Z3_mk_ite(ctx, is_ovf, a, Z3_mk_bvsdiv(ctx, a, b));
+		Z3_ast q = Z3_mk_ite(ctx, is_zero, minus_one, inner);
+		smt_wr(ctx, regs, d, q);
+		return true;
+	}
+	case OP_DIVU: {
+		Z3_ast a = regs[s1];
+		Z3_ast b = regs[s2];
+		Z3_ast is_zero = Z3_mk_eq(ctx, b, smt_bv64(ctx, 0));
+		smt_wr(ctx, regs, d, Z3_mk_ite(ctx, is_zero, smt_bv64(ctx, (u64)-1), Z3_mk_bvudiv(ctx, a, b)));
+		return true;
+	}
+	case OP_REM: {
+		Z3_ast a = regs[s1];
+		Z3_ast b = regs[s2];
+		Z3_ast zero = smt_bv64(ctx, 0);
+		Z3_ast minus_one = smt_bv64(ctx, (u64)-1);
+		Z3_ast int_min = smt_bv64(ctx, 0x8000000000000000ULL);
+		Z3_ast is_zero = Z3_mk_eq(ctx, b, zero);
+		Z3_ast eq_min = Z3_mk_eq(ctx, a, int_min);
+		Z3_ast eq_m1 = Z3_mk_eq(ctx, b, minus_one);
+		Z3_ast ovf_args[2] = {eq_min, eq_m1};
+		Z3_ast is_ovf = Z3_mk_and(ctx, 2, ovf_args);
+		Z3_ast inner = Z3_mk_ite(ctx, is_ovf, zero, Z3_mk_bvsrem(ctx, a, b));
+		Z3_ast q = Z3_mk_ite(ctx, is_zero, a, inner);
+		smt_wr(ctx, regs, d, q);
+		return true;
+	}
+	case OP_REMU: {
+		Z3_ast a = regs[s1];
+		Z3_ast b = regs[s2];
+		Z3_ast is_zero = Z3_mk_eq(ctx, b, smt_bv64(ctx, 0));
+		smt_wr(ctx, regs, d, Z3_mk_ite(ctx, is_zero, a, Z3_mk_bvurem(ctx, a, b)));
+		return true;
+	}
+	}
+	return false;
+}
 
 #endif // #ifndef EXT_RV32M_SMT_CUH
-

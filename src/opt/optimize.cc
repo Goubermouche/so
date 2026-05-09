@@ -169,11 +169,9 @@ namespace sup {
 					const inst* rw = flat.data() + i * SYNTH_PROG_LEN;
 					const u32 rw_len = cands[i].len;
 					const auto t0 = std::chrono::steady_clock::now();
-					verify_report rep = verify_equivalent(
-						m_prog.instructions.data(), (u32)m_prog.instructions.size(),
-						rw, rw_len,
-						m_live_out
-					);
+					program_slice a = { m_prog.instructions.data(), (u32)m_prog.instructions.size() };
+					program_slice b = { rw, rw_len };
+					smt_verify_report rep = smt_eq(&a, &b, m_live_out);
 					const auto t1 = std::chrono::steady_clock::now();
 					m_total_smt_ms += std::chrono::duration<f64, std::milli>(t1 - t0).count();
 					++m_total_smt_calls;

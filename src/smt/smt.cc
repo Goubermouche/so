@@ -1,171 +1,225 @@
 #include "smt/smt.h"
-#include "int/instruction.cuh"
 #include "ext/rv32i/smt.cuh"
-#include "ext/rv64i/smt.cuh"
 #include "ext/rv32m/smt.cuh"
+#include "ext/rv64i/smt.cuh"
 #include "ext/rv64m/smt.cuh"
-#include <z3++.h>
+#include "int/instruction.cuh"
+#include <chrono>
+#include <cstdio>
+#include <cstring>
+#include <z3.h>
 
-namespace sup {
-	namespace detail {
-		smt_state make_input_state(z3::context& ctx) {
-			smt_state a = {
-				ctx.bv_const("s_x0",  64), ctx.bv_const("s_x1",  64),
-				ctx.bv_const("s_x2",  64), ctx.bv_const("s_x3",  64),
-				ctx.bv_const("s_x4",  64), ctx.bv_const("s_x5",  64),
-				ctx.bv_const("s_x6",  64), ctx.bv_const("s_x7",  64),
-				ctx.bv_const("s_x8",  64), ctx.bv_const("s_x9",  64),
-				ctx.bv_const("s_x10", 64), ctx.bv_const("s_x11", 64),
-				ctx.bv_const("s_x12", 64), ctx.bv_const("s_x13", 64),
-				ctx.bv_const("s_x14", 64), ctx.bv_const("s_x15", 64),
-				ctx.bv_const("s_x16", 64), ctx.bv_const("s_x17", 64),
-				ctx.bv_const("s_x18", 64), ctx.bv_const("s_x19", 64),
-				ctx.bv_const("s_x20", 64), ctx.bv_const("s_x21", 64),
-				ctx.bv_const("s_x22", 64), ctx.bv_const("s_x23", 64),
-				ctx.bv_const("s_x24", 64), ctx.bv_const("s_x25", 64),
-				ctx.bv_const("s_x26", 64), ctx.bv_const("s_x27", 64),
-				ctx.bv_const("s_x28", 64), ctx.bv_const("s_x29", 64),
-				ctx.bv_const("s_x30", 64), ctx.bv_const("s_x31", 64),
-			};
-			return a;
-		}
+static Z3_ast mk_bv64_const(Z3_context ctx, const char* name) {
+	Z3_sort s64 = Z3_mk_bv_sort(ctx, 64);
+	Z3_symbol sym = Z3_mk_string_symbol(ctx, name);
+	Z3_ast c = Z3_mk_const(ctx, sym, s64);
+	Z3_inc_ref(ctx, c);
+	return c;
+}
 
-		smt_state symbolic_run(z3::context& ctx, const smt_state& in, const inst* prog, u32 prog_len, const char** unsupported_opcode) {
-			smt_state regs = in;
-			regs[0] = ctx.bv_val((u64)0, 64); // pin x0 = 0
+smt_state make_input_state(Z3_context ctx) {
+	static const char* names[32] = {
+		"s_x0",	 "s_x1",	"s_x2",	 "s_x3",	"s_x4",	 "s_x5",	"s_x6",	 "s_x7",
+		"s_x8",	 "s_x9",	"s_x10", "s_x11", "s_x12", "s_x13", "s_x14", "s_x15",
+		"s_x16", "s_x17", "s_x18", "s_x19", "s_x20", "s_x21", "s_x22", "s_x23",
+		"s_x24", "s_x25", "s_x26", "s_x27", "s_x28", "s_x29", "s_x30", "s_x31",
+	};
+	smt_state a = {};
+	for(u32 i = 0; i < 32; ++i) { a[i] = mk_bv64_const(ctx, names[i]); }
+	return a;
+}
 
-			for(u32 i = 0; i < prog_len; ++i) {
-				const inst& ins = prog[i];
-				const u32 op = (u32)ins.op;
+// pin x0 = 0; replaces whatever's currently in slot 0, managing refs
+static void pin_x0(Z3_context ctx, smt_state& regs) {
+	Z3_sort s64 = Z3_mk_bv_sort(ctx, 64);
+	Z3_ast zero = Z3_mk_unsigned_int64(ctx, 0, s64);
+	Z3_inc_ref(ctx, zero);
+	if(regs[0]) Z3_dec_ref(ctx, regs[0]);
+	regs[0] = zero;
+}
 
-				if(op == OP_NOP) {
-					continue;
-				}
+static smt_state clone_state(Z3_context ctx, const smt_state& src) {
+	smt_state out = {};
+	for(u32 i = 0; i < 32; ++i) {
+		out[i] = src[i];
+		if(out[i]) Z3_inc_ref(ctx, out[i]);
+	}
+	return out;
+}
 
-				const inst_spec& spec = INST_DB_HOST.row[op];
-				const u32 d = spec.dst_slot >= 0 ? (u32)ins.operands[spec.dst_slot ].reg : 0;
-				const u32 s1 = spec.src_slot >= 0 ? (u32)ins.operands[spec.src_slot ].reg : 0;
-				const u32 s2 = spec.src2_slot >= 0 ? (u32)ins.operands[spec.src2_slot].reg : 0;
-				z3::expr imm = ctx.bv_val((u64)0, 64);
+smt_state symbolic_run(Z3_context ctx, const smt_state& in, const program_slice* prog,
+											 const char** unsupported_opcode) {
+	smt_state regs = clone_state(ctx, in);
+	pin_x0(ctx, regs);
+	Z3_sort s64 = Z3_mk_bv_sort(ctx, 64);
 
-				for(u32 k = 0; k < 4; ++k) {
-					if(spec.operands[k] == inst_spec::IMM) {
-						imm = ctx.bv_val((u64)ins.operands[k].i, 64);
-						break;
-					}
-				}
+	for(u32 i = 0; i < prog->size; ++i) {
+		const inst& ins = prog->instructions[i];
+		const u32 op = (u32)ins.op;
 
-				// dispatch through registered extensions in declaration order
-				bool handled = false;
-				if(!handled) handled = ext_rv32i_smt(ctx, regs, op, d, s1, s2, imm);
-				if(!handled) handled = ext_rv64i_smt(ctx, regs, op, d, s1, s2, imm);
-				if(!handled) handled = ext_rv32m_smt(ctx, regs, op, d, s1, s2, imm);
-				if(!handled) handled = ext_rv64m_smt(ctx, regs, op, d, s1, s2, imm);
+		if(op == OP_NOP) { continue; }
 
-				if(!handled) {
-					if(unsupported_opcode) {
-						*unsupported_opcode = "opcode not handled by any extension";
-					}
+		const inst_spec& spec = INST_DB_HOST.row[op];
+		const u32 d = spec.dst_slot >= 0 ? (u32)ins.operands[spec.dst_slot].reg : 0;
+		const u32 s1 = spec.src_slot >= 0 ? (u32)ins.operands[spec.src_slot].reg : 0;
+		const u32 s2 = spec.src2_slot >= 0 ? (u32)ins.operands[spec.src2_slot].reg : 0;
 
-					break;
-				}
+		Z3_ast imm = Z3_mk_unsigned_int64(ctx, 0, s64);
+		Z3_inc_ref(ctx, imm);
 
-				// re-pin x0 = 0 after every step
-				regs[0] = ctx.bv_val((u64)0, 64);
-			}
-
-			return regs;
-		}
-	} // namespace detail
-
-	verify_report verify_equivalent(
-		const inst* target, u32 target_len,
-		const inst* rewrite, u32 rewrite_len,
-		u64 live_outs,
-		u32 timeout_ms
-	) {
-		verify_report r = {};
-
-		try {
-			z3::context ctx;
-			z3::params  params(ctx);
-			params.set(":timeout", timeout_ms);
-
-			smt_state in = detail::make_input_state(ctx);
-			in[0] = ctx.bv_val((u64)0, 64);
-
-			const char* err = nullptr;
-			smt_state out_target  = detail::symbolic_run(ctx, in, target,  target_len,  &err);
-
-			if(err) {
-				r.kind = VERIFY_ERROR;
-				r.error = err;
-				return r;
-			}
-
-			smt_state out_rewrite = detail::symbolic_run(ctx, in, rewrite, rewrite_len, &err);
-
-			if(err) {
-				r.kind = VERIFY_ERROR;
-				r.error = err;
-				return r;
-			}
-
-			z3::expr_vector disjuncts(ctx);
-
-			for(u32 reg = 0; reg < 32; ++reg) {
-				if(reg == 0) {
-					continue;
-				}
-
-				if(live_outs & (1ULL << reg)) {
-					disjuncts.push_back(out_target[reg] != out_rewrite[reg]);
-				}
-			}
-
-			if(disjuncts.empty()) {
-				r.kind = VERIFY_EQUIVALENT;
-				r.solve_ms = 0;
-				return r;
-			}
-
-			z3::solver solver(ctx);
-			solver.set(params);
-			solver.add(z3::mk_or(disjuncts));
-
-			const auto t0 = std::chrono::high_resolution_clock::now();
-			const z3::check_result chk = solver.check();
-			const auto t1 = std::chrono::high_resolution_clock::now();
-			r.solve_ms = std::chrono::duration<f64, std::milli>(t1 - t0).count();
-
-			switch(chk) {
-				case z3::unsat: r.kind = VERIFY_EQUIVALENT; return r;
-				case z3::sat: {
-					z3::model m = solver.get_model();
-
-					for(u32 i = 0; i < 32; ++i) {
-						z3::expr v = m.eval(in[i], true);
-						u64 raw = 0;
-						r.counterexample.regs[i] = v.is_numeral_u64(raw) ? raw : 0;
-					}
-
-					r.counterexample.regs[0] = 0;
-					r.kind = VERIFY_COUNTEREXAMPLE;
-					return r;
-				}
-				case z3::unknown:
-				default:
-					r.kind = VERIFY_TIMEOUT;
-					return r;
+		for(u32 k = 0; k < 4; ++k) {
+			if(spec.operands[k] == inst_spec::IMM) {
+				Z3_ast new_imm = Z3_mk_unsigned_int64(ctx, (u64)ins.operands[k].i, s64);
+				Z3_inc_ref(ctx, new_imm);
+				Z3_dec_ref(ctx, imm);
+				imm = new_imm;
+				break;
 			}
 		}
-		catch(const z3::exception& e) {
-			r.kind = VERIFY_ERROR;
-			static thread_local char err_buf[512];
-			std::snprintf(err_buf, sizeof(err_buf), "%s", e.msg());
-			r.error = err_buf;
-			return r;
+
+		bool handled = false;
+		if(!handled) handled = ext_rv32i_smt(ctx, regs, op, d, s1, s2, imm);
+		if(!handled) handled = ext_rv64i_smt(ctx, regs, op, d, s1, s2, imm);
+		if(!handled) handled = ext_rv32m_smt(ctx, regs, op, d, s1, s2, imm);
+		if(!handled) handled = ext_rv64m_smt(ctx, regs, op, d, s1, s2, imm);
+
+		Z3_dec_ref(ctx, imm);
+
+		if(!handled) {
+			if(unsupported_opcode) { *unsupported_opcode = "opcode not handled by any extension"; }
+			break;
+		}
+
+		pin_x0(ctx, regs);
+	}
+
+	return regs;
+}
+
+// catch any error reported through the Z3 error handler.
+static thread_local char g_err_buf[512];
+static thread_local bool g_err_set = false;
+static void z3_error_cb(Z3_context c, Z3_error_code ec) {
+	Z3_string msg = Z3_get_error_msg(c, ec);
+	std::snprintf(g_err_buf, sizeof(g_err_buf), "%s", msg ? msg : "z3 error");
+	g_err_set = true;
+}
+
+smt_verify_report smt_eq(const program_slice* a, const program_slice* b, u64 live_outs) {
+	smt_verify_report r = {};
+
+	Z3_config cfg = Z3_mk_config();
+	Z3_context ctx = Z3_mk_context_rc(cfg);
+	Z3_del_config(cfg);
+	Z3_set_error_handler(ctx, z3_error_cb);
+	g_err_set = false;
+
+	Z3_params params = Z3_mk_params(ctx);
+	Z3_params_inc_ref(ctx, params);
+	Z3_symbol timeout_sym = Z3_mk_string_symbol(ctx, "timeout");
+	Z3_params_set_uint(ctx, params, timeout_sym, SMT_TIMEOUT_MS);
+
+	smt_state in = make_input_state(ctx);
+	pin_x0(ctx, in);
+
+	const char* err = nullptr;
+	smt_state out_target = symbolic_run(ctx, in, a, &err);
+	if(err || g_err_set) {
+		r.kind = VERIFY_ERROR;
+		r.error = err ? err : g_err_buf;
+		smt_free_state(ctx, in);
+		smt_free_state(ctx, out_target);
+		Z3_params_dec_ref(ctx, params);
+		Z3_del_context(ctx);
+		return r;
+	}
+
+	smt_state out_rewrite = symbolic_run(ctx, in, b, &err);
+	if(err || g_err_set) {
+		r.kind = VERIFY_ERROR;
+		r.error = err ? err : g_err_buf;
+		smt_free_state(ctx, in);
+		smt_free_state(ctx, out_target);
+		smt_free_state(ctx, out_rewrite);
+		Z3_params_dec_ref(ctx, params);
+		Z3_del_context(ctx);
+		return r;
+	}
+
+	// build disjunction: OR over live regs of (out_target[reg] != out_rewrite[reg]).
+	Z3_ast disjuncts[32];
+	u32 n_disj = 0;
+	for(u32 reg = 0; reg < 32; ++reg) {
+		if(reg == 0) continue;
+		if(live_outs & (1ULL << reg)) {
+			Z3_ast eq = Z3_mk_eq(ctx, out_target[reg], out_rewrite[reg]);
+			Z3_ast neq = Z3_mk_not(ctx, eq);
+			Z3_inc_ref(ctx, neq);
+			disjuncts[n_disj++] = neq;
 		}
 	}
-} // namespace sup
 
+	if(n_disj == 0) {
+		r.kind = VERIFY_EQUIVALENT;
+		r.solve_ms = 0;
+		smt_free_state(ctx, in);
+		smt_free_state(ctx, out_target);
+		smt_free_state(ctx, out_rewrite);
+		Z3_params_dec_ref(ctx, params);
+		Z3_del_context(ctx);
+		return r;
+	}
+
+	Z3_ast formula = Z3_mk_or(ctx, n_disj, disjuncts);
+	Z3_inc_ref(ctx, formula);
+	for(u32 i = 0; i < n_disj; ++i) Z3_dec_ref(ctx, disjuncts[i]);
+
+	Z3_solver solver = Z3_mk_solver(ctx);
+	Z3_solver_inc_ref(ctx, solver);
+	Z3_solver_set_params(ctx, solver, params);
+	Z3_solver_assert(ctx, solver, formula);
+
+	const auto t0 = std::chrono::high_resolution_clock::now();
+	Z3_lbool chk = Z3_solver_check(ctx, solver);
+	const auto t1 = std::chrono::high_resolution_clock::now();
+	r.solve_ms = std::chrono::duration<f64, std::milli>(t1 - t0).count();
+
+	switch(chk) {
+	case Z3_L_FALSE: r.kind = VERIFY_EQUIVALENT; break;
+	case Z3_L_TRUE: {
+		Z3_model m = Z3_solver_get_model(ctx, solver);
+		Z3_model_inc_ref(ctx, m);
+		for(u32 i = 0; i < 32; ++i) {
+			Z3_ast v = nullptr;
+			if(Z3_model_eval(ctx, m, in[i], true, &v) && v) {
+				Z3_inc_ref(ctx, v);
+				uint64_t raw = 0;
+				r.counterexample.regs[i] = Z3_get_numeral_uint64(ctx, v, &raw) ? raw : 0;
+				Z3_dec_ref(ctx, v);
+			} else {
+				r.counterexample.regs[i] = 0;
+			}
+		}
+		r.counterexample.regs[0] = 0;
+		r.kind = VERIFY_COUNTEREXAMPLE;
+		Z3_model_dec_ref(ctx, m);
+		break;
+	}
+	case Z3_L_UNDEF:
+	default: r.kind = VERIFY_TIMEOUT; break;
+	}
+
+	if(g_err_set && r.kind != VERIFY_COUNTEREXAMPLE) {
+		r.kind = VERIFY_ERROR;
+		r.error = g_err_buf;
+	}
+
+	Z3_dec_ref(ctx, formula);
+	Z3_solver_dec_ref(ctx, solver);
+	smt_free_state(ctx, in);
+	smt_free_state(ctx, out_target);
+	smt_free_state(ctx, out_rewrite);
+	Z3_params_dec_ref(ctx, params);
+	Z3_del_context(ctx);
+	return r;
+}

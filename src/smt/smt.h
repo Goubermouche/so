@@ -1,33 +1,25 @@
 #ifndef SMT_H
 #define SMT_H
 
-#include "int/instruction.cuh"
 #include "int/cpu.cuh"
+#include "int/program.h"
 
-namespace sup {
-	enum verify_result {
-		VERIFY_EQUIVALENT,
-		VERIFY_COUNTEREXAMPLE,
-		VERIFY_TIMEOUT,
-		VERIFY_ERROR,
-	};
+#define SMT_TIMEOUT_MS 10000
 
-	struct verify_report {
-		verify_result kind;
-		cpu_state counterexample;
-		f64 solve_ms;
-		const char* error;
-	};
+typedef enum smt_verify_result {
+	VERIFY_EQUIVALENT,
+	VERIFY_COUNTEREXAMPLE,
+	VERIFY_TIMEOUT,
+	VERIFY_ERROR,
+} smt_verify_result;
 
-	verify_report verify_equivalent(
-		const inst* target,
-		u32 target_len,
-		const inst* rewrite,
-		u32 rewrite_len,
-		u64 live_outs,
-		u32 timeout_ms = 10000
-	);
-} // namespace sup
+typedef struct smt_verify_report {
+	smt_verify_result kind;
+	cpu_state counterexample;
+	f64 solve_ms;
+	const char* error;
+} smt_verify_report;
+
+smt_verify_report smt_eq(const program_slice* a, const program_slice* b, u64 live_outs);
 
 #endif // #ifndef SMT_H
-

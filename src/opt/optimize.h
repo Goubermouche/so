@@ -42,7 +42,7 @@ namespace sup {
 			u32 m_n_tests = 0;
 			arr<inst> m_best_prog;
 			u32 m_best_len = 0;
-			verify_report m_rep = {};
+			smt_verify_report m_rep = {};
 			// stats
 			u64 m_total_candidates = 0;
 			u64 m_total_gpu_passes = 0;

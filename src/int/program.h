@@ -91,6 +91,11 @@ namespace sup {
 
 	opcode find_inst_op(const str& name, const inst_spec::operand* operands, u8 operand_count);
 
+	typedef struct program_slice {
+		const inst* instructions;
+		u32 size;
+	} program_slice;
+
 	struct program {
 		static program parse(const str& source);
 		static program dce(const inst* prog, u32 prog_len, u64 live_mask);
