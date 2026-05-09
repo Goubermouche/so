@@ -4,50 +4,45 @@
 #include "int/cpu.cuh"
 #include "int/instruction.cuh"
 
-namespace sup {
-	static constexpr u32 SYNTH_PROG_LEN = 8;
-	static constexpr u32 SYNTH_N_TESTS = 64;
-	static constexpr u32 N_WARPS_PER_BLOCK = 4;
-	static constexpr u32 THREADS_PER_BLOCK = N_WARPS_PER_BLOCK * 32;
+#define SYNTH_PROG_LEN 8
+#define SYNTH_N_TESTS 64
+#define N_WARPS_PER_BLOCK 4
+#define THREADS_PER_BLOCK N_WARPS_PER_BLOCK * 32
+#define TESTS_PER_LANE SYNTH_N_TESTS / 32
 
-	struct synth_config {
-		u64 live_mask;
-		u32 n_tests;
-		u32 prog_len;
-	};
+typedef struct opt_synth_config {
+	u64 live_mask;
+	u32 n_tests;
+	u32 prog_len;
+	const inst* candidates;
+	u64 n_candidates;
+	const cpu_state* test_in;
+	const cpu_state* target_out;
+	f64 elapsed_ms_total;
+} opt_synth_config;
 
-	struct synth_result {
-		u32 fail_mask;
-		u32 pass_count;
-	};
+typedef struct opt_synth_result {
+	u32 fail_mask;
+	u32 pass_count;
+} opt_synth_result;
 
-	struct gpu_runner {
-		gpu_runner();
-		~gpu_runner();
+typedef struct opt_gpu_context {
+	u64 max_chunk_cands;
+	void* d_cands;
+	void* d_test_in;
+	void* d_target_out;
+	void* d_fail_mask;
+	void* d_pass_count;
+	void* h_fail_mask;
+	void* h_pass_count;
+} opt_gpu_context;
 
-		i32 init(u64 requested_max_chunk_cands = 0);
-		u64 chunk_size() const { return m_max_chunk_cands; }
+typedef struct opt_shared_block {
+	inst progs[N_WARPS_PER_BLOCK][SYNTH_PROG_LEN];
+} opt_shared_block;
 
-		void run(
-			const inst* candidates,
-			u64 n_candidates,
-			const cpu_state* test_in,
-			const cpu_state* target_out,
-			const synth_config& cfg,
-			synth_result* results,
-			f64* elapsed_ms_total);
-
-	private:
-		u64 m_max_chunk_cands;
-		void* m_d_cands;
-		void* m_d_test_in;
-		void* m_d_target_out;
-		void* m_d_fail_mask;
-		void* m_d_pass_count;
-		void* m_h_fail_mask;
-		void* m_h_pass_count;
-	};
-} // namespace sup
+i32 opt_gpu_runner_make(opt_gpu_context* ctx, u64 max_chunk_cands);
+void opt_gpu_runner_free(opt_gpu_context* ctx);
+void opt_gpu_runner_run(opt_gpu_context* ctx, opt_synth_config* cfg, opt_synth_result* results);
 
 #endif // #ifndef DRIVER_CUH
-

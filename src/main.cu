@@ -27,12 +27,12 @@ i32 help() {
 }
 
 i32 list_e() {
-	for(u64 i = 0; i < EXT_NAMES_SIZE; ++i) printf("%s\n", EXT_NAMES[i]);
+	for(u64 i = 0; i < EXT_COUNT; ++i) printf("%s\n", EXT_NAMES[i]);
 	return 0;
 }
 
-i32 parse_e(config& cfg, const char* p) {
-	cfg.ext_mask = 0;
+i32 parse_e(opt_config* cfg, const char* p) {
+	cfg->ext_mask = 0;
 	while(*p) {
 		while(*p == ' ' || *p == ',' || *p == '+') p++;
 		if(!*p) break;
@@ -41,7 +41,7 @@ i32 parse_e(config& cfg, const char* p) {
 		while(*p && *p != ' ' && *p != ',' && *p != '+') p++;
 
 		bool found = false;
-		for(u32 i = 0; i < EXT_NAMES_SIZE; ++i) {
+		for(u32 i = 0; i < EXT_COUNT; ++i) {
 			const char* ext = EXT_NAMES[i];
 			const char* s = start;
 
@@ -51,7 +51,7 @@ i32 parse_e(config& cfg, const char* p) {
 			}
 
 			if(s == p && *ext == '\0') {
-				cfg.ext_mask |= (1u << i);
+				cfg->ext_mask |= (1u << i);
 				found = true;
 				break;
 			}
@@ -126,7 +126,7 @@ i32 read_file(const char* filename, char** out) {
 }
 
 i32 main(i32 argc, char** argv) {
-	config cfg;
+	opt_config cfg = opt_make_default_config();
 	i32 argi = 1;
 	char* source = 0;
 
@@ -141,7 +141,7 @@ i32 main(i32 argc, char** argv) {
 			return help();
 		} else if(!strcmp(argv[argi], "-e")) {
 			VERIFY_ARG("-e", "<list>");
-			i32 res = parse_e(cfg, argv[++argi]);
+			i32 res = parse_e(&cfg, argv[++argi]);
 			if(res) { return res; }
 		} else if(!strcmp(argv[argi], "-p")) {
 			VERIFY_ARG("-p", "<num>");
@@ -163,7 +163,7 @@ i32 main(i32 argc, char** argv) {
 	// run
 	if(device_init()) { return 1; }
 
-	optimize(source, cfg);
+	program parsed = program::parse(source);
+	opt_run(&parsed, &cfg);
 	return 0;
 }
-

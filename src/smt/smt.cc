@@ -3,11 +3,6 @@
 #include "ext/rv32m/smt.cuh"
 #include "ext/rv64i/smt.cuh"
 #include "ext/rv64m/smt.cuh"
-#include "int/instruction.cuh"
-#include <chrono>
-#include <cstdio>
-#include <cstring>
-#include <z3.h>
 
 smt_state smt_run(Z3_context ctx, const smt_state* in, const program_slice* prog) {
 	smt_state regs = smt_clone_state(ctx, in);
@@ -15,22 +10,22 @@ smt_state smt_run(Z3_context ctx, const smt_state* in, const program_slice* prog
 	Z3_sort s64 = Z3_mk_bv_sort(ctx, 64);
 
 	for(u32 i = 0; i < prog->size; ++i) {
-		const inst& ins = prog->instructions[i];
-		const u32 op = (u32)ins.op;
+		const inst* ins = &prog->instructions[i];
+		const u32 op = (u32)ins->op;
 
 		if(op == OP_NOP) { continue; }
 
-		const inst_spec& spec = INST_DB_HOST.row[op];
-		const u32 d = spec.dst_slot >= 0 ? (u32)ins.operands[spec.dst_slot].reg : 0;
-		const u32 s1 = spec.src_slot >= 0 ? (u32)ins.operands[spec.src_slot].reg : 0;
-		const u32 s2 = spec.src2_slot >= 0 ? (u32)ins.operands[spec.src2_slot].reg : 0;
+		const inst_spec* spec = &INST_DB_HOST.row[op];
+		const u32 d = spec->dst_slot >= 0 ? (u32)ins->operands[spec->dst_slot].reg : 0;
+		const u32 s1 = spec->src_slot >= 0 ? (u32)ins->operands[spec->src_slot].reg : 0;
+		const u32 s2 = spec->src2_slot >= 0 ? (u32)ins->operands[spec->src2_slot].reg : 0;
 
 		Z3_ast imm = Z3_mk_unsigned_int64(ctx, 0, s64);
 		Z3_inc_ref(ctx, imm);
 
 		for(u32 k = 0; k < 4; ++k) {
-			if(spec.operands[k] == inst_spec::IMM) {
-				Z3_ast new_imm = Z3_mk_unsigned_int64(ctx, (u64)ins.operands[k].i, s64);
+			if(spec->operands[k] == inst_spec::IMM) {
+				Z3_ast new_imm = Z3_mk_unsigned_int64(ctx, (u64)ins->operands[k].i, s64);
 				Z3_inc_ref(ctx, new_imm);
 				Z3_dec_ref(ctx, imm);
 				imm = new_imm;
@@ -81,7 +76,7 @@ smt_verify_report smt_eq(const program_slice* a, const program_slice* b, u64 liv
 	// run first program
 	smt_state out_target = smt_run(ctx, &in, a);
 	if(g_err_set) {
-		r.kind = VERIFY_ERROR;
+		r.kind = SMT_ERROR;
 		r.error = g_err_buf;
 		smt_free_state(ctx, &in);
 		smt_free_state(ctx, &out_target);
@@ -93,7 +88,7 @@ smt_verify_report smt_eq(const program_slice* a, const program_slice* b, u64 liv
 	// run second program
 	smt_state out_rewrite = smt_run(ctx, &in, b);
 	if(g_err_set) {
-		r.kind = VERIFY_ERROR;
+		r.kind = SMT_ERROR;
 		r.error = g_err_buf;
 		smt_free_state(ctx, &in);
 		smt_free_state(ctx, &out_target);
@@ -117,7 +112,7 @@ smt_verify_report smt_eq(const program_slice* a, const program_slice* b, u64 liv
 	}
 
 	if(n_disj == 0) {
-		r.kind = VERIFY_EQUIVALENT;
+		r.kind = SMT_EQUIVALENT;
 		r.solve_ms = 0;
 		smt_free_state(ctx, &in);
 		smt_free_state(ctx, &out_target);
@@ -142,7 +137,7 @@ smt_verify_report smt_eq(const program_slice* a, const program_slice* b, u64 liv
 	r.solve_ms = std::chrono::duration<f64, std::milli>(t1 - t0).count();
 
 	switch(chk) {
-		case Z3_L_FALSE: r.kind = VERIFY_EQUIVALENT; break;
+		case Z3_L_FALSE: r.kind = SMT_EQUIVALENT; break;
 		case Z3_L_TRUE: {
 			Z3_model m = Z3_solver_get_model(ctx, solver);
 			Z3_model_inc_ref(ctx, m);
@@ -158,16 +153,16 @@ smt_verify_report smt_eq(const program_slice* a, const program_slice* b, u64 liv
 				}
 			}
 			r.counterexample.regs[0] = 0;
-			r.kind = VERIFY_COUNTEREXAMPLE;
+			r.kind = SMT_COUNTEREXAMPLE;
 			Z3_model_dec_ref(ctx, m);
 			break;
 		}
 		case Z3_L_UNDEF:
-		default: r.kind = VERIFY_TIMEOUT; break;
+		default: r.kind = SMT_TIMEOUT; break;
 	}
 
-	if(g_err_set && r.kind != VERIFY_COUNTEREXAMPLE) {
-		r.kind = VERIFY_ERROR;
+	if(g_err_set && r.kind != SMT_COUNTEREXAMPLE) {
+		r.kind = SMT_ERROR;
 		r.error = g_err_buf;
 	}
 

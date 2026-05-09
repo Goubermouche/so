@@ -4,10 +4,10 @@
 #include "ext/rv32i/run.cuh"
 #include "int/instruction.cuh"
 
-SO_HD bool ext_rv32m_run(u32 op, u64 regs[32], const inst& in) {
-	const u32 d = (u32)in.operands[0].reg;
-	const u64 a = regs[in.operands[1].reg];
-	const u64 b = regs[in.operands[2].reg];
+SO_HD bool ext_rv32m_run(u32 op, u64 regs[32], const inst* in) {
+	const u32 d = (u32)in->operands[0].reg;
+	const u64 a = regs[in->operands[1].reg];
+	const u64 b = regs[in->operands[2].reg];
 
 	switch(op) {
 		case OP_MUL: ext_rv_wr(regs, d, a * b); return true;
