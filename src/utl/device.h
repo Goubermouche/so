@@ -1,56 +1,71 @@
 #ifndef DEVICE_H
 #define DEVICE_H
 
-#include <cuda_runtime.h>
 #include "type.h"
-
-namespace sup {
-	inline void check_cuda(cudaError_t err, const char* msg) {
-		if(err != cudaSuccess) {
-			print_err("error: [{}]: {}\n", msg, cudaGetErrorString(err));
-			flush();
-			exit(1);
-		}
-	}
-
-	inline i32 device_init() {
-		i32 dev = 0;
-
-		if(cudaGetDevice(&dev) != cudaSuccess) {
-			print_err("error: no device found\n");
-			return 1;
-		}
-
-		cudaDeviceProp p;
-		if(cudaGetDeviceProperties(&p, dev) != cudaSuccess) {
-			print_err("error: cannot query device properties\n");
-			return 2;
-		}
-
-		const f64 mem_bw_gbs  = ((f64)p.memoryBusWidth / 8.0) * ((f64)p.memoryClockRate * 1000.0) * 2.0 / 1e9;
-		const i32 max_threads = p.multiProcessorCount * p.maxThreadsPerMultiProcessor;
-		const i32 max_warps   = max_threads / 32;
-
-		print("> device: {} (sm_{}{})\n", p.name, p.major, p.minor);
-		print("          threads: {}\n", max_threads);
-		print("          warps: {}\n", max_warps);
-		print("          dram: {} GB @ {} GB/s\n", std::ceil(p.totalGlobalMem / (1024.0 * 1024.0 * 1024.0)), (i32)mem_bw_gbs);
-		print("          L2: {}\n", p.l2CacheSize / 1024);
-		print("          shared memory per block: {} KB\n", (int)p.sharedMemPerBlock / 1024);
-		print("          SM clock: {} MHz\n", p.clockRate / 1000);
-		print("          mem clock: {} MHz\n", p.memoryClockRate / 1000.0);
-
-		return 0;
-	}
-} // namespace sup
+#include <cuda_runtime.h>
 
 #ifdef __CUDACC__
-	#define SO_HD __host__ __device__ __forceinline__
-	#define SO_D  __device__ __forceinline__
+#define SO_HD __host__ __device__ __forceinline__
+#define SO_D __device__ __forceinline__
 #else
-	#define SO_HD inline
-	#define SO_D  inline
+#define SO_HD inline
+#define SO_D inline
 #endif // #ifdef __CUDACC__
 
-#endif // #define DEVICE_H
+inline void check_cuda(cudaError_t err, const char* msg) {
+	if(err != cudaSuccess) {
+		fprintf(stderr, "error: [%s]: %s\n", msg, cudaGetErrorString(err));
+		fflush(stderr);
+		exit(1);
+	}
+}
 
+inline void dmalloc(void** ptr, u64 size, const char* msg) {
+	check_cuda(cudaMalloc(ptr, size), msg);
+}
+
+inline void hmalloc(void** ptr, u64 size, const char* msg) {
+	check_cuda(cudaMallocHost(ptr, size), msg);
+}
+
+inline void htod_memcpy(void* dst, const void* src, u64 count, const char* msg) {
+	check_cuda(cudaMemcpy(dst, src, count, cudaMemcpyHostToDevice), msg);
+}
+
+inline void dtoh_memcpy(void* dst, const void* src, u64 count, const char* msg) {
+	check_cuda(cudaMemcpy(dst, src, count, cudaMemcpyDeviceToHost), msg);
+}
+
+inline i32 device_init() {
+	i32 dev = 0;
+
+	if(cudaGetDevice(&dev) != cudaSuccess) {
+		fprintf(stderr, "error: no device found\n");
+		return 1;
+	}
+
+	cudaDeviceProp p;
+	if(cudaGetDeviceProperties(&p, dev) != cudaSuccess) {
+		fprintf(stderr, "error: cannot query device properties\n");
+		return 2;
+	}
+
+	const f64 mem_bw_gbs =
+		((f64)p.memoryBusWidth / 8.0) * ((f64)p.memoryClockRate * 1000.0) * 2.0 / 1e9;
+	const i32 max_threads = p.multiProcessorCount * p.maxThreadsPerMultiProcessor;
+	const i32 max_warps = max_threads / 32;
+
+	printf("> device: %s (sm_%u%u)\n", p.name, p.major, p.minor);
+	printf("          threads: %u\n", max_threads);
+	printf("          warps: %u\n", max_warps);
+	printf("          dram: %f GB @ %d GB/s\n",
+				 std::ceil(p.totalGlobalMem / (1024.0 * 1024.0 * 1024.0)), (i32)mem_bw_gbs);
+	printf("          L2: %d\n", p.l2CacheSize / 1024);
+	printf("          shared memory per block: %d KB\n", (int)p.sharedMemPerBlock / 1024);
+	printf("          SM clock: %d MHz\n", p.clockRate / 1000);
+	printf("          mem clock: %f MHz\n", p.memoryClockRate / 1000.0);
+
+	return 0;
+}
+
+#endif // #define DEVICE_H

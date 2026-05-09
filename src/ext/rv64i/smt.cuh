@@ -1,58 +1,21 @@
 #ifndef EXT_RV64I_SMT_CUH
 #define EXT_RV64I_SMT_CUH
 
-#include "int/instruction.cuh"
-#include "ext/rv32i/smt.cuh"
-#include <z3++.h>
+#include "smt/smt_state.h"
 
-namespace sup {
-	inline bool ext_rv64i_smt(z3::context& ctx, smt_state& regs, u32 op, u32 d, u32 s1, u32 s2, const z3::expr& imm) {
-		using namespace ext_smt;
-		switch(op) {
-			case OP_ADDIW: wr(regs, d, sext_w(ctx, regs[s1] + imm)); return true;
-			case OP_SLLIW: {
-				z3::expr lo32 = regs[s1].extract(31, 0);
-				z3::expr cnt  = z3::zext(imm.extract(4, 0), 27);
-				wr(regs, d, z3::sext(z3::shl(lo32, cnt), 32));
-				return true;
-			}
-			case OP_SRLIW: {
-				z3::expr lo32 = regs[s1].extract(31, 0);
-				z3::expr cnt  = z3::zext(imm.extract(4, 0), 27);
-				wr(regs, d, z3::sext(z3::lshr(lo32, cnt), 32));
-				return true;
-			}
-			case OP_SRAIW: {
-				z3::expr lo32 = regs[s1].extract(31, 0);
-				z3::expr cnt  = z3::zext(imm.extract(4, 0), 27);
-				wr(regs, d, z3::sext(z3::ashr(lo32, cnt), 32));
-				return true;
-			}
-			case OP_ADDW: wr(regs, d, sext_w(ctx, regs[s1] + regs[s2])); return true;
-			case OP_SUBW: wr(regs, d, sext_w(ctx, regs[s1] - regs[s2])); return true;
-			case OP_SLLW: {
-				z3::expr lo32 = regs[s1].extract(31, 0);
-				z3::expr cnt  = z3::zext(regs[s2].extract(4, 0), 27);
-				wr(regs, d, z3::sext(z3::shl(lo32, cnt), 32));
-				return true;
-			}
-			case OP_SRLW: {
-				z3::expr lo32 = regs[s1].extract(31, 0);
-				z3::expr cnt  = z3::zext(regs[s2].extract(4, 0), 27);
-				wr(regs, d, z3::sext(z3::lshr(lo32, cnt), 32));
-				return true;
-			}
-			case OP_SRAW: {
-				z3::expr lo32 = regs[s1].extract(31, 0);
-				z3::expr cnt  = z3::zext(regs[s2].extract(4, 0), 27);
-				wr(regs, d, z3::sext(z3::ashr(lo32, cnt), 32));
-				return true;
-			}
-		}
-
-		return false;
+inline bool ext_rv64i_smt(Z3_context ctx, smt_state* s, u32 op, u32 d, u32 s1, u32 s2, Z3_ast imm) {
+	switch(op) {
+		case OP_ADDIW: WR(smt_sext_w(ctx, Z3_mk_bvadd(ctx, A, imm)));
+		case OP_ADDW:  WR(smt_sext_w(ctx, Z3_mk_bvadd(ctx, A, B)));
+		case OP_SUBW:  WR(smt_sext_w(ctx, Z3_mk_bvsub(ctx, A, B)));
+		case OP_SLLIW: WR(SEXT(32, Z3_mk_bvshl(ctx, LO32(A), SH5_32(imm))));
+		case OP_SRLIW: WR(SEXT(32, Z3_mk_bvlshr(ctx, LO32(A), SH5_32(imm))));
+		case OP_SRAIW: WR(SEXT(32, Z3_mk_bvashr(ctx, LO32(A), SH5_32(imm))));
+		case OP_SLLW:  WR(SEXT(32, Z3_mk_bvshl(ctx, LO32(A), SH5_32(B))));
+		case OP_SRLW:  WR(SEXT(32, Z3_mk_bvlshr(ctx, LO32(A), SH5_32(B))));
+		case OP_SRAW:  WR(SEXT(32, Z3_mk_bvashr(ctx, LO32(A), SH5_32(B))));
 	}
-} // namespace sup
+	return false;
+}
 
-#endif // #ifndef EXT_RV64I_SMT_CUH
-
+#endif // EXT_RV64I_SMT_CUH

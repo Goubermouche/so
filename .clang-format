@@ -1,0 +1,53 @@
+---
+BasedOnStyle: LLVM
+IndentWidth: 2
+TabWidth: 2
+UseTab: Always
+ContinuationIndentWidth: 2
+ConstructorInitializerIndentWidth: 2
+
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterFunction: false
+  AfterControlStatement: Never
+  AfterEnum: false
+  AfterStruct: false
+  AfterUnion: false
+  AfterClass: false
+  AfterNamespace: false
+  AfterCaseLabel: false
+  BeforeElse: false
+  BeforeWhile: false
+  BeforeCatch: false
+  SplitEmptyFunction: false
+  SplitEmptyRecord: false
+  IndentBraces: false
+
+SpaceBeforeParens: Never
+
+AllowShortFunctionsOnASingleLine: All
+AllowShortIfStatementsOnASingleLine: WithoutElse
+AllowShortLoopsOnASingleLine: true
+AllowShortBlocksOnASingleLine: Always
+AllowShortCaseLabelsOnASingleLine: true
+AllowShortEnumsOnASingleLine: true
+AllowAllArgumentsOnNextLine: true
+AllowAllParametersOfDeclarationOnNextLine: true
+BinPackArguments: true
+BinPackParameters: true
+
+PointerAlignment: Left
+DerivePointerAlignment: false
+
+ColumnLimit: 100
+AlignTrailingComments: true
+SortIncludes: true
+KeepEmptyLinesAtTheStartOfBlocks: false
+MaxEmptyLinesToKeep: 1
+SpacesInParentheses: false
+SpacesInSquareBrackets: false
+SpacesInCStyleCastParentheses: false
+Cpp11BracedListStyle: true
+
+IndentPPDirectives: None
+IndentCaseLabels: true

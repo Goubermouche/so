@@ -10,206 +10,241 @@
 // - add a Z3.cc file that exposes ext_<name>_smt(...)
 // - wire those into smt/smt.cc and opt/batch_runner.cuh's dispatcher
 
-namespace sup {
-	enum inst_shape : u8 {
-		SHAPE_NONE = 0, // nop
-		SHAPE_RRR,      // rd, rs1, rs2
-		SHAPE_RRI,      // rd, rs1, imm
-		SHAPE_RR,       // rd, rs1
-		SHAPE_RI,       // rd, imm
-	};
+typedef enum int_inst_shape : u8 {
+	SHAPE_NONE = 0, // nop
+	SHAPE_RRR,			// rd, rs1, rs2
+	SHAPE_RRI,			// rd, rs1, imm
+	SHAPE_RR,				// rd, rs1
+	SHAPE_RI,				// rd, imm
+} int_inst_shape;
 
-#define EXTENSION_LIST(X) \
-	X(RV32I, "rv32i", 0)    \
-	X(RV64I, "rv64i", 1)    \
-	X(RV32M, "rv32m", 2)    \
+#define EXTENSION_LIST(X)                                                                          \
+	X(RV32I, "rv32i", 0)                                                                             \
+	X(RV64I, "rv64i", 1)                                                                             \
+	X(RV32M, "rv32m", 2)                                                                             \
 	X(RV64M, "rv64m", 3)
 
-	// EXT_RV32I is the base ISA and is always implied
-	// rv64-prefixed extensions extend their rv32 counterpart and require
-	// it to be enabled. The optimizer's pool builder enforces this implicitly
-	enum ext_bits : u32 {
+// EXT_RV32I is the base ISA and is always implied
+// rv64-prefixed extensions extend their rv32 counterpart and require
+// it to be enabled. The optimizer's pool builder enforces this implicitly
+typedef enum inst_ext_bits : u32 {
 #define X(TAG, DIR, BIT) EXT_##TAG = 1u << (BIT),
-		EXTENSION_LIST(X)
+	EXTENSION_LIST(X)
 #undef X
-	};
+} inst_ext_bits;
 
-	// array of all extension directory names
-	inline constexpr const char* EXT_NAMES[] = {
+// array of all extension directory names
+inline constexpr const char* INT_EXT_NAMES[] = {
 #define X(TAG, DIR, BIT) DIR,
-		EXTENSION_LIST(X)
+	EXTENSION_LIST(X)
 #undef X
-	};
+};
 
-	constexpr u64 EXT_NAMES_SIZE = sizeof(EXT_NAMES) / sizeof(EXT_NAMES[0]);
+inline constexpr u32 INT_EXT_BITS[] = {
+#define X(TAG, DIR, BIT) (1u << (BIT)),
+	EXTENSION_LIST(X)
+#undef X
+};
 
-} // namespace sup
+constexpr u64 INT_EXT_COUNT = sizeof(INT_EXT_NAMES) / sizeof(INT_EXT_NAMES[0]);
+
+inline void int_print_enabled_extensions(u32 mask) {
+	bool first = true;
+	for(u32 i = 0; i < INT_EXT_COUNT; ++i) {
+		if(mask & INT_EXT_BITS[i]) {
+			std::printf("%s%s", first ? "" : ", ", INT_EXT_NAMES[i]);
+			first = false;
+		}
+	}
+}
 
 // extensions
 #include "ext/rv32i/opcodes.def"
-#include "ext/rv64i/opcodes.def"
 #include "ext/rv32m/opcodes.def"
+#include "ext/rv64i/opcodes.def"
 #include "ext/rv64m/opcodes.def"
 
-namespace sup {
-#define EXT_OPCODE_LIST(X) \
-	EXT_RV32I_OPCODES(X)   \
-	EXT_RV64I_OPCODES(X)   \
-	EXT_RV32M_OPCODES(X)   \
+#define EXT_OPCODE_LIST(X)                                                                         \
+	EXT_RV32I_OPCODES(X)                                                                             \
+	EXT_RV64I_OPCODES(X)                                                                             \
+	EXT_RV32M_OPCODES(X)                                                                             \
 	EXT_RV64M_OPCODES(X)
 
-	enum opcode : u16 {
+typedef enum int_opcode : u16 {
 #define X(TAG, mnemonic, shape, comm) OP_##TAG,
-		EXT_OPCODE_LIST(X)
+	EXT_OPCODE_LIST(X)
 #undef X
 		OP_NOP,
-		OP_COUNT,
+	OP_COUNT,
+} int_opcode;
+
+typedef struct int_inst {
+	union operand {
+		int_reg_index reg;
+		u64 i;
+	};
+	int_opcode op;
+	operand operands[4];
+} int_inst;
+
+typedef struct int_inst_spec {
+	enum operand : u8 {
+		NONE = 0,
+		REG,
+		IMM,
 	};
 
-	struct inst {
-		union operand {
-			reg_index reg;
-			u64 i;
-		};
-		opcode op;
-		operand operands[4];
-	};
+	const char* name;
+	operand operands[4];
+	int_opcode op;
+	i8 dst_slot;
+	i8 src_slot;
+	i8 src2_slot;
+	u32 ext;
+	u8 commutative;
 
-	struct inst_spec {
-		enum operand : u8 {
-			NONE = 0,
-			REG,
-			IMM,
-		};
+	SO_HD constexpr u8 get_operand_count() const {
+		u8 i = 0;
 
-		const char* name;
-		operand operands[4];
-		opcode op;
-		i8 dst_slot;
-		i8 src_slot;
-		i8 src2_slot;
-		u32 ext;
-		u8 commutative;
-
-		SO_HD constexpr u8 get_operand_count() const {
-			u8 i = 0;
-
-			for(; i < 4; ++i) {
-				if(operands[i] == NONE) {
-					break;
-				}
-			}
-
-			return i;
+		for(; i < 4; ++i) {
+			if(operands[i] == NONE) { break; }
 		}
-	};
 
-	struct inst_db_t {
-		inst_spec row[OP_COUNT];
-	};
-
-	SO_HD constexpr inst_spec::operand shape_op0(inst_shape s) {
-		return s == SHAPE_NONE ? inst_spec::NONE : inst_spec::REG;
+		return i;
 	}
+} int_inst_spec;
 
-	SO_HD constexpr inst_spec::operand shape_op1(inst_shape s) {
-		switch(s) {
-			case SHAPE_RRR: case SHAPE_RRI: case SHAPE_RR: return inst_spec::REG;
-			case SHAPE_RI:                                 return inst_spec::IMM;
-			default:                                       return inst_spec::NONE;
-		}
+typedef struct int_inst_db {
+	int_inst_spec row[OP_COUNT];
+} int_inst_db;
+
+SO_HD constexpr int_inst_spec::operand int_shape_op0(int_inst_shape s) {
+	return s == SHAPE_NONE ? int_inst_spec::NONE : int_inst_spec::REG;
+}
+
+SO_HD constexpr int_inst_spec::operand int_shape_op1(int_inst_shape s) {
+	switch(s) {
+		case SHAPE_RRR:
+		case SHAPE_RRI:
+		case SHAPE_RR: return int_inst_spec::REG;
+		case SHAPE_RI: return int_inst_spec::IMM;
+		default: return int_inst_spec::NONE;
 	}
+}
 
-	SO_HD constexpr inst_spec::operand shape_op2(inst_shape s) {
-		switch(s) {
-			case SHAPE_RRR: return inst_spec::REG;
-			case SHAPE_RRI: return inst_spec::IMM;
-			default:        return inst_spec::NONE;
-		}
+SO_HD constexpr int_inst_spec::operand int_shape_op2(int_inst_shape s) {
+	switch(s) {
+		case SHAPE_RRR: return int_inst_spec::REG;
+		case SHAPE_RRI: return int_inst_spec::IMM;
+		default: return int_inst_spec::NONE;
 	}
+}
 
-	SO_HD constexpr i8 shape_dst_slot(inst_shape s) {
-		return s == SHAPE_NONE ? (i8)-1 : (i8)0;
+SO_HD constexpr i8 int_shape_dst_slot(int_inst_shape s) { return s == SHAPE_NONE ? (i8)-1 : (i8)0; }
+
+SO_HD constexpr i8 int_shape_src_slot(int_inst_shape s) {
+	switch(s) {
+		case SHAPE_RRR:
+		case SHAPE_RRI:
+		case SHAPE_RR: return 1;
+		default: return -1;
 	}
+}
 
-	SO_HD constexpr i8 shape_src_slot(inst_shape s) {
-		switch(s) {
-			case SHAPE_RRR: case SHAPE_RRI: case SHAPE_RR: return 1;
-			default:                                       return -1;
-		}
-	}
+SO_HD constexpr i8 int_shape_src2_slot(int_inst_shape s) { return s == SHAPE_RRR ? (i8)2 : (i8)-1; }
 
-	SO_HD constexpr i8 shape_src2_slot(inst_shape s) {
-		return s == SHAPE_RRR ? (i8)2 : (i8)-1;
-	}
+SO_HD constexpr int_inst_db int_build_inst_db() {
+	int_inst_db d = {};
 
-	SO_HD constexpr inst_db_t build_inst_db() {
-		inst_db_t d = {};
-
-#define ROW(TAG, MN, SHAPE, COMM, EXT_BIT)                                         \
-	d.row[OP_##TAG] = inst_spec{                                                   \
-		MN,                                                                        \
-		{ shape_op0(SHAPE), shape_op1(SHAPE), shape_op2(SHAPE), inst_spec::NONE }, \
-		OP_##TAG,                                                                  \
-		shape_dst_slot(SHAPE),                                                     \
-		shape_src_slot(SHAPE),                                                     \
-		shape_src2_slot(SHAPE),                                                    \
-		(u32)(EXT_BIT),                                                            \
-		(u8)(COMM)                                                                 \
-	};
+#define ROW(TAG, MN, SHAPE, COMM, EXT_BIT)                                                         \
+	d.row[OP_##TAG] = int_inst_spec{                                                                 \
+		MN,                                                                                            \
+		{int_shape_op0(SHAPE), int_shape_op1(SHAPE), int_shape_op2(SHAPE), int_inst_spec::NONE},       \
+		OP_##TAG,                                                                                      \
+		int_shape_dst_slot(SHAPE),                                                                     \
+		int_shape_src_slot(SHAPE),                                                                     \
+		int_shape_src2_slot(SHAPE),                                                                    \
+		(u32)(EXT_BIT),                                                                                \
+		(u8)(COMM)};
 
 #define X(TAG, MN, SHAPE, COMM) ROW(TAG, MN, SHAPE, COMM, EXT_RV32I)
-		EXT_RV32I_OPCODES(X)
+	EXT_RV32I_OPCODES(X)
 #undef X
 #define X(TAG, MN, SHAPE, COMM) ROW(TAG, MN, SHAPE, COMM, EXT_RV64I)
-		EXT_RV64I_OPCODES(X)
+	EXT_RV64I_OPCODES(X)
 #undef X
 #define X(TAG, MN, SHAPE, COMM) ROW(TAG, MN, SHAPE, COMM, EXT_RV32M)
-		EXT_RV32M_OPCODES(X)
+	EXT_RV32M_OPCODES(X)
 #undef X
 #define X(TAG, MN, SHAPE, COMM) ROW(TAG, MN, SHAPE, COMM, EXT_RV64M)
-		EXT_RV64M_OPCODES(X)
+	EXT_RV64M_OPCODES(X)
 #undef X
 
 #undef ROW
-		d.row[OP_NOP] = inst_spec{
-			"nop",
-			{ inst_spec::NONE, inst_spec::NONE, inst_spec::NONE, inst_spec::NONE },
-			OP_NOP, -1, -1, -1, EXT_RV32I, 0
-		};
-		return d;
-	}
+	d.row[OP_NOP] = int_inst_spec{
+		"nop",		 {int_inst_spec::NONE, int_inst_spec::NONE, int_inst_spec::NONE, int_inst_spec::NONE},
+		OP_NOP,		 -1,
+		-1,				 -1,
+		EXT_RV32I, 0};
+	return d;
+}
 
-	inline constexpr inst_db_t INST_DB_HOST = build_inst_db();
+inline constexpr int_inst_db INT_INST_DB_HOST = int_build_inst_db();
 
 #ifdef __CUDACC__
-	static __constant__ inst_db_t INST_DB_DEV = build_inst_db();
+static __constant__ int_inst_db INT_INST_DB_DEV = int_build_inst_db();
 #endif // #ifdef __CUDACC__
 
-	SO_HD const inst_spec& find_spec(opcode op) {
+SO_HD const int_inst_spec* int_find_spec(int_opcode op) {
 #ifdef __CUDA_ARCH__
-		return INST_DB_DEV.row[op];
+	return &INT_INST_DB_DEV.row[op];
 #else
-		return INST_DB_HOST.row[op];
+	return &INT_INST_DB_HOST.row[op];
 #endif // #ifdef __CUDA_ARCH__
+}
+
+SO_HD constexpr b32 int_check_inst_db_alignment() {
+	const int_inst_db d = int_build_inst_db();
+
+	for(u32 i = 0; i < (u32)OP_COUNT; ++i) {
+		if((u32)d.row[i].op != i) { return false; }
 	}
 
-	namespace detail {
-		SO_HD constexpr b32 check_inst_db_alignment() {
-			const inst_db_t d = build_inst_db();
+	return true;
+}
 
-			for(u32 i = 0; i < (u32)OP_COUNT; ++i) {
-				if((u32)d.row[i].op != i) {
-					return false;
-				}
+static_assert(int_check_inst_db_alignment(), "INST_DB rows must be in opcode-enum order");
+
+inline int_opcode int_find_inst_op(const str& name, const int_inst_spec::operand* operands,
+																	 u8 operand_count) {
+	for(u32 i = 0; i < (u32)OP_COUNT; ++i) {
+		const int_inst_spec& spec = INT_INST_DB_HOST.row[i];
+
+		if(name != spec.name) { continue; }
+
+		if(spec.get_operand_count() != operand_count) { continue; }
+
+		b32 ok = true;
+
+		for(u8 k = 0; k < operand_count; ++k) {
+			if(spec.operands[k] != operands[k]) {
+				ok = false;
+				break;
 			}
-
-			return true;
 		}
 
-		static_assert(check_inst_db_alignment(), "INST_DB rows must be in opcode-enum order");
-	} // namespace detail
-} // namespace sup
+		if(ok) { return (int_opcode)i; }
+	}
+
+	return OP_COUNT; // sentinel: "no match"
+}
+
+inline str int_operand_to_string(int_inst::operand op, int_inst_spec::operand ty) {
+	switch(ty) {
+		case int_inst_spec::REG: return int_reg_name((u32)op.reg);
+		case int_inst_spec::IMM: return std::to_string((i64)op.i);
+		default: return "?";
+	}
+}
 
 #endif // #ifndef INSTRUCTION_CUH
-

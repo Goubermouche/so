@@ -1,59 +1,55 @@
 #ifndef OPTIMIZE_H
 #define OPTIMIZE_H
 
-#include "opt/driver.cuh"
-#include "opt/enumerate.cuh"
 #include "int/program.h"
+#include "opt/driver.cuh"
+#include "opt/enumerate.h"
 #include "smt/smt.h"
 
-namespace sup {
-	struct config {
-		u64 live_mask = 0;
-		u64 seed = 1;
-		u32 ext_mask = EXT_RV32I;
-		u32 max_prog_len = 6;
-		u64 batch_size = 4'000'000;
-		u64 gpu_chunk_size = 0;
-		u32 max_cegis_iters = 8;
-	};
+typedef struct opt_config {
+	u64 live_mask;
+	u64 seed;
+	u32 ext_mask;
+	u32 max_prog_len;
+	u64 batch_size;
+	u64 gpu_chunk_size;
+	u32 max_cegis_iters;
+} opt_config;
 
-	void optimize(const str& prog, const config& cfg = {});
-	void optimize(const program& prog, const config& cfg = {});
+typedef struct opt_context {
+	const int_program* prog;
+	const opt_config* cfg;
+	u64 live_in;
+	u64 live_out;
+	int_cpu_state test_in[SYNTH_N_TESTS];
+	int_cpu_state target_out[SYNTH_N_TESTS];
+	u32 n_tests;
+	arr<int_inst> best_prog;
+	u32 best_len;
+	smt_verify_report rep;
+	// stats
+	u64 total_candidates;
+	u64 total_gpu_passes;
+	f64 total_gpu_ms;
+	f64 total_smt_ms;
+	u64 total_smt_calls;
+	opt_gpu_context gpu;
+} opt_context;
 
-	namespace detail {
-		struct optimizer {
-			optimizer(const program& prog, const config& cfg);
-			~optimizer();
-			void run();
-		private:
-			void log_startup() const;
-			void print_reg_mask(u64 mask) const;
-			void seed_test_vectors();
-			b32 run_length(u32 L);
-			void filter_batch(const arr<candidate<SYNTH_PROG_LEN>>& cands);
-			void log_results(b32 found) const;
-		private:
-			const program& m_prog;
-			const config& m_cfg;
-			u64 m_live_in;
-			u64 m_live_out;
-			cpu_state m_test_in[SYNTH_N_TESTS];
-			cpu_state m_target_out[SYNTH_N_TESTS];
-			u32 m_n_tests = 0;
-			arr<inst> m_best_prog;
-			u32 m_best_len = 0;
-			verify_report m_rep = {};
-			// stats
-			u64 m_total_candidates = 0;
-			u64 m_total_gpu_passes = 0;
-			f64 m_total_gpu_ms = 0.0;
-			f64 m_total_smt_ms = 0.0;
-			u64 m_total_smt_calls = 0;
+typedef struct opt_survivor_set {
+	arr<u32> indices;
+} opt_survivor_set;
 
-			gpu_runner m_gpu;
-		};
-	} // namespace detail
-} // namespace sup
+opt_config opt_make_default_config();
+
+void opt_print_reg_mask(u64 mask);
+void opt_log_startup(const opt_context* ctx);
+void opt_log_results(const opt_context* ctx, b32 found);
+
+void opt_seed_test_vectors(opt_context* ctx);
+void opt_filter_batch(opt_context* ctx, const arr<opt_candidate>& cands);
+b32 opt_run_length(opt_context* ctx, u32 len);
+
+void opt_run(const int_program* prog, const opt_config* cfg);
 
 #endif // #ifndef OPTIMIZE_H
-
