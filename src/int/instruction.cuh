@@ -10,7 +10,6 @@
 // - add a Z3.cc file that exposes ext_<name>_smt(...)
 // - wire those into smt/smt.cc and opt/batch_runner.cuh's dispatcher
 
-namespace sup {
 enum inst_shape : u8 {
 	SHAPE_NONE = 0, // nop
 	SHAPE_RRR,			// rd, rs1, rs2
@@ -58,7 +57,6 @@ inline void print_enabled_extensions(u32 mask) {
 		}
 	}
 }
-} // namespace sup
 
 // extensions
 #include "ext/rv32i/opcodes.def"
@@ -66,7 +64,6 @@ inline void print_enabled_extensions(u32 mask) {
 #include "ext/rv64i/opcodes.def"
 #include "ext/rv64m/opcodes.def"
 
-namespace sup {
 #define EXT_OPCODE_LIST(X)                                                                         \
 	EXT_RV32I_OPCODES(X)                                                                             \
 	EXT_RV64I_OPCODES(X)                                                                             \
@@ -206,7 +203,6 @@ SO_HD const inst_spec* find_spec(opcode op) {
 #endif // #ifdef __CUDA_ARCH__
 }
 
-namespace detail {
 SO_HD constexpr b32 check_inst_db_alignment() {
 	const inst_db_t d = build_inst_db();
 
@@ -218,7 +214,5 @@ SO_HD constexpr b32 check_inst_db_alignment() {
 }
 
 static_assert(check_inst_db_alignment(), "INST_DB rows must be in opcode-enum order");
-} // namespace detail
-} // namespace sup
 
 #endif // #ifndef INSTRUCTION_CUH

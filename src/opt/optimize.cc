@@ -19,7 +19,7 @@ opt_config opt_make_default_config() {
 
 void opt_log_startup(const opt_context* ctx) {
 	printf("> source (%zu instructions):\n", ctx->prog->instructions.size());
-	print("{}", ctx->prog->to_string());
+	printf("%s", ctx->prog->to_string().c_str());
 	printf("> live-in:  { ");
 	opt_print_reg_mask(ctx->live_in);
 	printf(" }\n");

@@ -150,7 +150,7 @@ i32 main(i32 argc, char** argv) {
 		} else if(!strcmp(argv[argi], "-l")) {
 			return list_e();
 		} else {
-			print_err("error: unknown command line option '{}'\n", argv[argi]);
+			fprintf(stderr, "error: unknown command line option '%s'\n", argv[argi]);
 			return 1;
 		}
 	}

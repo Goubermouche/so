@@ -1,6 +1,5 @@
 #include "int/program.h"
 
-namespace sup {
 const char* token_to_str(token tok) {
 	switch(tok) {
 		case TOK_UNKNOWN: return "unknown";
@@ -67,7 +66,7 @@ token tokenizer::next_tok() {
 		case EOF: return curr = TOK_EOF;
 	}
 
-	ASSERT(false, "unknown character '{}' received\n", m_current_char);
+	ASSERT(false, "unknown character '%c' received\n", m_current_char);
 	return TOK_UNKNOWN;
 }
 
@@ -226,7 +225,7 @@ token tokenizer::string_to_number(const str& string) {
 
 	errno = 0;
 	const u64 number = strtoull(data, nullptr, base);
-	ASSERT(errno == 0, "strtoull failed for '{}'\n", curr_string);
+	ASSERT(errno == 0, "strtoull failed for '%s'\n", curr_string.c_str());
 	(void)string;
 	curr_imm = (i64)number;
 	return curr = TOK_NUMBER;
@@ -293,7 +292,7 @@ program program::parse(const str& source) {
 					curr_inst.operands[operand_count].i = (u64)(-tok.curr_imm);
 					operand_types[operand_count] = inst_spec::IMM;
 				} else {
-					ASSERT(false, "unrecognized operand type received ('{}')", token_to_str(tok.curr));
+					ASSERT(false, "unrecognized operand type received ('%s')", token_to_str(tok.curr));
 				}
 
 				operand_count++;
@@ -313,15 +312,15 @@ program program::parse(const str& source) {
 			}
 
 			curr_inst.op = find_inst_op(saved, operand_types, operand_count);
-			ASSERT(curr_inst.op != OP_COUNT, "no opcode matches mnemonic '{}' with {} operand(s)\n",
-						 saved, (int)operand_count);
+			ASSERT(curr_inst.op != OP_COUNT, "no opcode matches mnemonic '%s' with %d operand(s)\n",
+						 saved.c_str(), (int)operand_count);
 			result.push_back(curr_inst);
 
 			if(tok.curr == TOK_NEWLINE) { tok.next_tok(); }
 			continue;
 		}
 
-		ASSERT(false, "expected mnemonic, got '{}'", token_to_str(tok.curr));
+		ASSERT(false, "expected mnemonic, got '%s'", token_to_str(tok.curr));
 	}
 
 	return {result};
@@ -437,4 +436,3 @@ str program::operand_to_string(inst::operand op, inst_spec::operand ty) const {
 		default: return "?";
 	}
 }
-} // namespace sup
