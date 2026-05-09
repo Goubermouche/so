@@ -4,4 +4,8 @@
 out/
 out
 
+.vscode/
+.vscode
+
 compile_commands.json
+
