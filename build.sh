@@ -1,6 +1,7 @@
 #!/bin/sh
 set -e
 
+unset SOURCE_DATE_EPOCH
 mkdir -p out/obj 
 export LD_LIBRARY_PATH=/run/opengl-driver/lib:$LD_LIBRARY_PATH
 

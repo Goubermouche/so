@@ -4,8 +4,9 @@
 #include "int/cpu.cuh"
 
 // to add a new extension:
+// - append it to the EXTENSION_LIST macro below
 // - create src/ext/<name>/ext.cuh defining the X-macro and the run handler
-// - #include it below and append it to the EXT_OPCODE_LIST and ext_bits enum
+// - #include it below in the extensions section and append to EXT_OPCODE_LIST
 // - add a Z3.cc file that exposes ext_<name>_smt(...)
 // - wire those into smt/smt.cc and opt/batch_runner.cuh's dispatcher
 
@@ -18,15 +19,30 @@ namespace sup {
 		SHAPE_RI,       // rd, imm
 	};
 
+#define EXTENSION_LIST(X) \
+	X(RV32I, "rv32i", 0)    \
+	X(RV64I, "rv64i", 1)    \
+	X(RV32M, "rv32m", 2)    \
+	X(RV64M, "rv64m", 3)
+
 	// EXT_RV32I is the base ISA and is always implied
 	// rv64-prefixed extensions extend their rv32 counterpart and require
 	// it to be enabled. The optimizer's pool builder enforces this implicitly
 	enum ext_bits : u32 {
-		EXT_RV32I = 1u << 0,
-		EXT_RV64I = 1u << 1,
-		EXT_RV32M = 1u << 2,
-		EXT_RV64M = 1u << 3,
+#define X(TAG, DIR, BIT) EXT_##TAG = 1u << (BIT),
+		EXTENSION_LIST(X)
+#undef X
 	};
+
+	// array of all extension directory names
+	inline constexpr const char* EXT_NAMES[] = {
+#define X(TAG, DIR, BIT) DIR,
+		EXTENSION_LIST(X)
+#undef X
+	};
+
+	constexpr u64 EXT_NAMES_SIZE = sizeof(EXT_NAMES) / sizeof(EXT_NAMES[0]);
+
 } // namespace sup
 
 // extensions
@@ -37,9 +53,9 @@ namespace sup {
 
 namespace sup {
 #define EXT_OPCODE_LIST(X) \
-	EXT_RV32I_OPCODES(X)     \
-	EXT_RV64I_OPCODES(X)     \
-	EXT_RV32M_OPCODES(X)     \
+	EXT_RV32I_OPCODES(X)   \
+	EXT_RV64I_OPCODES(X)   \
+	EXT_RV32M_OPCODES(X)   \
 	EXT_RV64M_OPCODES(X)
 
 	enum opcode : u16 {
@@ -130,8 +146,8 @@ namespace sup {
 	SO_HD constexpr inst_db_t build_inst_db() {
 		inst_db_t d = {};
 
-#define ROW(TAG, MN, SHAPE, COMM, EXT_BIT)                                     \
-	d.row[OP_##TAG] = inst_spec{                                                 \
+#define ROW(TAG, MN, SHAPE, COMM, EXT_BIT)                                         \
+	d.row[OP_##TAG] = inst_spec{                                                   \
 		MN,                                                                        \
 		{ shape_op0(SHAPE), shape_op1(SHAPE), shape_op2(SHAPE), inst_spec::NONE }, \
 		OP_##TAG,                                                                  \
