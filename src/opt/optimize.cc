@@ -226,8 +226,9 @@ b32 opt_run_length(opt_context* ctx, u32 len) {
 		cands.reserve(ctx->cfg->batch_size);
 
 		const auto t_start = clk::now();
-		opt_enumerate(&pool, &imms, ctx->live_in, ctx->live_out, len, max_scratch, &cands,
-									ctx->cfg->batch_size);
+		opt_enum_config cfg = {&pool, &imms, ctx->live_in, ctx->live_out, len, max_scratch};
+		opt_enumerate(&cfg, &cands, ctx->cfg->batch_size);
+
 		printf("  iter %u (%zu candidates (%fms))\n", cegis_iter, cands.size(),
 					 std::chrono::duration<f64, std::milli>(clk::now() - t_start).count());
 		if(cands.empty()) return false;
