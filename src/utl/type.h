@@ -3,7 +3,6 @@
 
 #include <stdint.h>
 #include <cctype>
-#include <cctype>
 #include <cstdio>
 #include <cstring>
 #include <cmath>
@@ -119,6 +118,8 @@ namespace sup {
 // #else
 // #define ASSERT(__condition, __message, ...)
 // #endif
+
+using namespace sup;
 
 #endif // #ifndef TYPE_H
 
