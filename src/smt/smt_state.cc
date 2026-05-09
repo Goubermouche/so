@@ -11,6 +11,11 @@ Z3_ast smt_sext_w(Z3_context ctx, Z3_ast v64) {
 	return Z3_mk_sign_ext(ctx, 32, lo32);
 }
 
+Z3_ast smt_bv32(Z3_context ctx, u64 v) {
+	Z3_sort s32 = Z3_mk_bv_sort(ctx, 32);
+	return Z3_mk_unsigned_int64(ctx, v, s32);
+}
+
 Z3_ast smt_bv64(Z3_context ctx, u64 v) {
 	Z3_sort s64 = Z3_mk_bv_sort(ctx, 64);
 	return Z3_mk_unsigned_int64(ctx, v, s64);

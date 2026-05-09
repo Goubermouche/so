@@ -50,4 +50,4 @@ SpacesInCStyleCastParentheses: false
 Cpp11BracedListStyle: true
 
 IndentPPDirectives: None
-IndentCaseLabels: false
+IndentCaseLabels: true

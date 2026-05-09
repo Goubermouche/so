@@ -142,28 +142,28 @@ smt_verify_report smt_eq(const program_slice* a, const program_slice* b, u64 liv
 	r.solve_ms = std::chrono::duration<f64, std::milli>(t1 - t0).count();
 
 	switch(chk) {
-	case Z3_L_FALSE: r.kind = VERIFY_EQUIVALENT; break;
-	case Z3_L_TRUE: {
-		Z3_model m = Z3_solver_get_model(ctx, solver);
-		Z3_model_inc_ref(ctx, m);
-		for(u32 i = 0; i < 32; ++i) {
-			Z3_ast v = nullptr;
-			if(Z3_model_eval(ctx, m, in.r[i], true, &v) && v) {
-				Z3_inc_ref(ctx, v);
-				uint64_t raw = 0;
-				r.counterexample.regs[i] = Z3_get_numeral_uint64(ctx, v, &raw) ? raw : 0;
-				Z3_dec_ref(ctx, v);
-			} else {
-				r.counterexample.regs[i] = 0;
+		case Z3_L_FALSE: r.kind = VERIFY_EQUIVALENT; break;
+		case Z3_L_TRUE: {
+			Z3_model m = Z3_solver_get_model(ctx, solver);
+			Z3_model_inc_ref(ctx, m);
+			for(u32 i = 0; i < 32; ++i) {
+				Z3_ast v = nullptr;
+				if(Z3_model_eval(ctx, m, in.r[i], true, &v) && v) {
+					Z3_inc_ref(ctx, v);
+					uint64_t raw = 0;
+					r.counterexample.regs[i] = Z3_get_numeral_uint64(ctx, v, &raw) ? raw : 0;
+					Z3_dec_ref(ctx, v);
+				} else {
+					r.counterexample.regs[i] = 0;
+				}
 			}
+			r.counterexample.regs[0] = 0;
+			r.kind = VERIFY_COUNTEREXAMPLE;
+			Z3_model_dec_ref(ctx, m);
+			break;
 		}
-		r.counterexample.regs[0] = 0;
-		r.kind = VERIFY_COUNTEREXAMPLE;
-		Z3_model_dec_ref(ctx, m);
-		break;
-	}
-	case Z3_L_UNDEF:
-	default: r.kind = VERIFY_TIMEOUT; break;
+		case Z3_L_UNDEF:
+		default: r.kind = VERIFY_TIMEOUT; break;
 	}
 
 	if(g_err_set && r.kind != VERIFY_COUNTEREXAMPLE) {
