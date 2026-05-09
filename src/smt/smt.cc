@@ -4,18 +4,18 @@
 #include "ext/rv64i/smt.cuh"
 #include "ext/rv64m/smt.cuh"
 
-smt_state smt_run(Z3_context ctx, const smt_state* in, const program_slice* prog) {
+smt_state smt_run(Z3_context ctx, const smt_state* in, const int_program* prog) {
 	smt_state regs = smt_clone_state(ctx, in);
 	smt_pin_x0(ctx, &regs);
 	Z3_sort s64 = Z3_mk_bv_sort(ctx, 64);
 
 	for(u32 i = 0; i < prog->size; ++i) {
-		const inst* ins = &prog->instructions[i];
+		const int_inst* ins = &prog->instructions[i];
 		const u32 op = (u32)ins->op;
 
 		if(op == OP_NOP) { continue; }
 
-		const inst_spec* spec = &INST_DB_HOST.row[op];
+		const int_inst_spec* spec = &INT_INST_DB_HOST.row[op];
 		const u32 d = spec->dst_slot >= 0 ? (u32)ins->operands[spec->dst_slot].reg : 0;
 		const u32 s1 = spec->src_slot >= 0 ? (u32)ins->operands[spec->src_slot].reg : 0;
 		const u32 s2 = spec->src2_slot >= 0 ? (u32)ins->operands[spec->src2_slot].reg : 0;
@@ -24,7 +24,7 @@ smt_state smt_run(Z3_context ctx, const smt_state* in, const program_slice* prog
 		Z3_inc_ref(ctx, imm);
 
 		for(u32 k = 0; k < 4; ++k) {
-			if(spec->operands[k] == inst_spec::IMM) {
+			if(spec->operands[k] == int_inst_spec::IMM) {
 				Z3_ast new_imm = Z3_mk_unsigned_int64(ctx, (u64)ins->operands[k].i, s64);
 				Z3_inc_ref(ctx, new_imm);
 				Z3_dec_ref(ctx, imm);
@@ -56,7 +56,7 @@ static void z3_error_cb(Z3_context c, Z3_error_code ec) {
 	g_err_set = true;
 }
 
-smt_verify_report smt_eq(const program_slice* a, const program_slice* b, u64 live_outs) {
+smt_verify_report smt_eq(const int_program* a, const int_program* b, u64 live_outs) {
 	smt_verify_report r = {};
 
 	Z3_config cfg = Z3_mk_config();

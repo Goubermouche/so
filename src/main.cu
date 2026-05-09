@@ -27,7 +27,7 @@ i32 help() {
 }
 
 i32 list_e() {
-	for(u64 i = 0; i < EXT_COUNT; ++i) printf("%s\n", EXT_NAMES[i]);
+	for(u64 i = 0; i < INT_EXT_COUNT; ++i) printf("%s\n", INT_EXT_NAMES[i]);
 	return 0;
 }
 
@@ -41,8 +41,8 @@ i32 parse_e(opt_config* cfg, const char* p) {
 		while(*p && *p != ' ' && *p != ',' && *p != '+') p++;
 
 		bool found = false;
-		for(u32 i = 0; i < EXT_COUNT; ++i) {
-			const char* ext = EXT_NAMES[i];
+		for(u32 i = 0; i < INT_EXT_COUNT; ++i) {
+			const char* ext = INT_EXT_NAMES[i];
 			const char* s = start;
 
 			while(s < p && *ext == *s) {
@@ -163,7 +163,8 @@ i32 main(i32 argc, char** argv) {
 	// run
 	if(device_init()) { return 1; }
 
-	program parsed = program::parse(source);
+	int_program parsed = int_parse(source);
 	opt_run(&parsed, &cfg);
+	int_program_free(&parsed);
 	return 0;
 }

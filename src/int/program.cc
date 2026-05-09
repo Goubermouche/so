@@ -1,6 +1,6 @@
 #include "int/program.h"
 
-const char* token_to_str(token tok) {
+const char* token_to_str(int_token tok) {
 	switch(tok) {
 		case TOK_UNKNOWN: return "unknown";
 		case TOK_IDENTIFIER: return "identifier";
@@ -18,22 +18,22 @@ const char* token_to_str(token tok) {
 		case TOK_NEWLINE: return "newline";
 		case TOK_EOF: return "eof";
 		default:
-			if(tok >= TOK_REG_X0 && tok <= TOK_REG_X31) { return reg_name((u32)(tok - TOK_REG_X0)); }
+			if(tok >= TOK_REG_X0 && tok <= TOK_REG_X31) { return int_reg_name((u32)(tok - TOK_REG_X0)); }
 
 			return "?";
 	}
 }
 
-b32 token_is_reg(token tok) { return tok >= TOK_REG_X0 && tok <= TOK_REG_X31; }
+b32 token_is_reg(int_token tok) { return tok >= TOK_REG_X0 && tok <= TOK_REG_X31; }
 
-u64 token_to_reg_index(token tok) {
+u64 token_to_reg_index(int_token tok) {
 	ASSERT(token_is_reg(tok), "token is not a register");
 	return tok - TOK_REG_X0;
 }
 
 tokenizer::tokenizer(const str& source) : m_source(source) {}
 
-token tokenizer::next_tok() {
+int_token tokenizer::next_tok() {
 	curr_string.clear();
 
 	// get rid of leading space-like characters
@@ -70,7 +70,7 @@ token tokenizer::next_tok() {
 	return TOK_UNKNOWN;
 }
 
-token tokenizer::next_tok_identifier() {
+int_token tokenizer::next_tok_identifier() {
 	// '.' is allowed inside mnemonics like sext.b / zext.h. dashes don't appear.
 	while(isalnum(m_current_char) || m_current_char == '_' || m_current_char == '.') {
 		curr_string += m_current_char;
@@ -87,7 +87,7 @@ token tokenizer::next_tok_identifier() {
 	return curr = TOK_IDENTIFIER;
 }
 
-token tokenizer::next_tok_comment() {
+int_token tokenizer::next_tok_comment() {
 	// skip over comments (both ';' and '#' style supported - '#' is the
 	// gas/clang convention for RISC-V)
 	do { next_char(); } while(!is_at_end() && m_current_char != '\n');
@@ -96,12 +96,12 @@ token tokenizer::next_tok_comment() {
 	return next_tok();
 }
 
-token tokenizer::next_tok_string() {
+int_token tokenizer::next_tok_string() {
 	ASSERT(false, "TODO: next_tok_string");
 	return TOK_UNKNOWN;
 }
 
-token tokenizer::next_tok_char() {
+int_token tokenizer::next_tok_char() {
 	ASSERT(false, "TODO: next_tok_char");
 	return TOK_UNKNOWN;
 }
@@ -123,8 +123,8 @@ b32 tokenizer::is_whitespace(char c) {
 	return (c == '\t' || c == '\v' || c == '\f' || c == '\r' || c == ' ');
 }
 
-token tokenizer::string_to_token(const str& string) {
-	static const map<str, token> operand_map = {
+int_token tokenizer::string_to_token(const str& string) {
+	static const map<str, int_token> operand_map = {
 		// numeric
 		{"x0", TOK_REG_X0},
 		{"x1", TOK_REG_X1},
@@ -201,7 +201,7 @@ token tokenizer::string_to_token(const str& string) {
 	return it->second;
 }
 
-token tokenizer::string_to_number(const str& string) {
+int_token tokenizer::string_to_number(const str& string) {
 	i32 base = 10;
 	char* data = curr_string.data();
 
@@ -231,9 +231,9 @@ token tokenizer::string_to_number(const str& string) {
 	return curr = TOK_NUMBER;
 }
 
-opcode find_inst_op(const str& name, const inst_spec::operand* operands, u8 operand_count) {
+int_opcode find_inst_op(const str& name, const int_inst_spec::operand* operands, u8 operand_count) {
 	for(u32 i = 0; i < (u32)OP_COUNT; ++i) {
-		const inst_spec& spec = INST_DB_HOST.row[i];
+		const int_inst_spec& spec = INT_INST_DB_HOST.row[i];
 
 		if(name != spec.name) { continue; }
 
@@ -248,14 +248,14 @@ opcode find_inst_op(const str& name, const inst_spec::operand* operands, u8 oper
 			}
 		}
 
-		if(ok) { return (opcode)i; }
+		if(ok) { return (int_opcode)i; }
 	}
 
 	return OP_COUNT; // sentinel: "no match"
 }
 
-program program::parse(const str& source) {
-	arr<inst> result;
+int_program int_parse(const str& source) {
+	arr<int_inst> result;
 	tokenizer tok(source);
 	tok.next_char();
 	tok.next_tok();
@@ -274,23 +274,23 @@ program program::parse(const str& source) {
 				continue;
 			}
 			// not a label after all - rewind by re-parsing as a mnemonic
-			inst curr_inst = {};
-			inst_spec::operand operand_types[4] = {};
+			int_inst curr_inst = {};
+			int_inst_spec::operand operand_types[4] = {};
 			u8 operand_count = 0;
 
 			while(tok.curr != TOK_NEWLINE && tok.curr != TOK_EOF && operand_count < 4) {
 				if(token_is_reg(tok.curr)) {
 					curr_inst.operands[operand_count].reg =
-						static_cast<reg_index>(token_to_reg_index(tok.curr));
-					operand_types[operand_count] = inst_spec::REG;
+						static_cast<int_reg_index>(token_to_reg_index(tok.curr));
+					operand_types[operand_count] = int_inst_spec::REG;
 				} else if(tok.curr == TOK_NUMBER) {
 					curr_inst.operands[operand_count].i = (u64)tok.curr_imm;
-					operand_types[operand_count] = inst_spec::IMM;
+					operand_types[operand_count] = int_inst_spec::IMM;
 				} else if(tok.curr == TOK_MINUS) {
 					tok.next_tok();
 					ASSERT(tok.curr == TOK_NUMBER, "expected number after '-'");
 					curr_inst.operands[operand_count].i = (u64)(-tok.curr_imm);
-					operand_types[operand_count] = inst_spec::IMM;
+					operand_types[operand_count] = int_inst_spec::IMM;
 				} else {
 					ASSERT(false, "unrecognized operand type received ('%s')", token_to_str(tok.curr));
 				}
@@ -303,11 +303,11 @@ program program::parse(const str& source) {
 
 			// pseudo-op rewriting
 			//   sext.w rd, rs1   ->   addiw rd, rs1, 0
-			if(saved == "sext.w" && operand_count == 2 && operand_types[0] == inst_spec::REG &&
-				 operand_types[1] == inst_spec::REG) {
+			if(saved == "sext.w" && operand_count == 2 && operand_types[0] == int_inst_spec::REG &&
+				operand_types[1] == int_inst_spec::REG) {
 				saved = "addiw";
 				curr_inst.operands[2].i = 0;
-				operand_types[2] = inst_spec::IMM;
+				operand_types[2] = int_inst_spec::IMM;
 				operand_count = 3;
 			}
 
@@ -323,21 +323,27 @@ program program::parse(const str& source) {
 		ASSERT(false, "expected mnemonic, got '%s'", token_to_str(tok.curr));
 	}
 
-	return {result};
+	int_inst* data = (int_inst*)malloc(sizeof(int_inst) * result.size());
+	memcpy(data, result.data(), sizeof(int_inst) * result.size());
+	return { data, (u32)result.size() };
 }
 
-program program::dce(const inst* prog, u32 prog_len, u64 live_mask) {
+void int_program_free(const int_program* program) {
+	free(program->instructions);
+}
+
+int_program int_dce(const int_program* program, u64 live_mask) {
 	// x0 is never live in the user-facing sense (writes are dropped)
 	u64 live = live_mask & ~1ULL;
 	u64 live_bits_by_slot = 0;
 	u32 count = 0;
 
-	for(i32 i = (i32)prog_len - 1; i >= 0; --i) {
-		const inst_spec* spec = find_spec(prog[i].op);
+	for(i32 i = (i32)program->size - 1; i >= 0; --i) {
+		const int_inst_spec* spec = int_find_spec(program->instructions[i].op);
 
 		if(spec->dst_slot < 0) { continue; }
 
-		const u32 dst = (u32)prog[i].operands[spec->dst_slot].reg;
+		const u32 dst = (u32)program->instructions[i].operands[spec->dst_slot].reg;
 
 		// writes to x0 are nops
 		if(dst == 0) { continue; }
@@ -352,35 +358,41 @@ program program::dce(const inst* prog, u32 prog_len, u64 live_mask) {
 			live &= ~dst_bit;
 
 			if(spec->src_slot >= 0) {
-				const u32 src = (u32)prog[i].operands[spec->src_slot].reg;
+				const u32 src = (u32)program->instructions[i].operands[spec->src_slot].reg;
 				live |= 1ULL << src;
 			}
 
 			if(spec->src2_slot >= 0) {
-				const u32 src2 = (u32)prog[i].operands[spec->src2_slot].reg;
+				const u32 src2 = (u32)program->instructions[i].operands[spec->src2_slot].reg;
 				live |= 1ULL << src2;
 			}
 		}
 	}
 
-	program out;
-
-	for(u32 i = 0; i < prog_len; ++i) {
-		if(live_bits_by_slot & (1ULL << i)) { out.instructions.push_back(prog[i]); }
+	int_program out;
+	out.size = 0;
+	for(u32 i = 0; i < program->size; ++i) {
+		if(live_bits_by_slot & (1ULL << i)) { out.size++; }
+	}
+	out.instructions = (int_inst*)malloc(sizeof(int_inst) * out.size);
+	u32 index = 0;
+	for(u32 i = 0; i < program->size; ++i) {
+		if(live_bits_by_slot & (1ULL << i)) { out.instructions[index++] = program->instructions[i]; }
 	}
 
 	return out;
 }
 
-str program::to_string() const {
+str int_program_to_string(const int_program* program) {
 	str result;
 
-	for(const inst& i : instructions) {
-		const inst_spec* spec = find_spec(i.op);
+	for(u32 i = 0; i < program->size; ++i) {
+		const int_inst inst = program->instructions[i];
+		const int_inst_spec* spec = int_find_spec(inst.op);
 		result += "    " + pad_to_length(spec->name, ' ', 8);
 
 		for(u8 j = 0; j < spec->get_operand_count(); ++j) {
-			result += operand_to_string(i.operands[j], spec->operands[j]);
+			result += int_operand_to_string(inst.operands[j], spec->operands[j]);
 
 			if(j + 1 < spec->get_operand_count()) { result += ", "; }
 		}
@@ -391,13 +403,13 @@ str program::to_string() const {
 	return result;
 }
 
-u64 program::live_outs() const {
+u64 int_program_live_outs(const int_program* program) {
 	u64 touched = 0;
 	u64 live_out = 0;
 
-	for(u64 idx = instructions.size(); idx-- > 0;) {
-		const inst& in = instructions[idx];
-		const inst_spec* spec = find_spec(in.op);
+	for(u64 idx = program->size; idx-- > 0;) {
+		const int_inst& in = program->instructions[idx];
+		const int_inst_spec* spec = int_find_spec(in.op);
 
 		// write side first
 		if(spec->dst_slot >= 0) {
@@ -429,10 +441,10 @@ u64 program::live_outs() const {
 	return live_out;
 }
 
-str program::operand_to_string(inst::operand op, inst_spec::operand ty) const {
+str int_operand_to_string(int_inst::operand op, int_inst_spec::operand ty) {
 	switch(ty) {
-		case inst_spec::REG: return reg_name((u32)op.reg);
-		case inst_spec::IMM: return std::to_string((i64)op.i);
+		case int_inst_spec::REG: return int_reg_name((u32)op.reg);
+		case int_inst_spec::IMM: return std::to_string((i64)op.i);
 		default: return "?";
 	}
 }

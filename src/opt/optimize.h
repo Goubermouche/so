@@ -17,14 +17,14 @@ typedef struct opt_config {
 } opt_config;
 
 typedef struct opt_context {
-	const program* prog;
+	const int_program* prog;
 	const opt_config* cfg;
 	u64 live_in;
 	u64 live_out;
-	cpu_state test_in[SYNTH_N_TESTS];
-	cpu_state target_out[SYNTH_N_TESTS];
+	int_cpu_state test_in[SYNTH_N_TESTS];
+	int_cpu_state target_out[SYNTH_N_TESTS];
 	u32 n_tests;
-	arr<inst> best_prog;
+	arr<int_inst> best_prog;
 	u32 best_len;
 	smt_verify_report rep;
 	// stats
@@ -50,6 +50,6 @@ void opt_seed_test_vectors(opt_context* ctx);
 void opt_filter_batch(opt_context* ctx, const arr<opt_candidate>& cands);
 b32 opt_run_length(opt_context* ctx, u32 len);
 
-void opt_run(const program* prog, const opt_config* cfg);
+void opt_run(const int_program* prog, const opt_config* cfg);
 
 #endif // #ifndef OPTIMIZE_H

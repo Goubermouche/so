@@ -3,12 +3,12 @@
 
 #include "int/instruction.cuh"
 
-SO_HD u64 opt_compute_live_in(const inst* prog, u32 prog_len) {
+SO_HD u64 opt_compute_live_in(const int_inst* prog, u32 prog_len) {
 	u64 written = 0;
 	u64 live_in = 0;
 
 	for(u32 i = 0; i < prog_len; ++i) {
-		const inst_spec* spec = find_spec(prog[i].op);
+		const int_inst_spec* spec = int_find_spec(prog[i].op);
 
 		if(spec->src_slot >= 0) {
 			const u32 r = (u32)prog[i].operands[spec->src_slot].reg;
@@ -29,7 +29,7 @@ SO_HD u64 opt_compute_live_in(const inst* prog, u32 prog_len) {
 	return live_in & ~1ull; // remove x0
 }
 
-SO_HD void opt_canonicalize(inst* prog, u32 prog_len, u64 preserved_mask) {
+SO_HD void opt_canonicalize(int_inst* prog, u32 prog_len, u64 preserved_mask) {
 	u8 rename[32];
 	u32 assigned_mask = 0;
 	u32 resolved_mask = 0;
@@ -49,11 +49,11 @@ SO_HD void opt_canonicalize(inst* prog, u32 prog_len, u64 preserved_mask) {
 	}
 
 	for(u32 i = 0; i < prog_len; ++i) {
-		inst& in = prog[i];
-		const inst_spec* spec = find_spec(in.op);
+		int_inst& in = prog[i];
+		const int_inst_spec* spec = int_find_spec(in.op);
 
 		for(u32 k = 0; k < 4; ++k) {
-			if(spec->operands[k] != inst_spec::REG) { continue; }
+			if(spec->operands[k] != int_inst_spec::REG) { continue; }
 
 			const u32 old = (u32)in.operands[k].reg;
 
@@ -68,17 +68,17 @@ SO_HD void opt_canonicalize(inst* prog, u32 prog_len, u64 preserved_mask) {
 				resolved_mask |= (1u << old);
 			}
 
-			in.operands[k].reg = (reg_index)rename[old];
+			in.operands[k].reg = (int_reg_index)rename[old];
 		}
 	}
 }
 
-SO_HD b32 opt_has_live_writes(const inst* prog, u32 prog_len, u64 live_mask) {
+SO_HD b32 opt_has_live_writes(const int_inst* prog, u32 prog_len, u64 live_mask) {
 	u64 live = live_mask & ~1ULL;
 	u32 useful = 0;
 
 	for(i32 i = (i32)prog_len - 1; i >= 0; --i) {
-		const inst_spec* spec = find_spec(prog[i].op);
+		const int_inst_spec* spec = int_find_spec(prog[i].op);
 		if(spec->dst_slot < 0) { continue; }
 
 		const u32 dst = (u32)prog[i].operands[spec->dst_slot].reg;

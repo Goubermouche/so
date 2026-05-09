@@ -4,7 +4,7 @@
 #include "ext/rv32i/run.cuh"
 #include "int/instruction.cuh"
 
-SO_HD bool ext_rv64i_run(u32 op, u64 regs[32], const inst* in) {
+SO_HD bool ext_rv64i_run(u32 op, u64 regs[32], const int_inst* in) {
 	const u32 d = (u32)in->operands[0].reg;
 
 	switch(op) {

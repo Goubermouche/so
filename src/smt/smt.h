@@ -15,12 +15,12 @@ typedef enum smt_result {
 
 typedef struct smt_verify_report {
 	smt_result kind;
-	cpu_state counterexample;
+	int_cpu_state counterexample;
 	f64 solve_ms;
 	const char* error;
 } smt_verify_report;
 
-smt_state smt_run(Z3_context ctx, const smt_state* in, const program_slice* prog);
-smt_verify_report smt_eq(const program_slice* a, const program_slice* b, u64 live_outs);
+smt_state smt_run(Z3_context ctx, const smt_state* in, const int_program* prog);
+smt_verify_report smt_eq(const int_program* a, const int_program* b, u64 live_outs);
 
 #endif // #ifndef SMT_H

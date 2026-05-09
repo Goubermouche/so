@@ -3,7 +3,7 @@
 
 #include "utl/device.h"
 
-enum reg_index {
+typedef enum int_reg_index {
 	REG_X0 = 0,
 	REG_X1,
 	REG_X2,
@@ -37,9 +37,13 @@ enum reg_index {
 	REG_X30,
 	REG_X31,
 	REG_COUNT = 32,
-};
+} int_reg_index;
 
-SO_HD const char* reg_name(u32 r) {
+typedef struct int_cpu_state {
+	u64 regs[32];
+} int_cpu_state;
+
+SO_HD const char* int_reg_name(u32 r) {
 	switch(r) {
 		case 0: return "x0";
 		case 1: return "x1";
@@ -76,9 +80,5 @@ SO_HD const char* reg_name(u32 r) {
 		default: return "?";
 	}
 }
-
-struct cpu_state {
-	u64 regs[32];
-};
 
 #endif // #ifndef CPU_CUH

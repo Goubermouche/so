@@ -4,16 +4,16 @@ opt_opcode_pool opt_build_opcode_pool(u32 ext_mask) {
 	opt_opcode_pool p = {};
 
 	for(u32 i = 0; i < (u32)OP_COUNT; ++i) {
-		const inst_spec& s = INST_DB_HOST.row[i];
+		const int_inst_spec& s = INT_INST_DB_HOST.row[i];
 		if(s.op == OP_NOP) { continue; }
 		if(!(s.ext & ext_mask)) { continue; }
-		p.ops[p.n_ops++] = (opcode)i;
+		p.ops[p.n_ops++] = (int_opcode)i;
 	}
 
 	return p;
 }
 
-b32 opt_op_is_commutative(opcode op) { return INST_DB_HOST.row[op].commutative != 0; }
+b32 opt_op_is_commutative(int_opcode op) { return INT_INST_DB_HOST.row[op].commutative != 0; }
 
 opt_imm_pool opt_build_default_imm_pool() {
 	opt_imm_pool p = {};
@@ -57,15 +57,15 @@ void opt_enum_backward(opt_enumerator* e, opt_candidate* cur, u32 prog_len, i32 
 
 	// iterate opcode -> dst -> sources
 	for(u32 oi = 0; oi < e->pool->n_ops; ++oi) {
-		const opcode op = e->pool->ops[oi];
-		const inst_spec& spec = INST_DB_HOST.row[op];
+		const int_opcode op = e->pool->ops[oi];
+		const int_inst_spec& spec = INT_INST_DB_HOST.row[op];
 
 		b32 has_rs1 = spec.src_slot >= 0;
 		b32 has_rs2 = spec.src2_slot >= 0;
 		b32 has_imm = false;
 
 		for(u32 k = 0; k < 4; ++k) {
-			if(spec.operands[k] == inst_spec::IMM) { has_imm = true; }
+			if(spec.operands[k] == int_inst_spec::IMM) { has_imm = true; }
 		}
 
 		u64 dst_iter = dst_avail;
@@ -120,10 +120,10 @@ void opt_enum_backward(opt_enumerator* e, opt_candidate* cur, u32 prog_len, i32 
 	}
 }
 
-void opt_try_place(opt_enumerator* e, opt_candidate* cur, u32 prog_len, i32 idx, opcode op, u32 rd,
+void opt_try_place(opt_enumerator* e, opt_candidate* cur, u32 prog_len, i32 idx, int_opcode op, u32 rd,
 									 u32 rs1, u32 rs2_or_imm_idx, b32 is_imm, u64 demanded, u64 used_scratch) {
 	if(e->out->size() >= e->cap) { return; }
-	const inst_spec& spec = INST_DB_HOST.row[op];
+	const int_inst_spec& spec = INT_INST_DB_HOST.row[op];
 	if(rd == 0) { return; }
 	if(!(demanded & (1ULL << rd))) { return; }
 
@@ -143,18 +143,18 @@ void opt_try_place(opt_enumerator* e, opt_candidate* cur, u32 prog_len, i32 idx,
 	}
 
 	// build the instruction
-	inst in = {};
+	int_inst in = {};
 	in.op = op;
-	in.operands[spec.dst_slot].reg = (reg_index)rd;
+	in.operands[spec.dst_slot].reg = (int_reg_index)rd;
 
-	if(spec.src_slot >= 0) { in.operands[spec.src_slot].reg = (reg_index)rs1; }
+	if(spec.src_slot >= 0) { in.operands[spec.src_slot].reg = (int_reg_index)rs1; }
 	if(!is_imm && spec.src2_slot >= 0) {
-		in.operands[spec.src2_slot].reg = (reg_index)rs2_or_imm_idx;
+		in.operands[spec.src2_slot].reg = (int_reg_index)rs2_or_imm_idx;
 	}
 
 	if(is_imm) {
 		for(u32 k = 0; k < 4; ++k) {
-			if(spec.operands[k] == inst_spec::IMM) {
+			if(spec.operands[k] == int_inst_spec::IMM) {
 				in.operands[k].i = (u64)e->imms->vals[rs2_or_imm_idx];
 				break;
 			}

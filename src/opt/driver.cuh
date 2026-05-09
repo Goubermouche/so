@@ -14,10 +14,10 @@ typedef struct opt_synth_config {
 	u64 live_mask;
 	u32 n_tests;
 	u32 prog_len;
-	const inst* candidates;
+	const int_inst* candidates;
 	u64 n_candidates;
-	const cpu_state* test_in;
-	const cpu_state* target_out;
+	const int_cpu_state* test_in;
+	const int_cpu_state* target_out;
 	f64 elapsed_ms_total;
 } opt_synth_config;
 
@@ -38,7 +38,7 @@ typedef struct opt_gpu_context {
 } opt_gpu_context;
 
 typedef struct opt_shared_block {
-	inst progs[N_WARPS_PER_BLOCK][SYNTH_PROG_LEN];
+	int_inst progs[N_WARPS_PER_BLOCK][SYNTH_PROG_LEN];
 } opt_shared_block;
 
 i32 opt_gpu_runner_make(opt_gpu_context* ctx, u64 max_chunk_cands);

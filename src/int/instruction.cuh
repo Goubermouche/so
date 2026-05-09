@@ -10,13 +10,13 @@
 // - add a Z3.cc file that exposes ext_<name>_smt(...)
 // - wire those into smt/smt.cc and opt/batch_runner.cuh's dispatcher
 
-enum inst_shape : u8 {
+typedef enum int_inst_shape : u8 {
 	SHAPE_NONE = 0, // nop
 	SHAPE_RRR,			// rd, rs1, rs2
 	SHAPE_RRI,			// rd, rs1, imm
 	SHAPE_RR,				// rd, rs1
 	SHAPE_RI,				// rd, imm
-};
+} int_inst_shape;
 
 #define EXTENSION_LIST(X)                                                                          \
 	X(RV32I, "rv32i", 0)                                                                             \
@@ -27,32 +27,32 @@ enum inst_shape : u8 {
 // EXT_RV32I is the base ISA and is always implied
 // rv64-prefixed extensions extend their rv32 counterpart and require
 // it to be enabled. The optimizer's pool builder enforces this implicitly
-enum ext_bits : u32 {
+typedef enum inst_ext_bits : u32 {
 #define X(TAG, DIR, BIT) EXT_##TAG = 1u << (BIT),
 	EXTENSION_LIST(X)
 #undef X
-};
+} inst_ext_bits;
 
 // array of all extension directory names
-inline constexpr const char* EXT_NAMES[] = {
+inline constexpr const char* INT_EXT_NAMES[] = {
 #define X(TAG, DIR, BIT) DIR,
 	EXTENSION_LIST(X)
 #undef X
 };
 
-inline constexpr u32 EXT_BITS[] = {
+inline constexpr u32 INT_EXT_BITS[] = {
 #define X(TAG, DIR, BIT) (1u << (BIT)),
 	EXTENSION_LIST(X)
 #undef X
 };
 
-constexpr u64 EXT_COUNT = sizeof(EXT_NAMES) / sizeof(EXT_NAMES[0]);
+constexpr u64 INT_EXT_COUNT = sizeof(INT_EXT_NAMES) / sizeof(INT_EXT_NAMES[0]);
 
-inline void print_enabled_extensions(u32 mask) {
+inline void int_print_enabled_extensions(u32 mask) {
 	bool first = true;
-	for(u32 i = 0; i < EXT_COUNT; ++i) {
-		if(mask & EXT_BITS[i]) {
-			std::printf("%s%s", first ? "" : ", ", EXT_NAMES[i]);
+	for(u32 i = 0; i < INT_EXT_COUNT; ++i) {
+		if(mask & INT_EXT_BITS[i]) {
+			std::printf("%s%s", first ? "" : ", ", INT_EXT_NAMES[i]);
 			first = false;
 		}
 	}
@@ -70,24 +70,24 @@ inline void print_enabled_extensions(u32 mask) {
 	EXT_RV32M_OPCODES(X)                                                                             \
 	EXT_RV64M_OPCODES(X)
 
-enum opcode : u16 {
+typedef enum int_opcode : u16 {
 #define X(TAG, mnemonic, shape, comm) OP_##TAG,
 	EXT_OPCODE_LIST(X)
 #undef X
 		OP_NOP,
 	OP_COUNT,
-};
+} int_opcode;
 
-struct inst {
+typedef struct int_inst {
 	union operand {
-		reg_index reg;
+		int_reg_index reg;
 		u64 i;
 	};
-	opcode op;
+	int_opcode op;
 	operand operands[4];
-};
+} int_inst;
 
-struct inst_spec {
+typedef struct int_inst_spec {
 	enum operand : u8 {
 		NONE = 0,
 		REG,
@@ -96,7 +96,7 @@ struct inst_spec {
 
 	const char* name;
 	operand operands[4];
-	opcode op;
+	int_opcode op;
 	i8 dst_slot;
 	i8 src_slot;
 	i8 src2_slot;
@@ -112,37 +112,37 @@ struct inst_spec {
 
 		return i;
 	}
-};
+} int_inst_spec;
 
-struct inst_db_t {
-	inst_spec row[OP_COUNT];
-};
+typedef struct int_inst_db {
+	int_inst_spec row[OP_COUNT];
+} int_inst_db;
 
-SO_HD constexpr inst_spec::operand shape_op0(inst_shape s) {
-	return s == SHAPE_NONE ? inst_spec::NONE : inst_spec::REG;
+SO_HD constexpr int_inst_spec::operand int_shape_op0(int_inst_shape s) {
+	return s == SHAPE_NONE ? int_inst_spec::NONE : int_inst_spec::REG;
 }
 
-SO_HD constexpr inst_spec::operand shape_op1(inst_shape s) {
+SO_HD constexpr int_inst_spec::operand int_shape_op1(int_inst_shape s) {
 	switch(s) {
 		case SHAPE_RRR:
 		case SHAPE_RRI:
-		case SHAPE_RR: return inst_spec::REG;
-		case SHAPE_RI: return inst_spec::IMM;
-		default: return inst_spec::NONE;
+		case SHAPE_RR: return int_inst_spec::REG;
+		case SHAPE_RI: return int_inst_spec::IMM;
+		default: return int_inst_spec::NONE;
 	}
 }
 
-SO_HD constexpr inst_spec::operand shape_op2(inst_shape s) {
+SO_HD constexpr int_inst_spec::operand int_shape_op2(int_inst_shape s) {
 	switch(s) {
-		case SHAPE_RRR: return inst_spec::REG;
-		case SHAPE_RRI: return inst_spec::IMM;
-		default: return inst_spec::NONE;
+		case SHAPE_RRR: return int_inst_spec::REG;
+		case SHAPE_RRI: return int_inst_spec::IMM;
+		default: return int_inst_spec::NONE;
 	}
 }
 
-SO_HD constexpr i8 shape_dst_slot(inst_shape s) { return s == SHAPE_NONE ? (i8)-1 : (i8)0; }
+SO_HD constexpr i8 int_shape_dst_slot(int_inst_shape s) { return s == SHAPE_NONE ? (i8)-1 : (i8)0; }
 
-SO_HD constexpr i8 shape_src_slot(inst_shape s) {
+SO_HD constexpr i8 int_shape_src_slot(int_inst_shape s) {
 	switch(s) {
 		case SHAPE_RRR:
 		case SHAPE_RRI:
@@ -151,21 +151,21 @@ SO_HD constexpr i8 shape_src_slot(inst_shape s) {
 	}
 }
 
-SO_HD constexpr i8 shape_src2_slot(inst_shape s) { return s == SHAPE_RRR ? (i8)2 : (i8)-1; }
+SO_HD constexpr i8 int_shape_src2_slot(int_inst_shape s) { return s == SHAPE_RRR ? (i8)2 : (i8)-1; }
 
-SO_HD constexpr inst_db_t build_inst_db() {
-	inst_db_t d = {};
+SO_HD constexpr int_inst_db int_build_inst_db() {
+	int_inst_db d = {};
 
 #define ROW(TAG, MN, SHAPE, COMM, EXT_BIT)                                                         \
-	d.row[OP_##TAG] =                                                                                \
-		inst_spec{MN,                                                                                  \
-							{shape_op0(SHAPE), shape_op1(SHAPE), shape_op2(SHAPE), inst_spec::NONE},             \
-							OP_##TAG,                                                                            \
-							shape_dst_slot(SHAPE),                                                               \
-							shape_src_slot(SHAPE),                                                               \
-							shape_src2_slot(SHAPE),                                                              \
-							(u32)(EXT_BIT),                                                                      \
-							(u8)(COMM)};
+	d.row[OP_##TAG] = int_inst_spec{                                                                 \
+		MN,                                                                                            \
+		{int_shape_op0(SHAPE), int_shape_op1(SHAPE), int_shape_op2(SHAPE), int_inst_spec::NONE},       \
+		OP_##TAG,                                                                                      \
+		int_shape_dst_slot(SHAPE),                                                                     \
+		int_shape_src_slot(SHAPE),                                                                     \
+		int_shape_src2_slot(SHAPE),                                                                    \
+		(u32)(EXT_BIT),                                                                                \
+		(u8)(COMM)};
 
 #define X(TAG, MN, SHAPE, COMM) ROW(TAG, MN, SHAPE, COMM, EXT_RV32I)
 	EXT_RV32I_OPCODES(X)
@@ -181,30 +181,30 @@ SO_HD constexpr inst_db_t build_inst_db() {
 #undef X
 
 #undef ROW
-	d.row[OP_NOP] =
-		inst_spec{"nop",		 {inst_spec::NONE, inst_spec::NONE, inst_spec::NONE, inst_spec::NONE},
-							OP_NOP,		 -1,
-							-1,				 -1,
-							EXT_RV32I, 0};
+	d.row[OP_NOP] = int_inst_spec{
+		"nop",		 {int_inst_spec::NONE, int_inst_spec::NONE, int_inst_spec::NONE, int_inst_spec::NONE},
+		OP_NOP,		 -1,
+		-1,				 -1,
+		EXT_RV32I, 0};
 	return d;
 }
 
-inline constexpr inst_db_t INST_DB_HOST = build_inst_db();
+inline constexpr int_inst_db INT_INST_DB_HOST = int_build_inst_db();
 
 #ifdef __CUDACC__
-static __constant__ inst_db_t INST_DB_DEV = build_inst_db();
+static __constant__ int_inst_db INT_INST_DB_DEV = int_build_inst_db();
 #endif // #ifdef __CUDACC__
 
-SO_HD const inst_spec* find_spec(opcode op) {
+SO_HD const int_inst_spec* int_find_spec(int_opcode op) {
 #ifdef __CUDA_ARCH__
-	return &INST_DB_DEV.row[op];
+	return &INT_INST_DB_DEV.row[op];
 #else
-	return &INST_DB_HOST.row[op];
+	return &INT_INST_DB_HOST.row[op];
 #endif // #ifdef __CUDA_ARCH__
 }
 
-SO_HD constexpr b32 check_inst_db_alignment() {
-	const inst_db_t d = build_inst_db();
+SO_HD constexpr b32 int_check_inst_db_alignment() {
+	const int_inst_db d = int_build_inst_db();
 
 	for(u32 i = 0; i < (u32)OP_COUNT; ++i) {
 		if((u32)d.row[i].op != i) { return false; }
@@ -213,6 +213,6 @@ SO_HD constexpr b32 check_inst_db_alignment() {
 	return true;
 }
 
-static_assert(check_inst_db_alignment(), "INST_DB rows must be in opcode-enum order");
+static_assert(int_check_inst_db_alignment(), "INST_DB rows must be in opcode-enum order");
 
 #endif // #ifndef INSTRUCTION_CUH

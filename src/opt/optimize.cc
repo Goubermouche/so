@@ -18,8 +18,8 @@ opt_config opt_make_default_config() {
 }
 
 void opt_log_startup(const opt_context* ctx) {
-	printf("> source (%zu instructions):\n", ctx->prog->instructions.size());
-	printf("%s", ctx->prog->to_string().c_str());
+	printf("> source (%u instructions):\n", ctx->prog->size);
+	printf("%s", int_program_to_string(ctx->prog).c_str());
 	printf("> live-in:  { ");
 	opt_print_reg_mask(ctx->live_in);
 	printf(" }\n");
@@ -31,7 +31,7 @@ void opt_log_startup(const opt_context* ctx) {
 	u32 effective_mask = ctx->cfg->ext_mask | EXT_RV32I;
 	if(effective_mask & EXT_RV64M) effective_mask |= EXT_RV32M;
 	printf("> extensions: ");
-	print_enabled_extensions(effective_mask);
+	int_print_enabled_extensions(effective_mask);
 	printf("\n");
 
 	printf("> max prog len: %u\n", ctx->cfg->max_prog_len);
@@ -51,10 +51,13 @@ void opt_log_results(const opt_context* ctx, b32 found) {
 	}
 
 	if(found) {
-		program live_prog;
-		live_prog.instructions = ctx->best_prog;
+		int_program live_prog;
+		live_prog.size = ctx->best_prog.size();
+		live_prog.instructions = (int_inst*)malloc(sizeof(int_inst) * live_prog.size);
+		memcpy(live_prog.instructions, ctx->best_prog.data(), sizeof(int_inst) * live_prog.size);
 		printf("> best program (%u instructions, SMT VERIFIED equivalent):\n", ctx->best_len);
-		printf("%s", live_prog.to_string().c_str());
+		printf("%s", int_program_to_string(&live_prog).c_str());
+		int_program_free(&live_prog);
 	} else {
 		printf("> no equivalent program found within length %u\n", ctx->cfg->max_prog_len);
 	}
@@ -65,7 +68,7 @@ void opt_print_reg_mask(u64 mask) {
 
 	for(u32 r = 0; r < 32; ++r) {
 		if(mask & (1ULL << r)) {
-			printf("%s%s", first ? "" : ",", reg_name(r));
+			printf("%s%s", first ? "" : ",", int_reg_name(r));
 			first = false;
 		}
 	}
@@ -79,7 +82,7 @@ void opt_seed_test_vectors(opt_context* ctx) {
 	u64 s = ctx->cfg->seed ^ 0x9E3779B97F4A7C15ULL;
 
 	for(u32 t = 0; t < n_initial; ++t) {
-		cpu_state in = {};
+		int_cpu_state in = {};
 
 		for(u32 i = 0; i < 32; ++i) {
 			s ^= s >> 30;
@@ -92,8 +95,7 @@ void opt_seed_test_vectors(opt_context* ctx) {
 
 		in.regs[0] = 0; // x0 invariant
 		ctx->test_in[t] = in;
-		program_slice prog = {ctx->prog->instructions.data(), (u32)ctx->prog->instructions.size()};
-		ctx->target_out[t] = opt_host_run(&prog, &in);
+		ctx->target_out[t] = opt_host_run(ctx->prog, &in);
 	}
 
 	ctx->n_tests = n_initial;
@@ -103,7 +105,7 @@ void opt_filter_batch(opt_context* ctx, const arr<opt_candidate>& cands) {
 	const u64 N = cands.size();
 	if(N == 0) { return; }
 
-	arr<inst> flat;
+	arr<int_inst> flat;
 	flat.resize(N * SYNTH_PROG_LEN);
 
 	for(u64 i = 0; i < N; ++i) {
@@ -113,7 +115,7 @@ void opt_filter_batch(opt_context* ctx, const arr<opt_candidate>& cands) {
 			if(j < c.len) {
 				flat[i * SYNTH_PROG_LEN + j] = c.code[j];
 			} else {
-				inst nop = {};
+				int_inst nop = {};
 				nop.op = OP_NOP;
 				flat[i * SYNTH_PROG_LEN + j] = nop;
 			}
@@ -141,12 +143,11 @@ void opt_filter_batch(opt_context* ctx, const arr<opt_candidate>& cands) {
 		if(results[i].pass_count == ctx->n_tests) {
 			++ok_count;
 			// SMT verify
-			const inst* rw = flat.data() + i * SYNTH_PROG_LEN;
+			int_inst* rw = flat.data() + i * SYNTH_PROG_LEN;
 			const u32 rw_len = cands[i].len;
 			const auto t0 = std::chrono::steady_clock::now();
-			program_slice a = {ctx->prog->instructions.data(), (u32)ctx->prog->instructions.size()};
-			program_slice b = {rw, rw_len};
-			smt_verify_report rep = smt_eq(&a, &b, ctx->live_out);
+			int_program b = {rw, rw_len};
+			smt_verify_report rep = smt_eq(ctx->prog, &b, ctx->live_out);
 			const auto t1 = std::chrono::steady_clock::now();
 			ctx->total_smt_ms += std::chrono::duration<f64, std::milli>(t1 - t0).count();
 			++ctx->total_smt_calls;
@@ -160,9 +161,7 @@ void opt_filter_batch(opt_context* ctx, const arr<opt_candidate>& cands) {
 				if(ctx->n_tests < SYNTH_N_TESTS) {
 					const u32 slot = ctx->n_tests++;
 					ctx->test_in[slot] = rep.counterexample;
-					program_slice prog = {ctx->prog->instructions.data(),
-																(u32)ctx->prog->instructions.size()};
-					ctx->target_out[slot] = opt_host_run(&prog, &rep.counterexample);
+					ctx->target_out[slot] = opt_host_run(ctx->prog, &rep.counterexample);
 				}
 
 				return;
@@ -171,7 +170,7 @@ void opt_filter_batch(opt_context* ctx, const arr<opt_candidate>& cands) {
 	}
 }
 
-void opt_run(const program* prog, const opt_config* cfg) {
+void opt_run(const int_program* prog, const opt_config* cfg) {
 	opt_context ctx;
 	ctx.n_tests = 0;
 	ctx.best_len = 0;
@@ -182,8 +181,8 @@ void opt_run(const program* prog, const opt_config* cfg) {
 	ctx.total_smt_calls = 0;
 	ctx.prog = prog;
 	ctx.cfg = cfg;
-	ctx.live_out = cfg->live_mask ? cfg->live_mask : prog->live_outs();
-	ctx.live_in = opt_compute_live_in(prog->instructions.data(), (u32)prog->instructions.size());
+	ctx.live_out = cfg->live_mask ? cfg->live_mask : int_program_live_outs(prog);
+	ctx.live_in = opt_compute_live_in(prog->instructions, prog->size);
 
 	opt_log_startup(&ctx);
 	opt_seed_test_vectors(&ctx);

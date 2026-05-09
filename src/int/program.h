@@ -3,7 +3,7 @@
 
 #include "int/instruction.cuh"
 
-enum token {
+typedef enum int_token {
 	TOK_UNKNOWN = 0,
 
 	TOK_IDENTIFIER,
@@ -56,28 +56,42 @@ enum token {
 	TOK_COLON,
 	TOK_NEWLINE,
 	TOK_EOF,
-};
+} int_token;
 
-const char* token_to_str(token tok);
-b32 token_is_reg(token tok);
-u64 token_to_reg_index(token tok);
+typedef struct int_program {
+	int_inst* instructions;
+	u32 size;
+} int_program;
+
+int_program int_parse(const str& source);
+int_program int_dce(const int_program* program, u64 live_mask);
+void int_program_free(const int_program* program);
+str int_program_to_string(const int_program* program);
+u64 int_program_live_outs(const int_program* program);
+str int_operand_to_string(int_inst::operand op, int_inst_spec::operand ty);
+
+
+
+const char* token_to_str(int_token tok);
+b32 token_is_reg(int_token tok);
+u64 token_to_reg_index(int_token tok);
 
 struct tokenizer {
 	tokenizer(const str& source);
 
-	token next_tok();
-	token next_tok_identifier();
-	token next_tok_comment();
-	token next_tok_string();
-	token next_tok_char();
+	int_token next_tok();
+	int_token next_tok_identifier();
+	int_token next_tok_comment();
+	int_token next_tok_string();
+	int_token next_tok_char();
 
 	char next_char();
 	b32 is_at_end();
 
 	void consume_spaces();
 	b32 is_whitespace(char c);
-	token string_to_token(const str& string);
-	token string_to_number(const str& string);
+	int_token string_to_token(const str& string);
+	int_token string_to_number(const str& string);
 
 private:
 	const str& m_source;
@@ -85,30 +99,11 @@ private:
 	u64 m_index = 0;
 
 public:
-	token curr;
+	int_token curr;
 	str curr_string;
 	i64 curr_imm; // signed
 };
 
-opcode find_inst_op(const str& name, const inst_spec::operand* operands, u8 operand_count);
-
-typedef struct program_slice {
-	const inst* instructions;
-	u32 size;
-} program_slice;
-
-struct program {
-	static program parse(const str& source);
-	static program dce(const inst* prog, u32 prog_len, u64 live_mask);
-
-	str to_string() const;
-	u64 live_outs() const;
-
-private:
-	str operand_to_string(inst::operand op, inst_spec::operand ty) const;
-
-public:
-	arr<inst> instructions;
-};
+int_opcode find_inst_op(const str& name, const int_inst_spec::operand* operands, u8 operand_count);
 
 #endif // #ifndef PROGRAM_H
