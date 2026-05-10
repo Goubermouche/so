@@ -127,82 +127,39 @@ int_token int_lexer_next_tok_char(int_lexer* lex) {
 	return TOK_UNKNOWN;
 }
 
+#include <cstdlib>
+
 int_token int_lexer_string_to_tok(const str& string) {
-	static const map<str, int_token> operand_map = {
-		// numeric
-		{"x0", TOK_REG_X0},
-		{"x1", TOK_REG_X1},
-		{"x2", TOK_REG_X2},
-		{"x3", TOK_REG_X3},
-		{"x4", TOK_REG_X4},
-		{"x5", TOK_REG_X5},
-		{"x6", TOK_REG_X6},
-		{"x7", TOK_REG_X7},
-		{"x8", TOK_REG_X8},
-		{"x9", TOK_REG_X9},
-		{"x10", TOK_REG_X10},
-		{"x11", TOK_REG_X11},
-		{"x12", TOK_REG_X12},
-		{"x13", TOK_REG_X13},
-		{"x14", TOK_REG_X14},
-		{"x15", TOK_REG_X15},
-		{"x16", TOK_REG_X16},
-		{"x17", TOK_REG_X17},
-		{"x18", TOK_REG_X18},
-		{"x19", TOK_REG_X19},
-		{"x20", TOK_REG_X20},
-		{"x21", TOK_REG_X21},
-		{"x22", TOK_REG_X22},
-		{"x23", TOK_REG_X23},
-		{"x24", TOK_REG_X24},
-		{"x25", TOK_REG_X25},
-		{"x26", TOK_REG_X26},
-		{"x27", TOK_REG_X27},
-		{"x28", TOK_REG_X28},
-		{"x29", TOK_REG_X29},
-		{"x30", TOK_REG_X30},
-		{"x31", TOK_REG_X31},
-		// ABI names
-		{"zero", TOK_REG_X0},
-		{"ra", TOK_REG_X1},
-		{"sp", TOK_REG_X2},
-		{"gp", TOK_REG_X3},
-		{"tp", TOK_REG_X4},
-		{"t0", TOK_REG_X5},
-		{"t1", TOK_REG_X6},
-		{"t2", TOK_REG_X7},
-		{"s0", TOK_REG_X8},
-		{"fp", TOK_REG_X8},
-		{"s1", TOK_REG_X9},
-		{"a0", TOK_REG_X10},
-		{"a1", TOK_REG_X11},
-		{"a2", TOK_REG_X12},
-		{"a3", TOK_REG_X13},
-		{"a4", TOK_REG_X14},
-		{"a5", TOK_REG_X15},
-		{"a6", TOK_REG_X16},
-		{"a7", TOK_REG_X17},
-		{"s2", TOK_REG_X18},
-		{"s3", TOK_REG_X19},
-		{"s4", TOK_REG_X20},
-		{"s5", TOK_REG_X21},
-		{"s6", TOK_REG_X22},
-		{"s7", TOK_REG_X23},
-		{"s8", TOK_REG_X24},
-		{"s9", TOK_REG_X25},
-		{"s10", TOK_REG_X26},
-		{"s11", TOK_REG_X27},
-		{"t3", TOK_REG_X28},
-		{"t4", TOK_REG_X29},
-		{"t5", TOK_REG_X30},
-		{"t6", TOK_REG_X31},
+	// numeric register (x1, x2,...)
+	if(string.length() > 1 && string[0] == 'x') {
+		char* end;
+		i64 reg_num = strtol(string.c_str() + 1, &end, 10);
+		if(*end == '\0' && reg_num >= 0 && reg_num <= 31) { return (int_token)(TOK_REG_X0 + reg_num); }
+	}
+
+	struct reg_mapping {
+		const char* name;
+		int_token tok;
 	};
 
-	const auto it = operand_map.find(string);
+	// ABI names
+	static const reg_mapping abi_map[] = {
+		{"zero", TOK_REG_X0}, {"ra", TOK_REG_X1},	 {"sp", TOK_REG_X2},	{"gp", TOK_REG_X3},
+		{"tp", TOK_REG_X4},		{"t0", TOK_REG_X5},	 {"t1", TOK_REG_X6},	{"t2", TOK_REG_X7},
+		{"s0", TOK_REG_X8},		{"fp", TOK_REG_X8},	 {"s1", TOK_REG_X9},	{"a0", TOK_REG_X10},
+		{"a1", TOK_REG_X11},	{"a2", TOK_REG_X12}, {"a3", TOK_REG_X13}, {"a4", TOK_REG_X14},
+		{"a5", TOK_REG_X15},	{"a6", TOK_REG_X16}, {"a7", TOK_REG_X17}, {"s2", TOK_REG_X18},
+		{"s3", TOK_REG_X19},	{"s4", TOK_REG_X20}, {"s5", TOK_REG_X21}, {"s6", TOK_REG_X22},
+		{"s7", TOK_REG_X23},	{"s8", TOK_REG_X24}, {"s9", TOK_REG_X25}, {"s10", TOK_REG_X26},
+		{"s11", TOK_REG_X27}, {"t3", TOK_REG_X28}, {"t4", TOK_REG_X29}, {"t5", TOK_REG_X30},
+		{"t6", TOK_REG_X31}};
 
-	if(it == operand_map.end()) { return TOK_UNKNOWN; }
+	static const u64 abi_size = sizeof(abi_map) / sizeof(abi_map[0]);
+	for(size_t i = 0; i < abi_size; ++i) {
+		if(string == abi_map[i].name) return abi_map[i].tok;
+	}
 
-	return it->second;
+	return TOK_UNKNOWN;
 }
 
 int_token int_lexer_string_to_num(int_lexer* lex, const str& string) {

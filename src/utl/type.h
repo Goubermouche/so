@@ -1,17 +1,13 @@
 #ifndef TYPE_H
 #define TYPE_H
 
-#include <algorithm>
-#include <array>
-#include <cctype>
-#include <climits>
-#include <cmath>
-#include <cstdio>
-#include <cstring>
 #include <sstream>
-#include <stdint.h>
-#include <unordered_map>
 #include <vector>
+
+#include <math.h>
+#include <stdio.h>
+#include <string.h>
+#include <stdint.h>
 
 #ifdef DEBUG
 #define DEBUG_MODE
@@ -66,8 +62,6 @@ typedef bool b32;
 using str = std::string;
 
 template <typename type> using arr = std::vector<type>;
-
-template <typename key, typename type> using map = std::unordered_map<key, type>;
 
 inline str pad_to_length(const str& s, char pad, u64 target_len) {
 	u64 pad_len = (target_len > s.size()) ? (target_len - s.size()) : 0;

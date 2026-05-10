@@ -59,7 +59,7 @@ inline i32 device_init() {
 	printf("          threads: %u\n", max_threads);
 	printf("          warps: %u\n", max_warps);
 	printf("          dram: %f GB @ %d GB/s\n",
-				 std::ceil(p.totalGlobalMem / (1024.0 * 1024.0 * 1024.0)), (i32)mem_bw_gbs);
+				 ceil(p.totalGlobalMem / (1024.0 * 1024.0 * 1024.0)), (i32)mem_bw_gbs);
 	printf("          L2: %d\n", p.l2CacheSize / 1024);
 	printf("          shared memory per block: %d KB\n", (int)p.sharedMemPerBlock / 1024);
 	printf("          SM clock: %d MHz\n", p.clockRate / 1000);
