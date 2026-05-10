@@ -145,11 +145,10 @@ void opt_filter_batch(opt_context* ctx, const arr<opt_candidate>& cands) {
 			// SMT verify
 			int_inst* rw = flat.data() + i * SYNTH_PROG_LEN;
 			const u32 rw_len = cands[i].len;
-			const auto t0 = std::chrono::steady_clock::now();
+			const f64 t0 = get_time_ms();
 			int_program b = {rw, rw_len};
 			smt_verify_report rep = smt_eq(ctx->prog, &b, ctx->live_out);
-			const auto t1 = std::chrono::steady_clock::now();
-			ctx->total_smt_ms += std::chrono::duration<f64, std::milli>(t1 - t0).count();
+			ctx->total_smt_ms += get_time_ms() - t0;
 			++ctx->total_smt_calls;
 
 			if(rep.kind == SMT_EQUIVALENT) {
@@ -157,7 +156,7 @@ void opt_filter_batch(opt_context* ctx, const arr<opt_candidate>& cands) {
 				ctx->best_prog.assign(rw, rw + rw_len);
 				return;
 			} else if(rep.kind == SMT_COUNTEREXAMPLE) {
-				// add the counterexample, then ABORT this batch
+				// add the counterexample, then abort this batch
 				if(ctx->n_tests < SYNTH_N_TESTS) {
 					const u32 slot = ctx->n_tests++;
 					ctx->test_in[slot] = rep.counterexample;
@@ -209,11 +208,9 @@ b32 opt_run_length(opt_context* ctx, u32 len) {
 	if(effective_mask & EXT_RV64M) effective_mask |= EXT_RV32M;
 
 	const opt_opcode_pool pool = opt_build_opcode_pool(effective_mask);
-	const opt_imm_pool imms = opt_build_default_imm_pool();
+	const opt_imm_pool imms = opt_build_default_imm_pool(); // TODO: add imms from programm etc.
 	u32 max_scratch = 5 + len;
 	if(max_scratch > 32) max_scratch = 32;
-
-	using clk = std::chrono::steady_clock;
 
 	// regenerate candidates if the test set grows
 	u32 cegis_iter = 0;
@@ -225,12 +222,11 @@ b32 opt_run_length(opt_context* ctx, u32 len) {
 		arr<opt_candidate> cands;
 		cands.reserve(ctx->cfg->batch_size);
 
-		const auto t_start = clk::now();
+		const f64 t0 = get_time_ms();
 		opt_enum_config cfg = {&pool, &imms, ctx->live_in, ctx->live_out, len, max_scratch};
 		opt_enumerate(&cfg, &cands, ctx->cfg->batch_size);
 
-		printf("  iter %u (%zu candidates (%fms))\n", cegis_iter, cands.size(),
-					 std::chrono::duration<f64, std::milli>(clk::now() - t_start).count());
+		printf("  iter %u (%zu candidates (%fms))\n", cegis_iter, cands.size(), get_time_ms() - t0);
 		if(cands.empty()) return false;
 
 		opt_filter_batch(ctx, cands);

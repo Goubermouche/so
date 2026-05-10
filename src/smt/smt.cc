@@ -3,6 +3,7 @@
 #include "ext/rv32m/smt.cuh"
 #include "ext/rv64i/smt.cuh"
 #include "ext/rv64m/smt.cuh"
+#include "utl/type.h"
 
 smt_state smt_run(Z3_context ctx, const smt_state* in, const int_program* prog) {
 	smt_state regs = smt_clone_state(ctx, in);
@@ -131,10 +132,9 @@ smt_verify_report smt_eq(const int_program* a, const int_program* b, u64 live_ou
 	Z3_solver_set_params(ctx, solver, params);
 	Z3_solver_assert(ctx, solver, formula);
 
-	const auto t0 = std::chrono::high_resolution_clock::now();
+	const f64 t0 = get_time_ms();
 	Z3_lbool chk = Z3_solver_check(ctx, solver);
-	const auto t1 = std::chrono::high_resolution_clock::now();
-	r.solve_ms = std::chrono::duration<f64, std::milli>(t1 - t0).count();
+	r.solve_ms = get_time_ms() - t0;
 
 	switch(chk) {
 		case Z3_L_FALSE: r.kind = SMT_EQUIVALENT; break;

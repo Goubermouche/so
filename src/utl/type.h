@@ -4,7 +4,6 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
-#include <chrono>
 #include <climits>
 #include <cmath>
 #include <cstdio>
@@ -73,6 +72,12 @@ template <typename key, typename type> using map = std::unordered_map<key, type>
 inline str pad_to_length(const str& s, char pad, u64 target_len) {
 	u64 pad_len = (target_len > s.size()) ? (target_len - s.size()) : 0;
 	return s + str(pad_len, pad);
+}
+
+static inline f64 get_time_ms(void) {
+	struct timespec ts;
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	return (f64)ts.tv_sec * 1000.0 + (f64)ts.tv_nsec / 1000000.0;
 }
 
 #endif // #ifndef TYPE_H
