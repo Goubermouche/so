@@ -35,19 +35,18 @@ void opt_log_startup(const opt_context* ctx) {
 	printf("\n");
 
 	printf("> max prog len: %u\n", ctx->cfg->max_prog_len);
-	printf("> batch size:   %zu\n", ctx->cfg->batch_size);
+	printf("> batch size: %zu\n", ctx->cfg->batch_size);
 }
 
 void opt_log_results(const opt_context* ctx, b32 found) {
 	printf("> finished\n");
 	printf("  total candidates evaluated: %zu\n", ctx->total_candidates);
-	printf("  total gpu time:             %fms\n", ctx->total_gpu_ms);
-	printf("  total smt time:             %fms (%zu calls)\n", ctx->total_smt_ms,
-				 ctx->total_smt_calls);
+	printf("  total gpu time: %fms\n", ctx->total_gpu_ms);
+	printf("  total smt time: %fms (%zu calls)\n", ctx->total_smt_ms, ctx->total_smt_calls);
 
 	if(ctx->total_gpu_ms > 0) {
 		const f64 cps = (f64)ctx->total_candidates / (ctx->total_gpu_ms / 1000.0);
-		printf("  gpu throughput:             %fM cand/sec\n", cps / 1e6);
+		printf("  gpu throughput: %fM cand/sec\n", cps / 1e6);
 	}
 
 	if(found) {

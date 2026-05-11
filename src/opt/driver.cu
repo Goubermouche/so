@@ -86,16 +86,28 @@ i32 opt_gpu_runner_make(opt_gpu_context* ctx, u64 max_chunk_cands) {
 	cudaDeviceProp p;
 	if(cudaGetDeviceProperties(&p, dev) != cudaSuccess) { return 2; }
 
+	u64 free_mem = 0;
+	u64 total_mem = 0;
+	if(cudaMemGetInfo(&free_mem, &total_mem) != cudaSuccess) { return 3; }
+	u64 usable_mem = (u64)((f64)free_mem * 0.90); // claim 90% of free vram
+
+	const u64 fixed_mem_bytes = 2ull * SYNTH_N_TESTS * sizeof(int_cpu_state);
+	if(usable_mem <= fixed_mem_bytes) {
+		fprintf(stderr, "error: insufficient VRAM for fixed buffers\n");
+		return 4;
+	}
+
+	usable_mem -= fixed_mem_bytes;
+
+	const u64 per_cand_bytes = (u64)SYNTH_PROG_LEN * sizeof(int_inst);
+	const u64 cand_footprint_bytes = per_cand_bytes + sizeof(u32) + sizeof(u32);
+	u64 chunk = usable_mem / cand_footprint_bytes;
 	const u64 hw_warps = (u64)p.multiProcessorCount * (u64)p.maxThreadsPerMultiProcessor / 32ULL;
 	const u64 ideal_lower = hw_warps * 8ull;
-	const u64 mem_budget_bytes = MB(256);
-	const u64 per_cand_bytes = SYNTH_PROG_LEN * sizeof(int_inst);
-	const u64 mem_upper = mem_budget_bytes / per_cand_bytes;
-
-	u64 chunk = ideal_lower;
+	if(chunk < ideal_lower) { chunk = ideal_lower; }
 	if(chunk < 1024) { chunk = 1024; }
-	if(chunk > mem_upper) { chunk = mem_upper; }
 
+	// align to warp block boundaries
 	chunk = ((chunk + N_WARPS_PER_BLOCK - 1) / N_WARPS_PER_BLOCK) * N_WARPS_PER_BLOCK;
 
 	if(max_chunk_cands != 0 && max_chunk_cands < chunk) {
@@ -111,12 +123,16 @@ i32 opt_gpu_runner_make(opt_gpu_context* ctx, u64 max_chunk_cands) {
 	dmalloc(&ctx->d_target_out, SYNTH_N_TESTS * sizeof(int_cpu_state), "alloc d_target_out");
 	dmalloc(&ctx->d_fail_mask, ctx->max_chunk_cands * sizeof(u32), "alloc d_fail_mask");
 	dmalloc(&ctx->d_pass_count, ctx->max_chunk_cands * sizeof(u32), "alloc d_pass_count");
+
 	// pinned host staging for fast async copyback
 	hmalloc(&ctx->h_fail_mask, ctx->max_chunk_cands * sizeof(u32), "alloc h_fail_mask");
 	hmalloc(&ctx->h_pass_count, ctx->max_chunk_cands * sizeof(u32), "alloc h_pass_count");
 
-	const u64 chunk_mb = cands_bytes / MB(1);
-	printf("  chunk size = %zu candidates (%zuMB)\n", ctx->max_chunk_cands, chunk_mb);
+	const u64 mask_bytes = ctx->max_chunk_cands * sizeof(u32) * 2;
+	const u64 total_allocated_bytes = cands_bytes + fixed_mem_bytes + mask_bytes;
+
+	printf("> chunk size: %zu candidates\n", ctx->max_chunk_cands);
+	printf("> VRAM: %zuMB / %zuMB avail\n", total_allocated_bytes / MB(1), free_mem / MB(1));
 
 	return 0;
 }
