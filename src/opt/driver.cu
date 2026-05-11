@@ -88,8 +88,8 @@ i32 opt_gpu_runner_make(opt_gpu_context* ctx, u64 max_chunk_cands) {
 
 	const u64 hw_warps = (u64)p.multiProcessorCount * (u64)p.maxThreadsPerMultiProcessor / 32ULL;
 	const u64 ideal_lower = hw_warps * 8ull;
-	const u64 mem_budget_bytes = 256ull * 1024ull * 1024ull;
-	const u64 per_cand_bytes = (u64)SYNTH_PROG_LEN * sizeof(int_inst);
+	const u64 mem_budget_bytes = MB(256);
+	const u64 per_cand_bytes = SYNTH_PROG_LEN * sizeof(int_inst);
 	const u64 mem_upper = mem_budget_bytes / per_cand_bytes;
 
 	u64 chunk = ideal_lower;
@@ -115,7 +115,7 @@ i32 opt_gpu_runner_make(opt_gpu_context* ctx, u64 max_chunk_cands) {
 	hmalloc(&ctx->h_fail_mask, ctx->max_chunk_cands * sizeof(u32), "alloc h_fail_mask");
 	hmalloc(&ctx->h_pass_count, ctx->max_chunk_cands * sizeof(u32), "alloc h_pass_count");
 
-	const u64 chunk_mb = cands_bytes / (1024 * 1024);
+	const u64 chunk_mb = cands_bytes / MB(1);
 	printf("  chunk size = %zu candidates (%zuMB)\n", ctx->max_chunk_cands, chunk_mb);
 
 	return 0;

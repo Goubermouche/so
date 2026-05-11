@@ -41,10 +41,15 @@
 			DEBUG_BREAK();                                                                               \
 		}                                                                                              \
 	} while(false)
-
 // #else
 // #define ASSERT(__condition, __message, ...)
 // #endif
+
+#define KB(n) (((u64)(n)) << 10)
+#define MB(n) (((u64)(n)) << 20)
+#define GB(n) (((u64)(n)) << 30)
+#define TB(n) (((u64)(n)) << 40)
+
 typedef uint8_t u8;
 typedef uint16_t u16;
 typedef uint32_t u32;

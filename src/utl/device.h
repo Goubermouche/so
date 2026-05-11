@@ -50,20 +50,19 @@ inline i32 device_init() {
 		return 2;
 	}
 
-	const f64 mem_bw_gbs =
-		((f64)p.memoryBusWidth / 8.0) * ((f64)p.memoryClockRate * 1000.0) * 2.0 / 1e9;
+	const f64 bus_width_bytes = (f64)p.memoryBusWidth / 8.0;
+	const f64 mem_bw_gbs = bus_width_bytes * ((f64)p.memoryClockRate * 1000.0) * 2.0 / 1e9;
 	const i32 max_threads = p.multiProcessorCount * p.maxThreadsPerMultiProcessor;
 	const i32 max_warps = max_threads / 32;
 
 	printf("> device: %s (sm_%u%u)\n", p.name, p.major, p.minor);
-	printf("          threads: %u\n", max_threads);
-	printf("          warps: %u\n", max_warps);
-	printf("          dram: %f GB @ %d GB/s\n",
-				 ceil(p.totalGlobalMem / (1024.0 * 1024.0 * 1024.0)), (i32)mem_bw_gbs);
-	printf("          L2: %d\n", p.l2CacheSize / 1024);
-	printf("          shared memory per block: %d KB\n", (int)p.sharedMemPerBlock / 1024);
-	printf("          SM clock: %d MHz\n", p.clockRate / 1000);
-	printf("          mem clock: %f MHz\n", p.memoryClockRate / 1000.0);
+	printf("    threads: %u\n", max_threads);
+	printf("    warps: %u\n", max_warps);
+	printf("    dram: %.0fGB @ %dGB/s\n", ceil((f64)p.totalGlobalMem / GB(1)), (i32)mem_bw_gbs);
+	printf("    L2: %zuKB\n", p.l2CacheSize / KB(1));
+	printf("    shared memory per block: %zuKB\n", p.sharedMemPerBlock / KB(1));
+	printf("    SM clock: %dMHz\n", p.clockRate / 1000);
+	printf("    mem clock: %dMHz\n", p.memoryClockRate / 1000);
 
 	return 0;
 }
