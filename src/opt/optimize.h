@@ -24,7 +24,9 @@ typedef struct opt_context {
 	int_cpu_state test_in[SYNTH_N_TESTS];
 	int_cpu_state target_out[SYNTH_N_TESTS];
 	u32 n_tests;
-	arr<int_inst> best_prog;
+	arena mem;
+	int_inst* best_prog;
+	u32 best_prog_len;
 	u32 best_len;
 	smt_verify_report rep;
 	// stats
@@ -37,7 +39,7 @@ typedef struct opt_context {
 } opt_context;
 
 typedef struct opt_survivor_set {
-	arr<u32> indices;
+	u32_arr indices;
 } opt_survivor_set;
 
 opt_config opt_make_default_config();
@@ -47,7 +49,7 @@ void opt_log_startup(const opt_context* ctx);
 void opt_log_results(const opt_context* ctx, b32 found);
 
 void opt_seed_test_vectors(opt_context* ctx);
-void opt_filter_batch(opt_context* ctx, const arr<opt_candidate>& cands);
+void opt_filter_batch(opt_context* ctx, const opt_candidate_arr* cands);
 b32 opt_run_length(opt_context* ctx, u32 len);
 
 void opt_run(const int_program* prog, const opt_config* cfg);

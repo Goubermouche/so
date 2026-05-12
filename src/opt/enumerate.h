@@ -19,6 +19,8 @@ typedef struct opt_candidate {
 	u32 len;
 } opt_candidate;
 
+ARR_DECL(opt_candidate, opt_candidate_arr)
+
 typedef struct opt_enumerator {
 	const opt_opcode_pool* pool;
 	const opt_imm_pool* imms;
@@ -26,7 +28,7 @@ typedef struct opt_enumerator {
 	u64 live_out_mask;
 	u32 max_scratch;
 	u32 prog_len;
-	arr<opt_candidate>* out;
+	opt_candidate_arr* out;
 	u64 cap;
 } opt_enumerator;
 
@@ -59,6 +61,6 @@ opt_imm_pool opt_build_default_imm_pool();
 
 void opt_enum_backward(opt_enumerator* e, opt_enum_state* s);
 void opt_try_place(opt_enumerator* e, opt_enum_state* s, const opt_place_attempt* a);
-void opt_enumerate(const opt_enum_config* cfg, arr<opt_candidate>* out, u64 cap);
+void opt_enumerate(const opt_enum_config* cfg, opt_candidate_arr* out, u64 cap);
 
 #endif // #ifndef OPT_ENUMERATE_H

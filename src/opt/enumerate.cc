@@ -24,7 +24,7 @@ opt_imm_pool opt_build_default_imm_pool() {
 }
 
 void opt_enum_backward(opt_enumerator* e, opt_enum_state* s) {
-	if(e->out->size() >= e->cap) return;
+	if(e->out->size >= e->cap) return;
 
 	// we placed all instructions - accept if all remaining demanded
 	// registers are live-ins (they'll be provided at runtime)
@@ -32,7 +32,7 @@ void opt_enum_backward(opt_enumerator* e, opt_enum_state* s) {
 		if((s->demanded & ~e->live_in_mask) == 0) {
 			opt_candidate emitted = *s->cur;
 			emitted.len = e->prog_len;
-			e->out->push_back(emitted);
+			opt_candidate_arr_push(e->out, emitted);
 		}
 
 		return;
@@ -84,7 +84,7 @@ void opt_enum_backward(opt_enumerator* e, opt_enum_state* s) {
 						b_iter &= b_iter - 1;
 						opt_place_attempt a = {op, rd, rs1, rs2, false};
 						opt_try_place(e, s, &a);
-						if(e->out->size() >= e->cap) { return; }
+						if(e->out->size >= e->cap) { return; }
 					}
 				}
 			} else if(has_rs1 && has_imm) {
@@ -97,14 +97,14 @@ void opt_enum_backward(opt_enumerator* e, opt_enum_state* s) {
 					for(u32 ii = 0; ii < e->imms->n; ++ii) {
 						opt_place_attempt a = {op, rd, rs1, ii, true};
 						opt_try_place(e, s, &a);
-						if(e->out->size() >= e->cap) { return; }
+						if(e->out->size >= e->cap) { return; }
 					}
 				}
 			} else if(has_imm) {
 				for(u32 ii = 0; ii < e->imms->n; ++ii) {
 					opt_place_attempt a = {op, rd, /*rs1*/ 0, ii, true};
 					opt_try_place(e, s, &a);
-					if(e->out->size() >= e->cap) { return; }
+					if(e->out->size >= e->cap) { return; }
 				}
 			} else if(has_rs1) {
 				u64 a_iter = src_avail;
@@ -114,7 +114,7 @@ void opt_enum_backward(opt_enumerator* e, opt_enum_state* s) {
 					a_iter &= a_iter - 1;
 					opt_place_attempt a = {op, rd, rs1, 0, false};
 					opt_try_place(e, s, &a);
-					if(e->out->size() >= e->cap) { return; }
+					if(e->out->size >= e->cap) { return; }
 				}
 			}
 		}
@@ -122,7 +122,7 @@ void opt_enum_backward(opt_enumerator* e, opt_enum_state* s) {
 }
 
 void opt_try_place(opt_enumerator* e, opt_enum_state* s, const opt_place_attempt* a) {
-	if(e->out->size() >= e->cap) { return; }
+	if(e->out->size >= e->cap) { return; }
 	const int_inst_spec& spec = INT_INST_DB_HOST.row[a->op];
 	if(a->rd == 0) { return; }
 	if(!(s->demanded & (1ULL << a->rd))) { return; }
@@ -180,7 +180,7 @@ void opt_try_place(opt_enumerator* e, opt_enum_state* s, const opt_place_attempt
 	opt_enum_backward(e, &ns);
 }
 
-void opt_enumerate(const opt_enum_config* cfg, arr<opt_candidate>* out, u64 cap) {
+void opt_enumerate(const opt_enum_config* cfg, opt_candidate_arr* out, u64 cap) {
 	opt_enumerator E;
 	E.pool = cfg->pool;
 	E.imms = cfg->imms;

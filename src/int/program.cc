@@ -1,8 +1,9 @@
 #include "int/program.h"
 #include "int/lexer.h"
 
-int_program int_parse(const str& source) {
-	arr<int_inst> result;
+int_program int_parse(str source) {
+	arena tmp = arena_make(0);
+	int_inst_arr result = int_inst_arr_make(&tmp);
 	int_lexer lex = int_lexer_make(source);
 	int_lexer_next_char(&lex);
 	int_lexer_next_tok(&lex);
@@ -49,18 +50,18 @@ int_program int_parse(const str& source) {
 
 			// pseudo-op rewriting
 			//   sext.w rd, rs1   ->   addiw rd, rs1, 0
-			if(saved == "sext.w" && operand_count == 2 && operand_types[0] == int_inst_spec::REG &&
-				 operand_types[1] == int_inst_spec::REG) {
-				saved = "addiw";
+			if(str_eq_cstr(saved, "sext.w") && operand_count == 2 &&
+				 operand_types[0] == int_inst_spec::REG && operand_types[1] == int_inst_spec::REG) {
+				saved = STR_LIT("addiw");
 				curr_inst.operands[2].i = 0;
 				operand_types[2] = int_inst_spec::IMM;
 				operand_count = 3;
 			}
 
 			curr_inst.op = int_find_inst_op(saved, operand_types, operand_count);
-			ASSERT(curr_inst.op != OP_COUNT, "no opcode matches mnemonic '%s' with %d operand(s)\n",
-						 saved.c_str(), (int)operand_count);
-			result.push_back(curr_inst);
+			ASSERT(curr_inst.op != OP_COUNT, "no opcode matches mnemonic '%.*s' with %d operand(s)\n",
+						 (int)saved.size, (const char*)saved.str, (int)operand_count);
+			int_inst_arr_push(&result, curr_inst);
 
 			if(lex.curr == TOK_NEWLINE) { int_lexer_next_tok(&lex); }
 			continue;
@@ -69,9 +70,11 @@ int_program int_parse(const str& source) {
 		ASSERT(false, "expected mnemonic, got '%s'", int_token_to_str(lex.curr));
 	}
 
-	int_inst* data = (int_inst*)malloc(sizeof(int_inst) * result.size());
-	memcpy(data, result.data(), sizeof(int_inst) * result.size());
-	return {data, (u32)result.size()};
+	int_inst* data = (int_inst*)malloc(sizeof(int_inst) * result.size);
+	memcpy(data, result.v, sizeof(int_inst) * result.size);
+	int_program out = {data, (u32)result.size};
+	arena_release(&tmp);
+	return out;
 }
 
 void int_program_free(const int_program* program) { free(program->instructions); }
@@ -127,23 +130,25 @@ int_program int_dce(const int_program* program, u64 live_mask) {
 	return out;
 }
 
-str int_program_to_string(const int_program* program) {
-	str result;
+str int_program_to_string(arena* a, const int_program* program) {
+	str_list builder = {};
 
 	for(u32 i = 0; i < program->size; ++i) {
 		const int_inst inst = program->instructions[i];
 		const int_inst_spec* spec = int_find_spec(inst.op);
-		result += "    " + pad_to_length(spec->name, ' ', 8);
+		str_list_push(a, &builder, STR_LIT("    "));
+		str_list_push(a, &builder, str_pad_to_len(a, str_cstring(spec->name), ' ', 8));
 
-		for(u8 j = 0; j < int_spec_get_operand_count(spec); ++j) {
-			result += int_operand_to_string(inst.operands[j], spec->operands[j]);
-			if(j + 1 < int_spec_get_operand_count(spec)) { result += ", "; }
+		const u8 nop = int_spec_get_operand_count(spec);
+		for(u8 j = 0; j < nop; ++j) {
+			str_list_push(a, &builder, int_operand_to_string(a, inst.operands[j], spec->operands[j]));
+			if(j + 1 < nop) { str_list_push(a, &builder, STR_LIT(", ")); }
 		}
 
-		result += '\n';
+		str_list_push(a, &builder, STR_LIT("\n"));
 	}
 
-	return result;
+	return str_list_flatten(a, &builder, STR_LIT(""));
 }
 
 u64 int_program_live_outs(const int_program* program) {

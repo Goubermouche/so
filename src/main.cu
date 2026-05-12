@@ -93,7 +93,7 @@ i32 parse_u32(const char* src, u32& out) {
 	return 0;
 }
 
-i32 read_file(const char* filename, char** out) {
+i32 read_file(const char* filename, char** out, u64* out_len) {
 	FILE* file = fopen(filename, "rb");
 	if(!file) {
 		fprintf(stderr, "error: cannot open file '%s'\n", filename);
@@ -121,6 +121,7 @@ i32 read_file(const char* filename, char** out) {
 	buffer[read_bytes] = '\0';
 	fclose(file);
 	*out = buffer;
+	*out_len = read_bytes;
 
 	return 0;
 }
@@ -129,11 +130,12 @@ i32 main(i32 argc, char** argv) {
 	opt_config cfg = opt_make_default_config();
 	i32 argi = 1;
 	char* source = 0;
+	u64 source_len = 0;
 
 	// parse arguments
 	for(; argi < argc; ++argi) {
 		if(argv[argi][0] != '-') {
-			i32 res = read_file(argv[argi], &source);
+			i32 res = read_file(argv[argi], &source, &source_len);
 			if(res) { return res; }
 		} else if(!strcmp(argv[argi], "--version")) {
 			return version();
@@ -163,7 +165,7 @@ i32 main(i32 argc, char** argv) {
 	// run
 	if(device_init()) { return 1; }
 
-	int_program parsed = int_parse(source);
+	int_program parsed = int_parse(str_make((u8*)source, source_len));
 	opt_run(&parsed, &cfg);
 	int_program_free(&parsed);
 	return 0;

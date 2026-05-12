@@ -1,5 +1,6 @@
 #include "int/lexer.h"
 #include "int/cpu.cuh"
+#include <cstdlib>
 
 const char* int_token_to_str(int_token tok) {
 	switch(tok) {
@@ -31,15 +32,19 @@ u64 int_token_to_reg_index(int_token tok) {
 	return tok - TOK_REG_X0;
 }
 
-int_lexer int_lexer_make(const str& source) {
+int_lexer int_lexer_make(str source) {
 	int_lexer lex;
 	lex.index = 0;
 	lex.source = source;
+	lex.current_char = 0;
+	lex.curr = TOK_UNKNOWN;
+	lex.curr_string = str_make(0, 0);
+	lex.curr_imm = 0;
 	return lex;
 }
 
 int_token int_lexer_next_tok(int_lexer* lex) {
-	lex->curr_string.clear();
+	lex->curr_string = str_make(0, 0);
 
 	// get rid of leading space-like characters
 	int_lexer_consume_spaces(lex);
@@ -77,10 +82,10 @@ int_token int_lexer_next_tok(int_lexer* lex) {
 
 char int_lexer_next_char(int_lexer* lex) {
 	if(int_lexer_is_at_end(lex)) { return lex->current_char = EOF; }
-	return lex->current_char = lex->source[lex->index++];
+	return lex->current_char = (char)lex->source.str[lex->index++];
 }
 
-b32 int_lexer_is_at_end(int_lexer* lex) { return lex->index >= lex->source.size(); }
+b32 int_lexer_is_at_end(int_lexer* lex) { return lex->index >= lex->source.size; }
 
 void int_lexer_consume_spaces(int_lexer* lex) {
 	// consume spaces (excluding newlines)
@@ -92,25 +97,28 @@ b32 int_lexer_is_whitespace(char c) {
 }
 
 int_token int_lexer_next_tok_identifier(int_lexer* lex) {
-	// '.' is allowed inside mnemonics like sext.b / zext.h. dashes don't appear
+	const u64 start = lex->index - 1;
+
 	while(isalnum(lex->current_char) || lex->current_char == '_' || lex->current_char == '.') {
-		lex->curr_string += lex->current_char;
 		int_lexer_next_char(lex);
 	}
+
+	const u64 end = lex->index - 1;
+	lex->curr_string = str_make(lex->source.str + start, end - start);
 
 	const auto token = int_lexer_string_to_tok(lex->curr_string);
 
 	if(token != TOK_UNKNOWN) { return lex->curr = token; }
 
 	// numerical literal
-	if(isdigit(lex->curr_string[0])) { return int_lexer_string_to_num(lex, lex->curr_string); }
+	if(lex->curr_string.size > 0 && isdigit(lex->curr_string.str[0])) {
+		return int_lexer_string_to_num(lex, lex->curr_string);
+	}
 
 	return lex->curr = TOK_IDENTIFIER;
 }
 
 int_token int_lexer_next_tok_comment(int_lexer* lex) {
-	// skip over comments (both ';' and '#' style supported - '#' is the
-	// gas/clang convention for RISC-V)
 	do { int_lexer_next_char(lex); } while(!int_lexer_is_at_end(lex) && lex->current_char != '\n');
 
 	// return the next token
@@ -127,13 +135,16 @@ int_token int_lexer_next_tok_char(int_lexer* lex) {
 	return TOK_UNKNOWN;
 }
 
-#include <cstdlib>
-
-int_token int_lexer_string_to_tok(const str& string) {
+int_token int_lexer_string_to_tok(str string) {
 	// numeric register (x1, x2,...)
-	if(string.length() > 1 && string[0] == 'x') {
+	if(string.size > 1 && string.str[0] == 'x') {
+		char buf[16] = {0};
+		const u64 n = string.size < 15 ? string.size : 15;
+		memcpy(buf, string.str, n);
+		buf[n] = 0;
+
 		char* end;
-		i64 reg_num = strtol(string.c_str() + 1, &end, 10);
+		i64 reg_num = strtol(buf + 1, &end, 10);
 		if(*end == '\0' && reg_num >= 0 && reg_num <= 31) { return (int_token)(TOK_REG_X0 + reg_num); }
 	}
 
@@ -156,18 +167,23 @@ int_token int_lexer_string_to_tok(const str& string) {
 
 	static const u64 abi_size = sizeof(abi_map) / sizeof(abi_map[0]);
 	for(size_t i = 0; i < abi_size; ++i) {
-		if(string == abi_map[i].name) return abi_map[i].tok;
+		if(str_eq_cstr(string, abi_map[i].name)) return abi_map[i].tok;
 	}
 
 	return TOK_UNKNOWN;
 }
 
-int_token int_lexer_string_to_num(int_lexer* lex, const str& string) {
+int_token int_lexer_string_to_num(int_lexer* lex, str string) {
 	i32 base = 10;
-	char* data = lex->curr_string.data();
+	char buf[64];
+	ASSERT(string.size < sizeof(buf), "numeric literal too long ('%.*s')\n", (int)string.size,
+				 (const char*)string.str);
+	memcpy(buf, string.str, string.size);
+	buf[string.size] = 0;
+	char* data = buf;
 
-	if(lex->curr_string[0] == '0' && lex->curr_string.size() > 1) {
-		switch(lex->curr_string[1]) {
+	if(string.size > 1 && buf[0] == '0') {
+		switch(buf[1]) {
 			case 'x':
 				base = 16;
 				data += 2;
@@ -186,8 +202,7 @@ int_token int_lexer_string_to_num(int_lexer* lex, const str& string) {
 
 	errno = 0;
 	const u64 number = strtoull(data, nullptr, base);
-	ASSERT(errno == 0, "strtoull failed for '%s'\n", lex->curr_string.c_str());
-	(void)string;
+	ASSERT(errno == 0, "strtoull failed for '%s'\n", buf);
 	lex->curr_imm = (i64)number;
 	return lex->curr = TOK_NUMBER;
 }

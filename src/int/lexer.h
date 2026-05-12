@@ -1,7 +1,7 @@
 #ifndef INT_LEXER_H
 #define INT_LEXER_H
 
-#include "utl/type.h"
+#include "utl/str.h"
 
 typedef enum int_token {
 	TOK_UNKNOWN = 0,
@@ -67,7 +67,7 @@ typedef struct int_lexer {
 	i64 curr_imm; // signed
 } int_lexer;
 
-int_lexer int_lexer_make(const str& source);
+int_lexer int_lexer_make(str source);
 int_token int_lexer_next_tok(int_lexer* lex);
 int_token int_lexer_next_tok_identifier(int_lexer* lex);
 int_token int_lexer_next_tok_comment(int_lexer* lex);
@@ -79,8 +79,8 @@ b32 int_lexer_is_at_end(int_lexer* lex);
 void int_lexer_consume_spaces(int_lexer* lex);
 b32 int_lexer_is_whitespace(char c);
 
-int_token int_lexer_string_to_tok(const str& string);
-int_token int_lexer_string_to_num(int_lexer* lex, const str& string);
+int_token int_lexer_string_to_tok(str string);
+int_token int_lexer_string_to_num(int_lexer* lex, str string);
 
 const char* int_token_to_str(int_token tok);
 b32 int_token_is_reg(int_token tok);

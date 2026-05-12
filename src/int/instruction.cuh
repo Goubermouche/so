@@ -6,6 +6,8 @@
 #include "ext/rv64i/opcodes.def"
 #include "ext/rv64m/opcodes.def"
 #include "int/cpu.cuh"
+#include "utl/arr.h"
+#include "utl/str.h"
 
 // to add a new extension:
 // - append it to the EXTENSION_LIST macro below
@@ -181,10 +183,12 @@ SO_HD const int_inst_spec* int_find_spec(int_opcode op) {
 #endif // #ifdef __CUDA_ARCH__
 }
 
+ARR_DECL(int_inst, int_inst_arr)
+
 u8 int_spec_get_operand_count(const int_inst_spec* spec);
 b32 int_op_is_commutative(int_opcode op);
-int_opcode int_find_inst_op(const str& name, const int_inst_spec::operand* operands, u8 op_count);
-str int_operand_to_string(int_inst::operand op, int_inst_spec::operand ty);
+int_opcode int_find_inst_op(str name, const int_inst_spec::operand* operands, u8 op_count);
+str int_operand_to_string(arena* a, int_inst::operand op, int_inst_spec::operand ty);
 void int_print_enabled_extensions(u32 mask);
 
 #endif // #ifndef INSTRUCTION_CUH

@@ -50,4 +50,7 @@
 	}                                                                                                \
                                                                                                    \
 	static inline b32 NAME##_empty(const NAME* arr) { return arr->size == 0; }
+
+ARR_DECL(u32, u32_arr)
+
 #endif // #ifndef UTL_arr_H
