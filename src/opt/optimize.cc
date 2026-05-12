@@ -1,6 +1,6 @@
 #include "opt/optimize.h"
-#include "int/instruction.cuh"
-#include "int/program.h"
+#include "cpu/instruction.cuh"
+#include "cpu/program.h"
 #include "opt/batch_runner.cuh"
 #include "opt/canon.cuh"
 #include "opt/driver.cuh"
@@ -21,7 +21,7 @@ void opt_log_startup(const opt_context* ctx) {
 	arena scratch = arena_make(0);
 
 	printf("> source (%u instructions):\n", ctx->prog->size);
-	str src = int_program_to_string(&scratch, ctx->prog);
+	str src = cpu_program_to_str(&scratch, ctx->prog);
 	printf("%s", (const char*)src.str);
 	printf("> live-in:  { ");
 	opt_print_reg_mask(ctx->live_in);
@@ -34,7 +34,7 @@ void opt_log_startup(const opt_context* ctx) {
 	u32 effective_mask = ctx->cfg->ext_mask | EXT_RV32I;
 	if(effective_mask & EXT_RV64M) effective_mask |= EXT_RV32M;
 	printf("> extensions: ");
-	int_print_enabled_extensions(effective_mask);
+	cpu_print_enabled_extensions(effective_mask);
 	printf("\n");
 
 	printf("> max prog len: %u\n", ctx->cfg->max_prog_len);
@@ -55,16 +55,16 @@ void opt_log_results(const opt_context* ctx, b32 found) {
 	}
 
 	if(found) {
-		int_program live_prog;
+		cpu_program live_prog;
 		live_prog.size = ctx->best_prog_len;
-		live_prog.instructions = (int_inst*)malloc(sizeof(int_inst) * live_prog.size);
-		memcpy(live_prog.instructions, ctx->best_prog, sizeof(int_inst) * live_prog.size);
+		live_prog.instructions = (cpu_inst*)malloc(sizeof(cpu_inst) * live_prog.size);
+		memcpy(live_prog.instructions, ctx->best_prog, sizeof(cpu_inst) * live_prog.size);
 		printf("> best program (%u instructions, SMT VERIFIED equivalent):\n", ctx->best_len);
 		arena scratch = arena_make(0);
-		str s = int_program_to_string(&scratch, &live_prog);
+		str s = cpu_program_to_str(&scratch, &live_prog);
 		printf("%s", (const char*)s.str);
 		arena_release(&scratch);
-		int_program_free(&live_prog);
+		cpu_program_free(&live_prog);
 	} else {
 		printf("> no equivalent program found within length %u\n", ctx->cfg->max_prog_len);
 	}
@@ -75,7 +75,7 @@ void opt_print_reg_mask(u64 mask) {
 
 	for(u32 r = 0; r < 32; ++r) {
 		if(mask & (1ULL << r)) {
-			printf("%s%s", first ? "" : ",", int_reg_name(r));
+			printf("%s%s", first ? "" : ",", cpu_reg_name(r));
 			first = false;
 		}
 	}
@@ -89,7 +89,7 @@ void opt_seed_test_vectors(opt_context* ctx) {
 	u64 s = ctx->cfg->seed ^ 0x9E3779B97F4A7C15ULL;
 
 	for(u32 t = 0; t < n_initial; ++t) {
-		int_cpu_state in = {};
+		cpu_state in = {};
 
 		for(u32 i = 0; i < 32; ++i) {
 			s ^= s >> 30;
@@ -113,7 +113,7 @@ void opt_filter_batch(opt_context* ctx, const opt_candidate_arr* cands) {
 	if(N == 0) { return; }
 
 	arena scratch = arena_make(0);
-	int_inst* flat = push_array(&scratch, int_inst, N * SYNTH_PROG_LEN);
+	cpu_inst* flat = push_array(&scratch, cpu_inst, N * SYNTH_PROG_LEN);
 
 	for(u64 i = 0; i < N; ++i) {
 		const opt_candidate& c = cands->v[i];
@@ -122,7 +122,7 @@ void opt_filter_batch(opt_context* ctx, const opt_candidate_arr* cands) {
 			if(j < c.len) {
 				flat[i * SYNTH_PROG_LEN + j] = c.code[j];
 			} else {
-				int_inst nop = {};
+				cpu_inst nop = {};
 				nop.op = OP_NOP;
 				flat[i * SYNTH_PROG_LEN + j] = nop;
 			}
@@ -149,10 +149,10 @@ void opt_filter_batch(opt_context* ctx, const opt_candidate_arr* cands) {
 		if(results[i].pass_count == ctx->n_tests) {
 			++ok_count;
 			// SMT verify
-			int_inst* rw = flat + i * SYNTH_PROG_LEN;
+			cpu_inst* rw = flat + i * SYNTH_PROG_LEN;
 			const u32 rw_len = cands->v[i].len;
 			const f64 t0 = get_time_ms();
-			int_program b = {rw, rw_len};
+			cpu_program b = {rw, rw_len};
 			smt_verify_report rep = smt_eq(ctx->prog, &b, ctx->live_out);
 			ctx->total_smt_ms += get_time_ms() - t0;
 			++ctx->total_smt_calls;
@@ -160,8 +160,8 @@ void opt_filter_batch(opt_context* ctx, const opt_candidate_arr* cands) {
 			if(rep.kind == SMT_EQUIVALENT) {
 				ctx->rep = rep;
 				// copy the winning program before we release the scratch arena
-				int_inst* dst = push_array(&ctx->mem, int_inst, rw_len);
-				memcpy(dst, rw, sizeof(int_inst) * rw_len);
+				cpu_inst* dst = push_array(&ctx->mem, cpu_inst, rw_len);
+				memcpy(dst, rw, sizeof(cpu_inst) * rw_len);
 				ctx->best_prog = dst;
 				ctx->best_prog_len = rw_len;
 				arena_release(&scratch);
@@ -183,7 +183,7 @@ void opt_filter_batch(opt_context* ctx, const opt_candidate_arr* cands) {
 	arena_release(&scratch);
 }
 
-void opt_run(const int_program* prog, const opt_config* cfg) {
+void opt_run(const cpu_program* prog, const opt_config* cfg) {
 	opt_context ctx;
 	ctx.n_tests = 0;
 	ctx.best_len = 0;
@@ -196,7 +196,7 @@ void opt_run(const int_program* prog, const opt_config* cfg) {
 	ctx.total_smt_calls = 0;
 	ctx.prog = prog;
 	ctx.cfg = cfg;
-	ctx.live_out = cfg->live_mask ? cfg->live_mask : int_program_live_outs(prog);
+	ctx.live_out = cfg->live_mask ? cfg->live_mask : cpu_program_live_outs(prog);
 	ctx.live_in = opt_compute_live_in(prog->instructions, prog->size);
 	ctx.mem = arena_make(0);
 

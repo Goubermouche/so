@@ -1,92 +1,92 @@
-#include "int/program.h"
-#include "int/lexer.h"
+#include "cpu/program.h"
+#include "lex/lexer.h"
 
-int_program int_parse(str source) {
+cpu_program cpu_program_parse(str source) {
 	arena tmp = arena_make(0);
-	int_inst_arr result = int_inst_arr_make(&tmp);
-	int_lexer lex = int_lexer_make(source);
-	int_lexer_next_char(&lex);
-	int_lexer_next_tok(&lex);
+	cpu_inst_arr result = cpu_inst_arr_make(&tmp);
+	lex_lexer lex = lex_make(source);
+	lex_next_char(&lex);
+	lex_next_tok(&lex);
 
 	while(lex.curr != TOK_EOF) {
 		// skip leading blank lines between instructions
-		while(lex.curr == TOK_NEWLINE) int_lexer_next_tok(&lex);
+		while(lex.curr == TOK_NEWLINE) lex_next_tok(&lex);
 		if(lex.curr == TOK_EOF) break;
 
 		if(lex.curr == TOK_IDENTIFIER) {
 			str saved = lex.curr_string;
-			int_lexer_next_tok(&lex);
+			lex_next_tok(&lex);
 			if(lex.curr == TOK_COLON) {
-				int_lexer_next_tok(&lex);
-				if(lex.curr == TOK_NEWLINE) int_lexer_next_tok(&lex);
+				lex_next_tok(&lex);
+				if(lex.curr == TOK_NEWLINE) lex_next_tok(&lex);
 				continue;
 			}
 			// not a label after all - rewind by re-parsing as a mnemonic
-			int_inst curr_inst = {};
-			int_inst_spec::operand operand_types[4] = {};
+			cpu_inst curr_inst = {};
+			cpu_inst_spec::operand operand_types[4] = {};
 			u8 operand_count = 0;
 
 			while(lex.curr != TOK_NEWLINE && lex.curr != TOK_EOF && operand_count < 4) {
-				if(int_token_is_reg(lex.curr)) {
-					curr_inst.operands[operand_count].reg = (int_reg_index)(int_token_to_reg_index(lex.curr));
-					operand_types[operand_count] = int_inst_spec::REG;
+				if(lex_token_is_reg(lex.curr)) {
+					curr_inst.operands[operand_count].reg = (cpu_reg_index)(lex_token_to_reg_index(lex.curr));
+					operand_types[operand_count] = cpu_inst_spec::REG;
 				} else if(lex.curr == TOK_NUMBER) {
 					curr_inst.operands[operand_count].i = (u64)lex.curr_imm;
-					operand_types[operand_count] = int_inst_spec::IMM;
+					operand_types[operand_count] = cpu_inst_spec::IMM;
 				} else if(lex.curr == TOK_MINUS) {
-					int_lexer_next_tok(&lex);
+					lex_next_tok(&lex);
 					ASSERT(lex.curr == TOK_NUMBER, "expected number after '-'");
 					curr_inst.operands[operand_count].i = (u64)(-lex.curr_imm);
-					operand_types[operand_count] = int_inst_spec::IMM;
+					operand_types[operand_count] = cpu_inst_spec::IMM;
 				} else {
-					ASSERT(false, "unrecognized operand type received ('%s')", int_token_to_str(lex.curr));
+					ASSERT(false, "unrecognized operand type received ('%s')", lex_token_to_str(lex.curr));
 				}
 
 				operand_count++;
 
-				if(int_lexer_next_tok(&lex) != TOK_COMMA) break;
-				int_lexer_next_tok(&lex);
+				if(lex_next_tok(&lex) != TOK_COMMA) break;
+				lex_next_tok(&lex);
 			}
 
 			// pseudo-op rewriting
 			//   sext.w rd, rs1   ->   addiw rd, rs1, 0
 			if(str_eq_cstr(saved, "sext.w") && operand_count == 2 &&
-				 operand_types[0] == int_inst_spec::REG && operand_types[1] == int_inst_spec::REG) {
+				 operand_types[0] == cpu_inst_spec::REG && operand_types[1] == cpu_inst_spec::REG) {
 				saved = STR_LIT("addiw");
 				curr_inst.operands[2].i = 0;
-				operand_types[2] = int_inst_spec::IMM;
+				operand_types[2] = cpu_inst_spec::IMM;
 				operand_count = 3;
 			}
 
-			curr_inst.op = int_find_inst_op(saved, operand_types, operand_count);
+			curr_inst.op = cpu_find_inst_op(saved, operand_types, operand_count);
 			ASSERT(curr_inst.op != OP_COUNT, "no opcode matches mnemonic '%.*s' with %d operand(s)\n",
 						 (int)saved.size, (const char*)saved.str, (int)operand_count);
-			int_inst_arr_push(&result, curr_inst);
+			cpu_inst_arr_push(&result, curr_inst);
 
-			if(lex.curr == TOK_NEWLINE) { int_lexer_next_tok(&lex); }
+			if(lex.curr == TOK_NEWLINE) { lex_next_tok(&lex); }
 			continue;
 		}
 
-		ASSERT(false, "expected mnemonic, got '%s'", int_token_to_str(lex.curr));
+		ASSERT(false, "expected mnemonic, got '%s'", lex_token_to_str(lex.curr));
 	}
 
-	int_inst* data = (int_inst*)malloc(sizeof(int_inst) * result.size);
-	memcpy(data, result.v, sizeof(int_inst) * result.size);
-	int_program out = {data, (u32)result.size};
+	cpu_inst* data = (cpu_inst*)malloc(sizeof(cpu_inst) * result.size);
+	memcpy(data, result.v, sizeof(cpu_inst) * result.size);
+	cpu_program out = {data, (u32)result.size};
 	arena_release(&tmp);
 	return out;
 }
 
-void int_program_free(const int_program* program) { free(program->instructions); }
+void cpu_program_free(const cpu_program* program) { free(program->instructions); }
 
-int_program int_dce(const int_program* program, u64 live_mask) {
+cpu_program cpu_program_dce(const cpu_program* program, u64 live_mask) {
 	// x0 is never live in the user-facing sense (writes are dropped)
 	u64 live = live_mask & ~1ULL;
 	u64 live_bits_by_slot = 0;
 	u32 count = 0;
 
 	for(i32 i = (i32)program->size - 1; i >= 0; --i) {
-		const int_inst_spec* spec = int_find_spec(program->instructions[i].op);
+		const cpu_inst_spec* spec = cpu_find_spec(program->instructions[i].op);
 
 		if(spec->dst_slot < 0) { continue; }
 
@@ -116,12 +116,12 @@ int_program int_dce(const int_program* program, u64 live_mask) {
 		}
 	}
 
-	int_program out;
+	cpu_program out;
 	out.size = 0;
 	for(u32 i = 0; i < program->size; ++i) {
 		if(live_bits_by_slot & (1ULL << i)) { out.size++; }
 	}
-	out.instructions = (int_inst*)malloc(sizeof(int_inst) * out.size);
+	out.instructions = (cpu_inst*)malloc(sizeof(cpu_inst) * out.size);
 	u32 index = 0;
 	for(u32 i = 0; i < program->size; ++i) {
 		if(live_bits_by_slot & (1ULL << i)) { out.instructions[index++] = program->instructions[i]; }
@@ -130,18 +130,18 @@ int_program int_dce(const int_program* program, u64 live_mask) {
 	return out;
 }
 
-str int_program_to_string(arena* a, const int_program* program) {
+str cpu_program_to_str(arena* a, const cpu_program* program) {
 	str_list builder = {};
 
 	for(u32 i = 0; i < program->size; ++i) {
-		const int_inst inst = program->instructions[i];
-		const int_inst_spec* spec = int_find_spec(inst.op);
+		const cpu_inst inst = program->instructions[i];
+		const cpu_inst_spec* spec = cpu_find_spec(inst.op);
 		str_list_push(a, &builder, STR_LIT("    "));
 		str_list_push(a, &builder, str_pad_to_len(a, str_cstring(spec->name), ' ', 8));
 
-		const u8 nop = int_spec_get_operand_count(spec);
+		const u8 nop = cpu_spec_get_operand_count(spec);
 		for(u8 j = 0; j < nop; ++j) {
-			str_list_push(a, &builder, int_operand_to_string(a, inst.operands[j], spec->operands[j]));
+			str_list_push(a, &builder, cpu_operand_to_string(a, inst.operands[j], spec->operands[j]));
 			if(j + 1 < nop) { str_list_push(a, &builder, STR_LIT(", ")); }
 		}
 
@@ -151,13 +151,13 @@ str int_program_to_string(arena* a, const int_program* program) {
 	return str_list_flatten(a, &builder, STR_LIT(""));
 }
 
-u64 int_program_live_outs(const int_program* program) {
+u64 cpu_program_live_outs(const cpu_program* program) {
 	u64 touched = 0;
 	u64 live_out = 0;
 
 	for(u64 idx = program->size; idx-- > 0;) {
-		const int_inst& in = program->instructions[idx];
-		const int_inst_spec* spec = int_find_spec(in.op);
+		const cpu_inst& in = program->instructions[idx];
+		const cpu_inst_spec* spec = cpu_find_spec(in.op);
 
 		// write side first
 		if(spec->dst_slot >= 0) {

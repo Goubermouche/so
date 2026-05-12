@@ -1,7 +1,7 @@
 #ifndef EXT_RV32M_SMT_CUH
 #define EXT_RV32M_SMT_CUH
 
-#include "smt/smt_state.h"
+#include "smt/state.h"
 
 inline bool ext_rv32m_smt(Z3_context ctx, smt_state* s, u32 op, u32 d, u32 s1, u32 s2, Z3_ast imm) {
 	switch(op) {

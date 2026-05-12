@@ -1,8 +1,8 @@
-#include "int/lexer.h"
-#include "int/cpu.cuh"
+#include "lex/lexer.h"
+#include "cpu/cpu.cuh"
 #include <cstdlib>
 
-const char* int_token_to_str(int_token tok) {
+const char* lex_token_to_str(lex_token tok) {
 	switch(tok) {
 		case TOK_UNKNOWN: return "unknown";
 		case TOK_IDENTIFIER: return "identifier";
@@ -20,20 +20,20 @@ const char* int_token_to_str(int_token tok) {
 		case TOK_NEWLINE: return "newline";
 		case TOK_EOF: return "eof";
 		default:
-			if(tok >= TOK_REG_X0 && tok <= TOK_REG_X31) { return int_reg_name((u32)(tok - TOK_REG_X0)); }
+			if(tok >= TOK_REG_X0 && tok <= TOK_REG_X31) { return cpu_reg_name((u32)(tok - TOK_REG_X0)); }
 			return "?";
 	}
 }
 
-b32 int_token_is_reg(int_token tok) { return tok >= TOK_REG_X0 && tok <= TOK_REG_X31; }
+b32 lex_token_is_reg(lex_token tok) { return tok >= TOK_REG_X0 && tok <= TOK_REG_X31; }
 
-u64 int_token_to_reg_index(int_token tok) {
-	ASSERT(int_token_is_reg(tok), "token is not a register");
+u64 lex_token_to_reg_index(lex_token tok) {
+	ASSERT(lex_token_is_reg(tok), "token is not a register");
 	return tok - TOK_REG_X0;
 }
 
-int_lexer int_lexer_make(str source) {
-	int_lexer lex;
+lex_lexer lex_make(str source) {
+	lex_lexer lex;
 	lex.index = 0;
 	lex.source = source;
 	lex.current_char = 0;
@@ -43,11 +43,11 @@ int_lexer int_lexer_make(str source) {
 	return lex;
 }
 
-int_token int_lexer_next_tok(int_lexer* lex) {
+lex_token lex_next_tok(lex_lexer* lex) {
 	lex->curr_string = str_make(0, 0);
 
 	// get rid of leading space-like characters
-	int_lexer_consume_spaces(lex);
+	lex_consume_spaces(lex);
 
 	// special characters
 	switch(lex->current_char) {
@@ -55,24 +55,24 @@ int_token int_lexer_next_tok(int_lexer* lex) {
 		case '.':
 		case '0' ... '9':
 		case 'a' ... 'z':
-		case 'A' ... 'Z': return int_lexer_next_tok_identifier(lex);
+		case 'A' ... 'Z': return lex_next_tok_identifier(lex);
 
 		case ';':
-		case '#': return int_lexer_next_tok_comment(lex);
-		case '"': return int_lexer_next_tok_string(lex);
-		case '\'': return int_lexer_next_tok_char(lex);
+		case '#': return lex_next_tok_comment(lex);
+		case '"': return lex_next_tok_string(lex);
+		case '\'': return lex_next_tok_char(lex);
 
-		case ',': int_lexer_next_char(lex); return lex->curr = TOK_COMMA;
-		case '[': int_lexer_next_char(lex); return lex->curr = TOK_LBRACKET;
-		case ']': int_lexer_next_char(lex); return lex->curr = TOK_RBRACKET;
-		case '(': int_lexer_next_char(lex); return lex->curr = TOK_LBRACE;
-		case ')': int_lexer_next_char(lex); return lex->curr = TOK_RBRACE;
-		case '+': int_lexer_next_char(lex); return lex->curr = TOK_PLUS;
-		case '-': int_lexer_next_char(lex); return lex->curr = TOK_MINUS;
-		case '*': int_lexer_next_char(lex); return lex->curr = TOK_ASTERISK;
-		case '$': int_lexer_next_char(lex); return lex->curr = TOK_DOLLARSIGN;
-		case ':': int_lexer_next_char(lex); return lex->curr = TOK_COLON;
-		case '\n': int_lexer_next_char(lex); return lex->curr = TOK_NEWLINE;
+		case ',': lex_next_char(lex); return lex->curr = TOK_COMMA;
+		case '[': lex_next_char(lex); return lex->curr = TOK_LBRACKET;
+		case ']': lex_next_char(lex); return lex->curr = TOK_RBRACKET;
+		case '(': lex_next_char(lex); return lex->curr = TOK_LBRACE;
+		case ')': lex_next_char(lex); return lex->curr = TOK_RBRACE;
+		case '+': lex_next_char(lex); return lex->curr = TOK_PLUS;
+		case '-': lex_next_char(lex); return lex->curr = TOK_MINUS;
+		case '*': lex_next_char(lex); return lex->curr = TOK_ASTERISK;
+		case '$': lex_next_char(lex); return lex->curr = TOK_DOLLARSIGN;
+		case ':': lex_next_char(lex); return lex->curr = TOK_COLON;
+		case '\n': lex_next_char(lex); return lex->curr = TOK_NEWLINE;
 		case EOF: return lex->curr = TOK_EOF;
 	}
 
@@ -80,62 +80,62 @@ int_token int_lexer_next_tok(int_lexer* lex) {
 	return TOK_UNKNOWN;
 }
 
-char int_lexer_next_char(int_lexer* lex) {
-	if(int_lexer_is_at_end(lex)) { return lex->current_char = EOF; }
+char lex_next_char(lex_lexer* lex) {
+	if(lex_is_at_end(lex)) { return lex->current_char = EOF; }
 	return lex->current_char = (char)lex->source.str[lex->index++];
 }
 
-b32 int_lexer_is_at_end(int_lexer* lex) { return lex->index >= lex->source.size; }
+b32 lex_is_at_end(lex_lexer* lex) { return lex->index >= lex->source.size; }
 
-void int_lexer_consume_spaces(int_lexer* lex) {
+void lex_consume_spaces(lex_lexer* lex) {
 	// consume spaces (excluding newlines)
-	while(int_lexer_is_whitespace(lex->current_char)) { int_lexer_next_char(lex); }
+	while(lex_is_whitespace(lex->current_char)) { lex_next_char(lex); }
 }
 
-b32 int_lexer_is_whitespace(char c) {
+b32 lex_is_whitespace(char c) {
 	return (c == '\t' || c == '\v' || c == '\f' || c == '\r' || c == ' ');
 }
 
-int_token int_lexer_next_tok_identifier(int_lexer* lex) {
+lex_token lex_next_tok_identifier(lex_lexer* lex) {
 	const u64 start = lex->index - 1;
 
 	while(isalnum(lex->current_char) || lex->current_char == '_' || lex->current_char == '.') {
-		int_lexer_next_char(lex);
+		lex_next_char(lex);
 	}
 
 	const u64 end = lex->index - 1;
 	lex->curr_string = str_make(lex->source.str + start, end - start);
 
-	const auto token = int_lexer_string_to_tok(lex->curr_string);
+	const auto token = lex_str_to_tok(lex->curr_string);
 
 	if(token != TOK_UNKNOWN) { return lex->curr = token; }
 
 	// numerical literal
 	if(lex->curr_string.size > 0 && isdigit(lex->curr_string.str[0])) {
-		return int_lexer_string_to_num(lex, lex->curr_string);
+		return lex_str_to_num(lex, lex->curr_string);
 	}
 
 	return lex->curr = TOK_IDENTIFIER;
 }
 
-int_token int_lexer_next_tok_comment(int_lexer* lex) {
-	do { int_lexer_next_char(lex); } while(!int_lexer_is_at_end(lex) && lex->current_char != '\n');
+lex_token lex_next_tok_comment(lex_lexer* lex) {
+	do { lex_next_char(lex); } while(!lex_is_at_end(lex) && lex->current_char != '\n');
 
 	// return the next token
-	return int_lexer_next_tok(lex);
+	return lex_next_tok(lex);
 }
 
-int_token int_lexer_next_tok_string(int_lexer* lex) {
+lex_token lex_next_tok_string(lex_lexer* lex) {
 	ASSERT(false, "TODO: next_tok_string");
 	return TOK_UNKNOWN;
 }
 
-int_token int_lexer_next_tok_char(int_lexer* lex) {
+lex_token lex_next_tok_char(lex_lexer* lex) {
 	ASSERT(false, "TODO: next_tok_char");
 	return TOK_UNKNOWN;
 }
 
-int_token int_lexer_string_to_tok(str string) {
+lex_token lex_str_to_tok(str string) {
 	// numeric register (x1, x2,...)
 	if(string.size > 1 && string.str[0] == 'x') {
 		char buf[16] = {0};
@@ -145,12 +145,12 @@ int_token int_lexer_string_to_tok(str string) {
 
 		char* end;
 		i64 reg_num = strtol(buf + 1, &end, 10);
-		if(*end == '\0' && reg_num >= 0 && reg_num <= 31) { return (int_token)(TOK_REG_X0 + reg_num); }
+		if(*end == '\0' && reg_num >= 0 && reg_num <= 31) { return (lex_token)(TOK_REG_X0 + reg_num); }
 	}
 
 	struct reg_mapping {
 		const char* name;
-		int_token tok;
+		lex_token tok;
 	};
 
 	// ABI names
@@ -173,7 +173,7 @@ int_token int_lexer_string_to_tok(str string) {
 	return TOK_UNKNOWN;
 }
 
-int_token int_lexer_string_to_num(int_lexer* lex, str string) {
+lex_token lex_str_to_num(lex_lexer* lex, str string) {
 	i32 base = 10;
 	char buf[64];
 	ASSERT(string.size < sizeof(buf), "numeric literal too long ('%.*s')\n", (int)string.size,

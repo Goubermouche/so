@@ -1,9 +1,9 @@
 #include "opt/batch_runner.cuh"
 #include "opt/driver.cuh"
 
-__global__ void synth_kernel(const int_inst* __restrict__ d_cands, u64 n_candidates,
-														 const int_cpu_state* __restrict__ d_test_in,
-														 const int_cpu_state* __restrict__ d_target_out, u64 live_mask,
+__global__ void synth_kernel(const cpu_inst* __restrict__ d_cands, u64 n_candidates,
+														 const cpu_state* __restrict__ d_test_in,
+														 const cpu_state* __restrict__ d_target_out, u64 live_mask,
 														 u32 prog_len, u32 n_tests, u32* __restrict__ d_fail_mask,
 														 u32* __restrict__ d_pass_count) {
 	const u32 lane = threadIdx.x & 31;
@@ -23,7 +23,7 @@ __global__ void synth_kernel(const int_inst* __restrict__ d_cands, u64 n_candida
 
 	__syncwarp();
 
-	const int_inst* prog = shared.progs[warp_local];
+	const cpu_inst* prog = shared.progs[warp_local];
 
 	u32 fail_local = 0;
 	u32 pass_local = 0;
@@ -91,7 +91,7 @@ i32 opt_gpu_runner_make(opt_gpu_context* ctx, u64 max_chunk_cands) {
 	if(cudaMemGetInfo(&free_mem, &total_mem) != cudaSuccess) { return 3; }
 	u64 usable_mem = (u64)((f64)free_mem * 0.90); // claim 90% of free vram
 
-	const u64 fixed_mem_bytes = 2ull * SYNTH_N_TESTS * sizeof(int_cpu_state);
+	const u64 fixed_mem_bytes = 2ull * SYNTH_N_TESTS * sizeof(cpu_state);
 	if(usable_mem <= fixed_mem_bytes) {
 		fprintf(stderr, "error: insufficient VRAM for fixed buffers\n");
 		return 4;
@@ -99,7 +99,7 @@ i32 opt_gpu_runner_make(opt_gpu_context* ctx, u64 max_chunk_cands) {
 
 	usable_mem -= fixed_mem_bytes;
 
-	const u64 per_cand_bytes = (u64)SYNTH_PROG_LEN * sizeof(int_inst);
+	const u64 per_cand_bytes = (u64)SYNTH_PROG_LEN * sizeof(cpu_inst);
 	const u64 cand_footprint_bytes = per_cand_bytes + sizeof(u32) + sizeof(u32);
 	u64 chunk = usable_mem / cand_footprint_bytes;
 	const u64 hw_warps = (u64)p.multiProcessorCount * (u64)p.maxThreadsPerMultiProcessor / 32ULL;
@@ -119,8 +119,8 @@ i32 opt_gpu_runner_make(opt_gpu_context* ctx, u64 max_chunk_cands) {
 	// allocate persistent buffers
 	const u64 cands_bytes = ctx->max_chunk_cands * per_cand_bytes;
 	dmalloc(&ctx->d_cands, cands_bytes, "alloc d_cands");
-	dmalloc(&ctx->d_test_in, SYNTH_N_TESTS * sizeof(int_cpu_state), "alloc d_test_in");
-	dmalloc(&ctx->d_target_out, SYNTH_N_TESTS * sizeof(int_cpu_state), "alloc d_target_out");
+	dmalloc(&ctx->d_test_in, SYNTH_N_TESTS * sizeof(cpu_state), "alloc d_test_in");
+	dmalloc(&ctx->d_target_out, SYNTH_N_TESTS * sizeof(cpu_state), "alloc d_target_out");
 	dmalloc(&ctx->d_fail_mask, ctx->max_chunk_cands * sizeof(u32), "alloc d_fail_mask");
 	dmalloc(&ctx->d_pass_count, ctx->max_chunk_cands * sizeof(u32), "alloc d_pass_count");
 
@@ -151,13 +151,13 @@ void opt_gpu_runner_run(opt_gpu_context* ctx, opt_synth_config* cfg, opt_synth_r
 	cfg->elapsed_ms_total = 0.0;
 	if(cfg->candidates == 0) { return; }
 
-	const u64 test_size = SYNTH_N_TESTS * sizeof(int_cpu_state);
+	const u64 test_size = SYNTH_N_TESTS * sizeof(cpu_state);
 
 	// upload test vectors once
 	htod_memcpy(ctx->d_test_in, cfg->test_in, test_size, "cp test_in");
 	htod_memcpy(ctx->d_target_out, cfg->target_out, test_size, "cp target_out");
 
-	const u64 per_cand_bytes = (u64)SYNTH_PROG_LEN * sizeof(int_inst);
+	const u64 per_cand_bytes = (u64)SYNTH_PROG_LEN * sizeof(cpu_inst);
 
 	cudaEvent_t e0;
 	cudaEvent_t e1;
@@ -176,7 +176,7 @@ void opt_gpu_runner_run(opt_gpu_context* ctx, opt_synth_config* cfg, opt_synth_r
 		}
 
 		// upload this chunk's candidates
-		const int_inst* to_copy = cfg->candidates + done * SYNTH_PROG_LEN;
+		const cpu_inst* to_copy = cfg->candidates + done * SYNTH_PROG_LEN;
 		htod_memcpy(ctx->d_cands, to_copy, this_chunk * per_cand_bytes, "cp chunk cands");
 		const u32 n_blocks = (u32)((this_chunk + N_WARPS_PER_BLOCK - 1) / N_WARPS_PER_BLOCK);
 		dim3 grid(n_blocks);
@@ -185,8 +185,8 @@ void opt_gpu_runner_run(opt_gpu_context* ctx, opt_synth_config* cfg, opt_synth_r
 		// run chunk
 		cudaEventRecord(e0);
 		synth_kernel<<<grid, block>>>(
-			(const int_inst*)ctx->d_cands, this_chunk, (const int_cpu_state*)ctx->d_test_in,
-			(const int_cpu_state*)ctx->d_target_out, cfg->live_mask, cfg->prog_len, cfg->n_tests,
+			(const cpu_inst*)ctx->d_cands, this_chunk, (const cpu_state*)ctx->d_test_in,
+			(const cpu_state*)ctx->d_target_out, cfg->live_mask, cfg->prog_len, cfg->n_tests,
 			(u32*)ctx->d_fail_mask, (u32*)ctx->d_pass_count);
 		cudaEventRecord(e1);
 		check_cuda(cudaGetLastError(), "kernel launch");

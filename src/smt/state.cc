@@ -1,4 +1,4 @@
-#include "smt/smt_state.h"
+#include "smt/state.h"
 
 Z3_ast smt_low6(Z3_context ctx, Z3_ast v) {
 	Z3_sort s64 = Z3_mk_bv_sort(ctx, 64);

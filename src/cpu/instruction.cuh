@@ -1,11 +1,11 @@
-#ifndef INSTRUCTION_CUH
-#define INSTRUCTION_CUH
+#ifndef CPU_INSTRUCTION_CUH
+#define CPU_INSTRUCTION_CUH
 
+#include "cpu/cpu.cuh"
 #include "ext/rv32i/opcodes.def"
 #include "ext/rv32m/opcodes.def"
 #include "ext/rv64i/opcodes.def"
 #include "ext/rv64m/opcodes.def"
-#include "int/cpu.cuh"
 #include "utl/arr.h"
 #include "utl/str.h"
 
@@ -28,56 +28,56 @@
 	EXT_RV32M_OPCODES(X)                                                                             \
 	EXT_RV64M_OPCODES(X)
 
-typedef enum int_inst_shape : u8 {
+typedef enum cpu_inst_shape : u8 {
 	SHAPE_NONE = 0, // nop
 	SHAPE_RRR,			// rd, rs1, rs2
 	SHAPE_RRI,			// rd, rs1, imm
 	SHAPE_RR,				// rd, rs1
 	SHAPE_RI,				// rd, imm
-} int_inst_shape;
+} cpu_inst_shape;
 
 // EXT_RV32I is the base ISA and is always implied
 // rv64-prefixed extensions extend their rv32 counterpart and require
 // it to be enabled. The optimizer's pool builder enforces this implicitly
-typedef enum inst_ext_bits : u32 {
+typedef enum cpu_inst_ext_bits : u32 {
 #define X(TAG, DIR, BIT) EXT_##TAG = 1u << (BIT),
 	EXTENSION_LIST(X)
 #undef X
-} inst_ext_bits;
+} cpu_inst_ext_bits;
 
 // array of all extension directory names
-inline constexpr const char* INT_EXT_NAMES[] = {
+inline constexpr const char* CPU_EXT_NAMES[] = {
 #define X(TAG, DIR, BIT) DIR,
 	EXTENSION_LIST(X)
 #undef X
 };
 
-inline constexpr u32 INT_EXT_BITS[] = {
+inline constexpr u32 CPU_EXT_BITS[] = {
 #define X(TAG, DIR, BIT) (1u << (BIT)),
 	EXTENSION_LIST(X)
 #undef X
 };
 
-#define INT_EXT_COUNT sizeof(INT_EXT_NAMES) / sizeof(INT_EXT_NAMES[0])
+#define CPU_EXT_COUNT sizeof(CPU_EXT_NAMES) / sizeof(CPU_EXT_NAMES[0])
 
-typedef enum int_opcode : u16 {
+typedef enum cpu_opcode : u16 {
 #define X(TAG, mnemonic, shape, comm) OP_##TAG,
 	EXT_OPCODE_LIST(X)
 #undef X
 		OP_NOP,
 	OP_COUNT,
-} int_opcode;
+} cpu_opcode;
 
-typedef struct int_inst {
+typedef struct cpu_inst {
 	typedef union operand {
-		int_reg_index reg;
+		cpu_reg_index reg;
 		u64 i;
 	} operand;
-	int_opcode op;
+	cpu_opcode op;
 	operand operands[4];
-} int_inst;
+} cpu_inst;
 
-typedef struct int_inst_spec {
+typedef struct cpu_inst_spec {
 	typedef enum operand : u8 {
 		NONE = 0,
 		REG,
@@ -86,43 +86,43 @@ typedef struct int_inst_spec {
 
 	const char* name;
 	operand operands[4];
-	int_opcode op;
+	cpu_opcode op;
 	i8 dst_slot;
 	i8 src_slot;
 	i8 src2_slot;
 	u32 ext;
 	u8 commutative;
-} int_inst_spec;
+} cpu_inst_spec;
 
-typedef struct int_inst_db {
-	int_inst_spec row[OP_COUNT];
-} int_inst_db;
+typedef struct cpu_inst_db {
+	cpu_inst_spec row[OP_COUNT];
+} cpu_inst_db;
 
-SO_HD constexpr int_inst_spec::operand int_shape_op0(int_inst_shape s) {
-	return s == SHAPE_NONE ? int_inst_spec::NONE : int_inst_spec::REG;
+SO_HD constexpr cpu_inst_spec::operand cpu_shape_op0(cpu_inst_shape s) {
+	return s == SHAPE_NONE ? cpu_inst_spec::NONE : cpu_inst_spec::REG;
 }
 
-SO_HD constexpr int_inst_spec::operand int_shape_op1(int_inst_shape s) {
+SO_HD constexpr cpu_inst_spec::operand cpu_shape_op1(cpu_inst_shape s) {
 	switch(s) {
 		case SHAPE_RRR:
 		case SHAPE_RRI:
-		case SHAPE_RR: return int_inst_spec::REG;
-		case SHAPE_RI: return int_inst_spec::IMM;
-		default: return int_inst_spec::NONE;
+		case SHAPE_RR: return cpu_inst_spec::REG;
+		case SHAPE_RI: return cpu_inst_spec::IMM;
+		default: return cpu_inst_spec::NONE;
 	}
 }
 
-SO_HD constexpr int_inst_spec::operand int_shape_op2(int_inst_shape s) {
+SO_HD constexpr cpu_inst_spec::operand cpu_shape_op2(cpu_inst_shape s) {
 	switch(s) {
-		case SHAPE_RRR: return int_inst_spec::REG;
-		case SHAPE_RRI: return int_inst_spec::IMM;
-		default: return int_inst_spec::NONE;
+		case SHAPE_RRR: return cpu_inst_spec::REG;
+		case SHAPE_RRI: return cpu_inst_spec::IMM;
+		default: return cpu_inst_spec::NONE;
 	}
 }
 
-SO_HD constexpr i8 int_shape_dst_slot(int_inst_shape s) { return s == SHAPE_NONE ? (i8)-1 : (i8)0; }
+SO_HD constexpr i8 cpu_shape_dst_slot(cpu_inst_shape s) { return s == SHAPE_NONE ? (i8)-1 : (i8)0; }
 
-SO_HD constexpr i8 int_shape_src_slot(int_inst_shape s) {
+SO_HD constexpr i8 cpu_shape_src_slot(cpu_inst_shape s) {
 	switch(s) {
 		case SHAPE_RRR:
 		case SHAPE_RRI:
@@ -131,19 +131,19 @@ SO_HD constexpr i8 int_shape_src_slot(int_inst_shape s) {
 	}
 }
 
-SO_HD constexpr i8 int_shape_src2_slot(int_inst_shape s) { return s == SHAPE_RRR ? (i8)2 : (i8)-1; }
+SO_HD constexpr i8 cpu_shape_src2_slot(cpu_inst_shape s) { return s == SHAPE_RRR ? (i8)2 : (i8)-1; }
 
-SO_HD constexpr int_inst_db int_build_inst_db() {
-	int_inst_db d = {};
+SO_HD constexpr cpu_inst_db cpu_build_inst_db() {
+	cpu_inst_db d = {};
 
 #define ROW(TAG, MN, SHAPE, COMM, EXT_BIT)                                                         \
-	d.row[OP_##TAG] = int_inst_spec{                                                                 \
+	d.row[OP_##TAG] = cpu_inst_spec{                                                                 \
 		MN,                                                                                            \
-		{int_shape_op0(SHAPE), int_shape_op1(SHAPE), int_shape_op2(SHAPE), int_inst_spec::NONE},       \
+		{cpu_shape_op0(SHAPE), cpu_shape_op1(SHAPE), cpu_shape_op2(SHAPE), cpu_inst_spec::NONE},       \
 		OP_##TAG,                                                                                      \
-		int_shape_dst_slot(SHAPE),                                                                     \
-		int_shape_src_slot(SHAPE),                                                                     \
-		int_shape_src2_slot(SHAPE),                                                                    \
+		cpu_shape_dst_slot(SHAPE),                                                                     \
+		cpu_shape_src_slot(SHAPE),                                                                     \
+		cpu_shape_src2_slot(SHAPE),                                                                    \
 		(u32)(EXT_BIT),                                                                                \
 		(u8)(COMM)};
 
@@ -161,34 +161,34 @@ SO_HD constexpr int_inst_db int_build_inst_db() {
 #undef X
 
 #undef ROW
-	d.row[OP_NOP] = int_inst_spec{
-		"nop",		 {int_inst_spec::NONE, int_inst_spec::NONE, int_inst_spec::NONE, int_inst_spec::NONE},
+	d.row[OP_NOP] = cpu_inst_spec{
+		"nop",		 {cpu_inst_spec::NONE, cpu_inst_spec::NONE, cpu_inst_spec::NONE, cpu_inst_spec::NONE},
 		OP_NOP,		 -1,
 		-1,				 -1,
 		EXT_RV32I, 0};
 	return d;
 }
 
-inline constexpr int_inst_db INT_INST_DB_HOST = int_build_inst_db();
+inline constexpr cpu_inst_db CPU_INST_DB_HOST = cpu_build_inst_db();
 
 #ifdef __CUDACC__
-static __constant__ int_inst_db INT_INST_DB_DEV = int_build_inst_db();
+static __constant__ cpu_inst_db CPU_INST_DB_DEV = cpu_build_inst_db();
 #endif // #ifdef __CUDACC__
 
-SO_HD const int_inst_spec* int_find_spec(int_opcode op) {
+SO_HD const cpu_inst_spec* cpu_find_spec(cpu_opcode op) {
 #ifdef __CUDA_ARCH__
-	return &INT_INST_DB_DEV.row[op];
+	return &CPU_INST_DB_DEV.row[op];
 #else
-	return &INT_INST_DB_HOST.row[op];
+	return &CPU_INST_DB_HOST.row[op];
 #endif // #ifdef __CUDA_ARCH__
 }
 
-ARR_DECL(int_inst, int_inst_arr)
+ARR_DECL(cpu_inst, cpu_inst_arr)
 
-u8 int_spec_get_operand_count(const int_inst_spec* spec);
-b32 int_op_is_commutative(int_opcode op);
-int_opcode int_find_inst_op(str name, const int_inst_spec::operand* operands, u8 op_count);
-str int_operand_to_string(arena* a, int_inst::operand op, int_inst_spec::operand ty);
-void int_print_enabled_extensions(u32 mask);
+u8 cpu_spec_get_operand_count(const cpu_inst_spec* spec);
+b32 cpu_op_is_commutative(cpu_opcode op);
+cpu_opcode cpu_find_inst_op(str name, const cpu_inst_spec::operand* operands, u8 op_count);
+str cpu_operand_to_string(arena* a, cpu_inst::operand op, cpu_inst_spec::operand ty);
+void cpu_print_enabled_extensions(u32 mask);
 
-#endif // #ifndef INSTRUCTION_CUH
+#endif // #ifndef CPU_INSTRUCTION_CUH

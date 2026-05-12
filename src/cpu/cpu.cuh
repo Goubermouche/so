@@ -1,9 +1,9 @@
-#ifndef CPU_CUH
-#define CPU_CUH
+#ifndef CPU_CPU_CUH
+#define CPU_CPU_CUH
 
 #include "utl/device.h"
 
-typedef enum int_reg_index {
+typedef enum cpu_reg_index {
 	REG_X0 = 0,
 	REG_X1,
 	REG_X2,
@@ -37,13 +37,13 @@ typedef enum int_reg_index {
 	REG_X30,
 	REG_X31,
 	REG_COUNT = 32,
-} int_reg_index;
+} cpu_reg_index;
 
-typedef struct int_cpu_state {
+typedef struct cpu_state {
 	u64 regs[32];
-} int_cpu_state;
+} cpu_state;
 
-SO_HD const char* int_reg_name(u32 r) {
+SO_HD const char* cpu_reg_name(u32 r) {
 	switch(r) {
 		case 0: return "x0";
 		case 1: return "x1";
@@ -81,4 +81,4 @@ SO_HD const char* int_reg_name(u32 r) {
 	}
 }
 
-#endif // #ifndef CPU_CUH
+#endif // #ifndef CPU_CPU_CUH

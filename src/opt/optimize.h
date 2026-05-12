@@ -1,7 +1,7 @@
-#ifndef OPTIMIZE_H
-#define OPTIMIZE_H
+#ifndef OPT_OPTIMIZE_H
+#define OPT_OPTIMIZE_H
 
-#include "int/program.h"
+#include "cpu/program.h"
 #include "opt/driver.cuh"
 #include "opt/enumerate.h"
 #include "smt/smt.h"
@@ -17,15 +17,15 @@ typedef struct opt_config {
 } opt_config;
 
 typedef struct opt_context {
-	const int_program* prog;
+	const cpu_program* prog;
 	const opt_config* cfg;
 	u64 live_in;
 	u64 live_out;
-	int_cpu_state test_in[SYNTH_N_TESTS];
-	int_cpu_state target_out[SYNTH_N_TESTS];
+	cpu_state test_in[SYNTH_N_TESTS];
+	cpu_state target_out[SYNTH_N_TESTS];
 	u32 n_tests;
 	arena mem;
-	int_inst* best_prog;
+	cpu_inst* best_prog;
 	u32 best_prog_len;
 	u32 best_len;
 	smt_verify_report rep;
@@ -52,6 +52,6 @@ void opt_seed_test_vectors(opt_context* ctx);
 void opt_filter_batch(opt_context* ctx, const opt_candidate_arr* cands);
 b32 opt_run_length(opt_context* ctx, u32 len);
 
-void opt_run(const int_program* prog, const opt_config* cfg);
+void opt_run(const cpu_program* prog, const opt_config* cfg);
 
-#endif // #ifndef OPTIMIZE_H
+#endif // #ifndef OPT_OPTIMIZE_H

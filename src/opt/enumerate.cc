@@ -4,10 +4,10 @@ opt_opcode_pool opt_build_opcode_pool(u32 ext_mask) {
 	opt_opcode_pool p = {};
 
 	for(u32 i = 0; i < (u32)OP_COUNT; ++i) {
-		const int_inst_spec& s = INT_INST_DB_HOST.row[i];
+		const cpu_inst_spec& s = CPU_INST_DB_HOST.row[i];
 		if(s.op == OP_NOP) { continue; }
 		if(!(s.ext & ext_mask)) { continue; }
-		p.ops[p.n_ops++] = (int_opcode)i;
+		p.ops[p.n_ops++] = (cpu_opcode)i;
 	}
 
 	return p;
@@ -54,15 +54,15 @@ void opt_enum_backward(opt_enumerator* e, opt_enum_state* s) {
 
 	// iterate opcode -> dst -> sources
 	for(u32 oi = 0; oi < e->pool->n_ops; ++oi) {
-		const int_opcode op = e->pool->ops[oi];
-		const int_inst_spec& spec = INT_INST_DB_HOST.row[op];
+		const cpu_opcode op = e->pool->ops[oi];
+		const cpu_inst_spec& spec = CPU_INST_DB_HOST.row[op];
 
 		b32 has_rs1 = spec.src_slot >= 0;
 		b32 has_rs2 = spec.src2_slot >= 0;
 		b32 has_imm = false;
 
 		for(u32 k = 0; k < 4; ++k) {
-			if(spec.operands[k] == int_inst_spec::IMM) { has_imm = true; }
+			if(spec.operands[k] == cpu_inst_spec::IMM) { has_imm = true; }
 		}
 
 		u64 dst_iter = dst_avail;
@@ -123,7 +123,7 @@ void opt_enum_backward(opt_enumerator* e, opt_enum_state* s) {
 
 void opt_try_place(opt_enumerator* e, opt_enum_state* s, const opt_place_attempt* a) {
 	if(e->out->size >= e->cap) { return; }
-	const int_inst_spec& spec = INT_INST_DB_HOST.row[a->op];
+	const cpu_inst_spec& spec = CPU_INST_DB_HOST.row[a->op];
 	if(a->rd == 0) { return; }
 	if(!(s->demanded & (1ULL << a->rd))) { return; }
 
@@ -138,23 +138,23 @@ void opt_try_place(opt_enumerator* e, opt_enum_state* s, const opt_place_attempt
 	}
 
 	// for R-type with two register sources, force rs1 <= rs2
-	if(!a->is_imm && spec.src2_slot >= 0 && int_op_is_commutative(a->op)) {
+	if(!a->is_imm && spec.src2_slot >= 0 && cpu_op_is_commutative(a->op)) {
 		if(a->rs1 > a->rs2_or_imm_idx) { return; }
 	}
 
 	// build the instruction
-	int_inst in = {};
+	cpu_inst in = {};
 	in.op = a->op;
-	in.operands[spec.dst_slot].reg = (int_reg_index)a->rd;
+	in.operands[spec.dst_slot].reg = (cpu_reg_index)a->rd;
 
-	if(spec.src_slot >= 0) { in.operands[spec.src_slot].reg = (int_reg_index)a->rs1; }
+	if(spec.src_slot >= 0) { in.operands[spec.src_slot].reg = (cpu_reg_index)a->rs1; }
 	if(!a->is_imm && spec.src2_slot >= 0) {
-		in.operands[spec.src2_slot].reg = (int_reg_index)a->rs2_or_imm_idx;
+		in.operands[spec.src2_slot].reg = (cpu_reg_index)a->rs2_or_imm_idx;
 	}
 
 	if(a->is_imm) {
 		for(u32 k = 0; k < 4; ++k) {
-			if(spec.operands[k] == int_inst_spec::IMM) {
+			if(spec.operands[k] == cpu_inst_spec::IMM) {
 				in.operands[k].i = (u64)e->imms->vals[a->rs2_or_imm_idx];
 				break;
 			}

@@ -1,7 +1,7 @@
 #ifndef SMT_STATE_H
 #define SMT_STATE_H
 
-#include "int/instruction.cuh"
+#include "cpu/instruction.cuh"
 #include <z3.h>
 
 // register accesses
@@ -46,4 +46,4 @@ smt_state smt_make_input_state(Z3_context ctx);
 smt_state smt_clone_state(Z3_context ctx, const smt_state* src);
 void smt_free_state(Z3_context ctx, smt_state* state);
 
-#endif // SMT_STATE_H
+#endif // ifndef SMT_STATE_H

@@ -1,11 +1,11 @@
 #ifndef OPT_ENUMERATE_H
 #define OPT_ENUMERATE_H
 
-#include "int/instruction.cuh"
+#include "cpu/instruction.cuh"
 #include "opt/driver.cuh"
 
 typedef struct opt_opcode_pool {
-	int_opcode ops[OP_COUNT];
+	cpu_opcode ops[OP_COUNT];
 	u32 n_ops;
 } opt_opcode_pool;
 
@@ -15,7 +15,7 @@ typedef struct opt_imm_pool {
 } opt_imm_pool;
 
 typedef struct opt_candidate {
-	int_inst code[SYNTH_PROG_LEN];
+	cpu_inst code[SYNTH_PROG_LEN];
 	u32 len;
 } opt_candidate;
 
@@ -40,7 +40,7 @@ typedef struct opt_enum_state {
 } opt_enum_state;
 
 typedef struct opt_place_attempt {
-	int_opcode op;
+	cpu_opcode op;
 	u32 rd;
 	u32 rs1;
 	u32 rs2_or_imm_idx;

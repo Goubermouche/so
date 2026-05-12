@@ -1,8 +1,8 @@
-#ifndef DRIVER_CUH
-#define DRIVER_CUH
+#ifndef OPT_DRIVER_CUH
+#define OPT_DRIVER_CUH
 
-#include "int/cpu.cuh"
-#include "int/instruction.cuh"
+#include "cpu/cpu.cuh"
+#include "cpu/instruction.cuh"
 
 #define SYNTH_PROG_LEN 8
 #define SYNTH_N_TESTS 64
@@ -14,10 +14,10 @@ typedef struct opt_synth_config {
 	u64 live_mask;
 	u32 n_tests;
 	u32 prog_len;
-	const int_inst* candidates;
+	const cpu_inst* candidates;
 	u64 n_candidates;
-	const int_cpu_state* test_in;
-	const int_cpu_state* target_out;
+	const cpu_state* test_in;
+	const cpu_state* target_out;
 	f64 elapsed_ms_total;
 } opt_synth_config;
 
@@ -38,11 +38,11 @@ typedef struct opt_gpu_context {
 } opt_gpu_context;
 
 typedef struct opt_shared_block {
-	int_inst progs[N_WARPS_PER_BLOCK][SYNTH_PROG_LEN];
+	cpu_inst progs[N_WARPS_PER_BLOCK][SYNTH_PROG_LEN];
 } opt_shared_block;
 
 i32 opt_gpu_runner_make(opt_gpu_context* ctx, u64 max_chunk_cands);
 void opt_gpu_runner_free(opt_gpu_context* ctx);
 void opt_gpu_runner_run(opt_gpu_context* ctx, opt_synth_config* cfg, opt_synth_result* results);
 
-#endif // #ifndef DRIVER_CUH
+#endif // #ifndef OPT_DRIVER_CUH
