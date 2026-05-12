@@ -179,6 +179,7 @@ int_token int_lexer_string_to_num(int_lexer* lex, str string) {
 	ASSERT(string.size < sizeof(buf), "numeric literal too long ('%.*s')\n", (int)string.size,
 				 (const char*)string.str);
 	memcpy(buf, string.str, string.size);
+	if (string.size >= sizeof(buf)) __builtin_unreachable();
 	buf[string.size] = 0;
 	char* data = buf;
 
