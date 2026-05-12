@@ -1,13 +1,15 @@
 #ifndef TYPE_H
 #define TYPE_H
 
-#include <sstream>
-#include <vector>
-
+#include <ctype.h>
+#include <errno.h>
 #include <math.h>
-#include <stdio.h>
-#include <string.h>
+#include <stdarg.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
 
 #ifdef DEBUG
 #define DEBUG_MODE
@@ -63,15 +65,6 @@ typedef int64_t i64;
 typedef float f32;
 typedef double f64;
 typedef bool b32;
-
-using str = std::string;
-
-template <typename type> using arr = std::vector<type>;
-
-inline str pad_to_length(const str& s, char pad, u64 target_len) {
-	u64 pad_len = (target_len > s.size()) ? (target_len - s.size()) : 0;
-	return s + str(pad_len, pad);
-}
 
 static inline f64 get_time_ms(void) {
 	struct timespec ts;
