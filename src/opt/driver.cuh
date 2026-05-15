@@ -19,6 +19,7 @@ typedef struct opt_synth_config {
 	const cpu_state* test_in;
 	const cpu_state* target_out;
 	f64 elapsed_ms_total;
+	b32 candidates_on_device;
 } opt_synth_config;
 
 typedef struct opt_synth_result {

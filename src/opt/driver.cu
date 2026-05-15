@@ -14,11 +14,8 @@ __global__ void synth_kernel(const cpu_inst* __restrict__ d_cands, u64 n_candida
 
 	__shared__ opt_shared_block shared;
 
-	if(lane == 0) {
-#pragma unroll
-		for(u32 i = 0; i < SYNTH_PROG_LEN; ++i) {
-			shared.progs[warp_local][i] = d_cands[cand_id * SYNTH_PROG_LEN + i];
-		}
+	if(lane < SYNTH_PROG_LEN) {
+		shared.progs[warp_local][lane] = d_cands[cand_id * SYNTH_PROG_LEN + lane];
 	}
 
 	__syncwarp();
@@ -32,30 +29,34 @@ __global__ void synth_kernel(const cpu_inst* __restrict__ d_cands, u64 n_candida
 	for(u32 t = 0; t < TESTS_PER_LANE; ++t) {
 		const u32 test_idx = lane * TESTS_PER_LANE + t;
 
-		if(test_idx >= n_tests) { break; }
-
-		u64 regs[32];
+		const b32 is_active = (test_idx < n_tests);
+		if(is_active) {
+			u64 regs[32];
 #pragma unroll
-		for(u32 i = 0; i < 32; ++i) { regs[i] = d_test_in[test_idx].regs[i]; }
+			for(u32 i = 0; i < 32; ++i) { regs[i] = d_test_in[test_idx].regs[i]; }
 
-		opt_lane_run(regs, prog, prog_len);
+			opt_lane_run(regs, prog, prog_len);
 
-		b32 ok = true;
-		u64 m = live_mask;
-		while(m) {
-			const u32 r = __ffsll((long long)m) - 1;
-			m &= m - 1;
-			if(regs[r] != d_target_out[test_idx].regs[r]) {
-				ok = false;
-				break;
+			b32 ok = true;
+			u64 m = live_mask;
+			while(m) {
+				const u32 r = __ffsll((long long)m) - 1;
+				m &= m - 1;
+				if(regs[r] != d_target_out[test_idx].regs[r]) {
+					ok = false;
+					break;
+				}
+			}
+
+			if(ok) {
+				++pass_local;
+			} else {
+				fail_local |= (1u << test_idx);
 			}
 		}
 
-		if(ok) {
-			++pass_local;
-		} else {
-			fail_local |= (1u << test_idx);
-		}
+		// early out
+		if(__any_sync(0xFFFFFFFFu, fail_local)) { break; }
 	}
 
 // warp-wide reductions
@@ -89,7 +90,7 @@ i32 opt_gpu_runner_make(opt_gpu_context* ctx, u64 max_chunk_cands) {
 	u64 free_mem = 0;
 	u64 total_mem = 0;
 	if(cudaMemGetInfo(&free_mem, &total_mem) != cudaSuccess) { return 3; }
-	u64 usable_mem = (u64)((f64)free_mem * 0.90); // claim 90% of free vram
+	u64 usable_mem = (u64)((f64)free_mem * 0.30);
 
 	const u64 fixed_mem_bytes = 2ull * SYNTH_N_TESTS * sizeof(cpu_state);
 	if(usable_mem <= fixed_mem_bytes) {
@@ -175,19 +176,24 @@ void opt_gpu_runner_run(opt_gpu_context* ctx, opt_synth_config* cfg, opt_synth_r
 			this_chunk = ctx->max_chunk_cands;
 		}
 
-		// upload this chunk's candidates
-		const cpu_inst* to_copy = cfg->candidates + done * SYNTH_PROG_LEN;
-		htod_memcpy(ctx->d_cands, to_copy, this_chunk * per_cand_bytes, "cp chunk cands");
+		const cpu_inst* d_chunk_cands;
+		if(cfg->candidates_on_device) {
+			d_chunk_cands = cfg->candidates + done * SYNTH_PROG_LEN;
+		} else {
+			const cpu_inst* to_copy = cfg->candidates + done * SYNTH_PROG_LEN;
+			htod_memcpy(ctx->d_cands, to_copy, this_chunk * per_cand_bytes, "cp chunk cands");
+			d_chunk_cands = (const cpu_inst*)ctx->d_cands;
+		}
 		const u32 n_blocks = (u32)((this_chunk + N_WARPS_PER_BLOCK - 1) / N_WARPS_PER_BLOCK);
 		dim3 grid(n_blocks);
 		dim3 block(THREADS_PER_BLOCK);
 
 		// run chunk
 		cudaEventRecord(e0);
-		synth_kernel<<<grid, block>>>(
-			(const cpu_inst*)ctx->d_cands, this_chunk, (const cpu_state*)ctx->d_test_in,
-			(const cpu_state*)ctx->d_target_out, cfg->live_mask, cfg->prog_len, cfg->n_tests,
-			(u32*)ctx->d_fail_mask, (u32*)ctx->d_pass_count);
+		synth_kernel<<<grid, block>>>(d_chunk_cands, this_chunk, (const cpu_state*)ctx->d_test_in,
+																	(const cpu_state*)ctx->d_target_out, cfg->live_mask,
+																	cfg->prog_len, cfg->n_tests, (u32*)ctx->d_fail_mask,
+																	(u32*)ctx->d_pass_count);
 		cudaEventRecord(e1);
 		check_cuda(cudaGetLastError(), "kernel launch");
 		check_cuda(cudaDeviceSynchronize(), "kernel sync");

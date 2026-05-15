@@ -3,7 +3,7 @@
 
 #include "cpu/program.h"
 #include "opt/driver.cuh"
-#include "opt/enumerate.h"
+#include "opt/enumerate.cuh"
 #include "smt/smt.h"
 
 typedef struct opt_config {
@@ -36,6 +36,9 @@ typedef struct opt_context {
 	f64 total_smt_ms;
 	u64 total_smt_calls;
 	opt_gpu_context gpu;
+	// persistent enumerator state: owns the device-side frontier ping-pong buffers and
+	// the candidate output. allocated once at startup, reused across cegis iters
+	opt_enum_context enum_ctx;
 } opt_context;
 
 typedef struct opt_survivor_set {
@@ -49,7 +52,7 @@ void opt_log_startup(const opt_context* ctx);
 void opt_log_results(const opt_context* ctx, b32 found);
 
 void opt_seed_test_vectors(opt_context* ctx);
-void opt_filter_batch(opt_context* ctx, const opt_candidate_arr* cands);
+void opt_filter_batch(opt_context* ctx, const opt_candidate* d_cands, u64 n_cands, u32 prog_len);
 b32 opt_run_length(opt_context* ctx, u32 len);
 
 void opt_run(const cpu_program* prog, const opt_config* cfg);

@@ -108,62 +108,45 @@ void opt_seed_test_vectors(opt_context* ctx) {
 	ctx->n_tests = n_initial;
 }
 
-void opt_filter_batch(opt_context* ctx, const opt_candidate_arr* cands) {
-	const u64 N = cands->size;
-	if(N == 0) { return; }
-
+void opt_filter_batch(opt_context* ctx, const opt_candidate* d_cands, u64 n_cands, u32 prog_len) {
+	if(n_cands == 0) { return; }
 	arena scratch = arena_make(0);
-	cpu_inst* flat = push_array(&scratch, cpu_inst, N * SYNTH_PROG_LEN);
-
-	for(u64 i = 0; i < N; ++i) {
-		const opt_candidate& c = cands->v[i];
-
-		for(u32 j = 0; j < SYNTH_PROG_LEN; ++j) {
-			if(j < c.len) {
-				flat[i * SYNTH_PROG_LEN + j] = c.code[j];
-			} else {
-				cpu_inst nop = {};
-				nop.op = OP_NOP;
-				flat[i * SYNTH_PROG_LEN + j] = nop;
-			}
-		}
-	}
 
 	opt_synth_config gcfg;
 	gcfg.live_mask = ctx->live_out;
 	gcfg.n_tests = ctx->n_tests;
-	gcfg.prog_len = cands->v[0].len;
-	gcfg.candidates = flat;
-	gcfg.n_candidates = N;
+	gcfg.prog_len = prog_len;
+	gcfg.candidates = (const cpu_inst*)d_cands;
+	gcfg.n_candidates = n_cands;
 	gcfg.test_in = ctx->test_in;
 	gcfg.target_out = ctx->target_out;
-	opt_synth_result* results = push_array(&scratch, opt_synth_result, N);
+	gcfg.candidates_on_device = true;
+	opt_synth_result* results = push_array(&scratch, opt_synth_result, n_cands);
 	opt_gpu_runner_run(&ctx->gpu, &gcfg, results);
 	ctx->total_gpu_ms += gcfg.elapsed_ms_total;
-	ctx->total_candidates += N;
+	ctx->total_candidates += n_cands;
 	++ctx->total_gpu_passes;
 
-	// any candidate that passed all tests is forwarded to SMT
 	u64 ok_count = 0;
-	for(u64 i = 0; i < N; ++i) {
+	for(u64 i = 0; i < n_cands; ++i) {
 		if(results[i].pass_count == ctx->n_tests) {
 			++ok_count;
-			// SMT verify
-			cpu_inst* rw = flat + i * SYNTH_PROG_LEN;
-			const u32 rw_len = cands->v[i].len;
+			// pull the candidate instructions
+			cpu_inst rw[SYNTH_PROG_LEN];
+			dtoh_memcpy(rw, d_cands + i, sizeof(opt_candidate), "cpback survivor");
+
 			const f64 t0 = get_time_ms();
-			cpu_program b = {rw, rw_len};
+			cpu_program b = {rw, prog_len};
 			smt_verify_report rep = smt_eq(ctx->prog, &b, ctx->live_out);
 			ctx->total_smt_ms += get_time_ms() - t0;
 			++ctx->total_smt_calls;
 
 			if(rep.kind == SMT_EQUIVALENT) {
 				ctx->rep = rep;
-				// copy the winning program before we release the scratch arena
-				cpu_inst* dst = push_array(&ctx->mem, cpu_inst, rw_len);
-				memcpy(dst, rw, sizeof(cpu_inst) * rw_len);
+				cpu_inst* dst = push_array(&ctx->mem, cpu_inst, prog_len);
+				memcpy(dst, rw, sizeof(cpu_inst) * prog_len);
 				ctx->best_prog = dst;
-				ctx->best_prog_len = rw_len;
+				ctx->best_prog_len = prog_len;
 				arena_release(&scratch);
 				return;
 			} else if(rep.kind == SMT_COUNTEREXAMPLE) {
@@ -202,8 +185,17 @@ void opt_run(const cpu_program* prog, const opt_config* cfg) {
 
 	opt_log_startup(&ctx);
 	opt_seed_test_vectors(&ctx);
-	if(opt_gpu_runner_make(&ctx.gpu, ctx.cfg->gpu_chunk_size)) {
+	const u64 chunk_cap = ctx.cfg->gpu_chunk_size ? ctx.cfg->gpu_chunk_size : ctx.cfg->batch_size;
+
+	if(opt_gpu_runner_make(&ctx.gpu, chunk_cap)) {
 		fprintf(stderr, "error: gpu_runner::init failed\n");
+		arena_release(&ctx.mem);
+		return;
+	}
+
+	if(opt_enum_context_make(&ctx.enum_ctx, ctx.cfg->batch_size)) {
+		fprintf(stderr, "error: enum_ctx::init failed\n");
+		opt_gpu_runner_free(&ctx.gpu);
 		arena_release(&ctx.mem);
 		return;
 	}
@@ -219,6 +211,8 @@ void opt_run(const cpu_program* prog, const opt_config* cfg) {
 	}
 
 	opt_log_results(&ctx, found);
+	opt_enum_context_free(&ctx.enum_ctx);
+	opt_gpu_runner_free(&ctx.gpu);
 	arena_release(&ctx.mem);
 }
 
@@ -236,35 +230,23 @@ b32 opt_run_length(opt_context* ctx, u32 len) {
 
 	while(cegis_iter < ctx->cfg->max_cegis_iters) {
 		const u32 prev_n_tests = ctx->n_tests;
-		arena iter_arena = arena_make(0);
-		opt_candidate_arr cands = opt_candidate_arr_make(&iter_arena);
-		opt_candidate_arr_reserve(&cands, ctx->cfg->batch_size);
-
 		const f64 t0 = get_time_ms();
 		opt_enum_config cfg = {&pool, &imms, ctx->live_in, ctx->live_out, len, max_scratch};
-		opt_enumerate(&cfg, &cands, ctx->cfg->batch_size);
+		opt_candidate* d_cands = nullptr;
+		u64 n_cands = 0;
+		opt_enumerate(&ctx->enum_ctx, &cfg, ctx->cfg->batch_size, &d_cands, &n_cands);
 
-		printf("  iter %u (%zu candidates (%fms))\n", cegis_iter, cands.size, get_time_ms() - t0);
-		if(cands.size == 0) {
-			arena_release(&iter_arena);
-			return false;
-		}
+		printf("  iter %u (%zu candidates (%fms))\n", cegis_iter, n_cands, get_time_ms() - t0);
+		if(n_cands == 0) { return false; }
 
-		opt_filter_batch(ctx, &cands);
+		opt_filter_batch(ctx, d_cands, n_cands, len);
 
-		if(ctx->best_prog != 0) {
-			arena_release(&iter_arena);
-			return true;
-		}
+		if(ctx->best_prog != 0) { return true; }
 
 		// if no new counterexample was added, we exhausted the candidate space at this L without
 		// finding equivalence
-		if(ctx->n_tests == prev_n_tests) {
-			arena_release(&iter_arena);
-			return false;
-		}
+		if(ctx->n_tests == prev_n_tests) { return false; }
 
-		arena_release(&iter_arena);
 		++cegis_iter;
 	}
 
