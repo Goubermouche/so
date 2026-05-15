@@ -2,6 +2,7 @@
 - Respect the provided [**.clang-format**](.clang-format), run Clang format before committing
 - Use tabs (2 spaces wide)
 - Identifiers must use `snake_case`
+- Comments must use the `//` format and must be lowercase, with the exception of acronyms
 - Constants and macros must use `CAPITAL_SNAKE_CASE`
 - Don't use C++ features (WIP moving to pure C)
 - `src/` contains directories which represent namespaces (all objects declared within a given directory must have a 1-3 character long prefix followed by an underscore, which refers to its namespace)
