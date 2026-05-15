@@ -4,7 +4,7 @@
 __global__ void synth_kernel(const cpu_inst* __restrict__ d_cands, u64 n_candidates,
 														 const cpu_state* __restrict__ d_test_in,
 														 const cpu_state* __restrict__ d_target_out, u64 live_mask,
-														 u32 prog_len, u32 n_tests, u32* __restrict__ d_fail_mask,
+														 u32 prog_len, u32* __restrict__ d_fail_mask,
 														 u32* __restrict__ d_pass_count) {
 	const u32 lane = threadIdx.x & 31;
 	const u32 warp_local = threadIdx.x >> 5;
@@ -25,15 +25,20 @@ __global__ void synth_kernel(const cpu_inst* __restrict__ d_cands, u64 n_candida
 	u32 fail_local = 0;
 	u32 pass_local = 0;
 
+	// phase 0: lanes 0-15 evaluate tests 0-15
+	// phase 1: lanes 16-31 evaluate tests 16-31
 #pragma unroll
-	for(u32 t = 0; t < TESTS_PER_LANE; ++t) {
-		const u32 test_idx = lane * TESTS_PER_LANE + t;
+	for(u32 phase = 0; phase < 2; ++phase) {
+		const u32 phase_start = phase * 16;
+		const u32 phase_end = phase_start + 16;
+		const b32 in_phase = (lane >= phase_start) && (lane < phase_end);
+		const b32 in_bounds = (lane < SYNTH_N_TESTS);
+		const b32 is_active = in_phase && in_bounds;
 
-		const b32 is_active = (test_idx < n_tests);
 		if(is_active) {
 			u64 regs[32];
 #pragma unroll
-			for(u32 i = 0; i < 32; ++i) { regs[i] = d_test_in[test_idx].regs[i]; }
+			for(u32 i = 0; i < 32; ++i) { regs[i] = d_test_in[lane].regs[i]; }
 
 			opt_lane_run(regs, prog, prog_len);
 
@@ -42,7 +47,7 @@ __global__ void synth_kernel(const cpu_inst* __restrict__ d_cands, u64 n_candida
 			while(m) {
 				const u32 r = __ffsll((long long)m) - 1;
 				m &= m - 1;
-				if(regs[r] != d_target_out[test_idx].regs[r]) {
+				if(regs[r] != d_target_out[lane].regs[r]) {
 					ok = false;
 					break;
 				}
@@ -51,11 +56,11 @@ __global__ void synth_kernel(const cpu_inst* __restrict__ d_cands, u64 n_candida
 			if(ok) {
 				++pass_local;
 			} else {
-				fail_local |= (1u << test_idx);
+				fail_local |= (1u << lane);
 			}
 		}
 
-		// early out
+		// early out in phase 0
 		if(__any_sync(0xFFFFFFFFu, fail_local)) { break; }
 	}
 
@@ -192,8 +197,7 @@ void opt_gpu_runner_run(opt_gpu_context* ctx, opt_synth_config* cfg, opt_synth_r
 		cudaEventRecord(e0);
 		synth_kernel<<<grid, block>>>(d_chunk_cands, this_chunk, (const cpu_state*)ctx->d_test_in,
 																	(const cpu_state*)ctx->d_target_out, cfg->live_mask,
-																	cfg->prog_len, cfg->n_tests, (u32*)ctx->d_fail_mask,
-																	(u32*)ctx->d_pass_count);
+																	cfg->prog_len, (u32*)ctx->d_fail_mask, (u32*)ctx->d_pass_count);
 		cudaEventRecord(e1);
 		check_cuda(cudaGetLastError(), "kernel launch");
 		check_cuda(cudaDeviceSynchronize(), "kernel sync");

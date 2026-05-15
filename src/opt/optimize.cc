@@ -85,10 +85,9 @@ void opt_print_reg_mask(u64 mask) {
 
 void opt_seed_test_vectors(opt_context* ctx) {
 	// 32 random test vectors at start, the CEGIS loop adds counterexamples in subsequent slots
-	const u32 n_initial = 32;
 	u64 s = ctx->cfg->seed ^ 0x9E3779B97F4A7C15ULL;
 
-	for(u32 t = 0; t < n_initial; ++t) {
+	for(u32 t = 0; t < SYNTH_N_TESTS; ++t) {
 		cpu_state in = {};
 
 		for(u32 i = 0; i < 32; ++i) {
@@ -104,8 +103,6 @@ void opt_seed_test_vectors(opt_context* ctx) {
 		ctx->test_in[t] = in;
 		ctx->target_out[t] = opt_host_run(ctx->prog, &in);
 	}
-
-	ctx->n_tests = n_initial;
 }
 
 void opt_filter_batch(opt_context* ctx, const opt_candidate* d_cands, u64 n_cands, u32 prog_len) {
@@ -114,7 +111,6 @@ void opt_filter_batch(opt_context* ctx, const opt_candidate* d_cands, u64 n_cand
 
 	opt_synth_config gcfg;
 	gcfg.live_mask = ctx->live_out;
-	gcfg.n_tests = ctx->n_tests;
 	gcfg.prog_len = prog_len;
 	gcfg.candidates = (const cpu_inst*)d_cands;
 	gcfg.n_candidates = n_cands;
@@ -129,7 +125,7 @@ void opt_filter_batch(opt_context* ctx, const opt_candidate* d_cands, u64 n_cand
 
 	u64 ok_count = 0;
 	for(u64 i = 0; i < n_cands; ++i) {
-		if(results[i].pass_count == ctx->n_tests) {
+		if(results[i].pass_count == SYNTH_N_TESTS) {
 			++ok_count;
 			// pull the candidate instructions
 			cpu_inst rw[SYNTH_PROG_LEN];
@@ -151,12 +147,10 @@ void opt_filter_batch(opt_context* ctx, const opt_candidate* d_cands, u64 n_cand
 				return;
 			} else if(rep.kind == SMT_COUNTEREXAMPLE) {
 				// add the counterexample, then abort this batch
-				if(ctx->n_tests < SYNTH_N_TESTS) {
-					const u32 slot = ctx->n_tests++;
-					ctx->test_in[slot] = rep.counterexample;
-					ctx->target_out[slot] = opt_host_run(ctx->prog, &rep.counterexample);
-				}
-
+				const u32 slot = 16 + (ctx->counterexample_count % 16);
+				ctx->counterexample_count++;
+				ctx->test_in[slot] = rep.counterexample;
+				ctx->target_out[slot] = opt_host_run(ctx->prog, &rep.counterexample);
 				arena_release(&scratch);
 				return;
 			}
@@ -168,12 +162,12 @@ void opt_filter_batch(opt_context* ctx, const opt_candidate* d_cands, u64 n_cand
 
 void opt_run(const cpu_program* prog, const opt_config* cfg) {
 	opt_context ctx;
-	ctx.n_tests = 0;
 	ctx.best_len = 0;
 	ctx.best_prog = 0;
 	ctx.best_prog_len = 0;
 	ctx.total_candidates = 0;
 	ctx.total_gpu_passes = 0;
+	ctx.counterexample_count = 0;
 	ctx.total_gpu_ms = 0.0;
 	ctx.total_smt_ms = 0.0;
 	ctx.total_smt_calls = 0;
@@ -229,7 +223,7 @@ b32 opt_run_length(opt_context* ctx, u32 len) {
 	u32 cegis_iter = 0;
 
 	while(cegis_iter < ctx->cfg->max_cegis_iters) {
-		const u32 prev_n_tests = ctx->n_tests;
+		const u32 prev_counterexample_count = ctx->counterexample_count;
 		const f64 t0 = get_time_ms();
 		opt_enum_config cfg = {&pool, &imms, ctx->live_in, ctx->live_out, len, max_scratch};
 		opt_candidate* d_cands = nullptr;
@@ -242,11 +236,7 @@ b32 opt_run_length(opt_context* ctx, u32 len) {
 		opt_filter_batch(ctx, d_cands, n_cands, len);
 
 		if(ctx->best_prog != 0) { return true; }
-
-		// if no new counterexample was added, we exhausted the candidate space at this L without
-		// finding equivalence
-		if(ctx->n_tests == prev_n_tests) { return false; }
-
+		if(ctx->counterexample_count == prev_counterexample_count) { return false; }
 		++cegis_iter;
 	}
 

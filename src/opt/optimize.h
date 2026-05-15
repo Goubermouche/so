@@ -23,7 +23,6 @@ typedef struct opt_context {
 	u64 live_out;
 	cpu_state test_in[SYNTH_N_TESTS];
 	cpu_state target_out[SYNTH_N_TESTS];
-	u32 n_tests;
 	arena mem;
 	cpu_inst* best_prog;
 	u32 best_prog_len;
@@ -39,6 +38,7 @@ typedef struct opt_context {
 	// persistent enumerator state: owns the device-side frontier ping-pong buffers and
 	// the candidate output. allocated once at startup, reused across cegis iters
 	opt_enum_context enum_ctx;
+	u32 counterexample_count;
 } opt_context;
 
 typedef struct opt_survivor_set {
