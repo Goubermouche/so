@@ -8,7 +8,6 @@
 #define SYNTH_N_TESTS 32
 #define N_WARPS_PER_BLOCK 4
 #define THREADS_PER_BLOCK N_WARPS_PER_BLOCK * 32
-#define TESTS_PER_LANE SYNTH_N_TESTS / 32
 
 typedef struct opt_synth_config {
 	u64 live_mask;
