@@ -20,20 +20,20 @@ inline void check_cuda(cudaError_t err, const char* msg) {
 	}
 }
 
-inline void dmalloc(void** ptr, u64 size, const char* msg) {
-	check_cuda(cudaMalloc(ptr, size), msg);
+inline void dmalloc(void** ptr, u64 size) {
+	check_cuda(cudaMalloc(ptr, size), "cudaMalloc");
 }
 
-inline void hmalloc(void** ptr, u64 size, const char* msg) {
-	check_cuda(cudaMallocHost(ptr, size), msg);
+inline void hmalloc(void** ptr, u64 size) {
+	check_cuda(cudaMallocHost(ptr, size), "cudaMallocHost");
 }
 
-inline void htod_memcpy(void* dst, const void* src, u64 count, const char* msg) {
-	check_cuda(cudaMemcpy(dst, src, count, cudaMemcpyHostToDevice), msg);
+inline void htod_memcpy(void* dst, const void* src, u64 count) {
+	check_cuda(cudaMemcpy(dst, src, count, cudaMemcpyHostToDevice), "cudaMemcpyHostToDevice");
 }
 
-inline void dtoh_memcpy(void* dst, const void* src, u64 count, const char* msg) {
-	check_cuda(cudaMemcpy(dst, src, count, cudaMemcpyDeviceToHost), msg);
+inline void dtoh_memcpy(void* dst, const void* src, u64 count) {
+	check_cuda(cudaMemcpy(dst, src, count, cudaMemcpyDeviceToHost), "cudaMemcpyDeviceToHost");
 }
 
 inline i32 device_init() {

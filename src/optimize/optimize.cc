@@ -6,8 +6,8 @@
 #include "optimize/filter.cuh"
 #include "util/type.h"
 
-opt_config opt_config_make_default() {
-	opt_config cfg;
+opt_cfg opt_cfg_make_default() {
+	opt_cfg cfg;
 	cfg.seed = 1;
 	cfg.ext_mask = EXT_RV32I;
 	cfg.batch_size = 4000000;
@@ -32,15 +32,15 @@ void opt_log_startup(const opt_ctx* ctx) {
 	printf("extensions: ");
 	cpu_print_enabled_extensions(effective_mask);
 	printf("\n");
-	printf("max prog len: %u\n", SYNTH_PROG_LEN);
-	printf("batch size: %zu\n", ctx->cfg->batch_size);
+	printf("max prog len: %u\n", OPT_PROGRAM_LEN);
+	printf("batch size: %zu cands\n", ctx->cfg->batch_size);
 
 	arena_release(&scratch);
 }
 
 void opt_log_results(opt_ctx* ctx, b32 found) {
 	if(!found) {
-		printf("done: no optimizations found (len: %u)\n", SYNTH_PROG_LEN);
+		printf("done: no optimizations found (len: %u)\n", OPT_PROGRAM_LEN);
 		return;
 	}
 
@@ -80,7 +80,7 @@ void opt_init_tests(opt_ctx* ctx) {
 	// are placed into the last 16 slots (round robin)
 	u64 s = ctx->cfg->seed ^ 0x9E3779B97F4A7C15ull;
 
-	for(u32 t = 0; t < SYNTH_N_TESTS; ++t) {
+	for(u32 t = 0; t < OPT_FILTER_TEST_COUNT; ++t) {
 		cpu_state in = {};
 
 		for(u32 i = 0; i < 32; ++i) {
@@ -101,20 +101,19 @@ void opt_init_tests(opt_ctx* ctx) {
 b32 opt_filter_batch(opt_ctx* ctx, const opt_program* p, u64 p_cnt, u32 len) {
 	if(p_cnt == 0) { return false; }
 	arena scratch = arena_make(0);
-	opt_filter_config cfg;
+	opt_filter_cfg cfg;
 	cfg.live_mask = ctx->live_out;
 	cfg.prog_len = len;
 	cfg.candidates = (const cpu_inst*)p;
 	cfg.n_candidates = p_cnt;
 	cfg.test_in = ctx->test_in;
 	cfg.target_out = ctx->target_out;
-	cfg.candidates_on_device = true;
-	opt_synth_result* results = PUSH_ARRAY(&scratch, opt_synth_result, p_cnt);
+	u8* pass_counts = PUSH_ARRAY(&scratch, u8, p_cnt);
 
 	// run mass filter - remove the majority of candidate programs by verifying
 	// their correctness against a set of random and counterexample tests
 	f64 t0_filter = get_time_ms();
-	opt_filter_run(&ctx->filter, &cfg, results);
+	opt_filter_run(&ctx->filter, &cfg, pass_counts);
 	ctx->ms_filter += get_time_ms() - t0_filter;
 	ctx->total_candidates += p_cnt;
 	ctx->filter_passes++;
@@ -122,10 +121,10 @@ b32 opt_filter_batch(opt_ctx* ctx, const opt_program* p, u64 p_cnt, u32 len) {
 	// go through our candidates, if they passed the test set we verify them
 	// via an SMT solver
 	for(u64 i = 0; i < p_cnt; ++i) {
-		if(results[i].pass_count == SYNTH_N_TESTS) {
+		if(pass_counts[i] == OPT_FILTER_TEST_COUNT) {
 			// pull the candidate instructions
-			cpu_inst survivor_inst[SYNTH_PROG_LEN];
-			dtoh_memcpy(survivor_inst, p + i, sizeof(opt_program), "cpback survivor");
+			cpu_inst survivor_inst[OPT_PROGRAM_LEN];
+			dtoh_memcpy(survivor_inst, p + i, sizeof(opt_program));
 			const f64 t0_smt = get_time_ms();
 			cpu_program survivor = {survivor_inst, len};
 			// verify via an SMT solver
@@ -172,7 +171,7 @@ b32 opt_run_length(opt_ctx* ctx, u32 len) {
 	while(iter < ctx->cfg->max_cegis_iters) {
 		const u32 prev_counterexample_count = ctx->counterexample_count;
 		const f64 t0 = get_time_ms();
-		opt_enum_config cfg;
+		opt_enum_cfg cfg;
 		cfg.pool = &opcodes;
 		cfg.imms = &immediates;
 		cfg.live_in_mask = ctx->live_in;
@@ -200,7 +199,7 @@ b32 opt_run_length(opt_ctx* ctx, u32 len) {
 	return false;
 }
 
-void opt_run(const cpu_program* prog, const opt_config* cfg) {
+void opt_run(const cpu_program* prog, const opt_cfg* cfg) {
 	f64 t0 = get_time_ms();
 	opt_ctx ctx = {0};
 	ctx.prog = prog;
@@ -228,7 +227,7 @@ void opt_run(const cpu_program* prog, const opt_config* cfg) {
 
 	printf("begin search\n");
 	b32 found = false;
-	for(u32 len = 1; len <= SYNTH_PROG_LEN; ++len) {
+	for(u32 len = 1; len <= OPT_PROGRAM_LEN; ++len) {
 		printf("  searching length %u\n", len);
 		if(opt_run_length(&ctx, len)) {
 			found = true;

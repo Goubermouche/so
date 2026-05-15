@@ -31,7 +31,7 @@ i32 list_e() {
 	return 0;
 }
 
-i32 parse_e(opt_config* cfg, const char* p) {
+i32 parse_e(opt_cfg* cfg, const char* p) {
 	cfg->ext_mask = 0;
 	while(*p) {
 		while(*p == ' ' || *p == ',' || *p == '+') p++;
@@ -127,7 +127,7 @@ i32 read_file(const char* filename, char** out, u64* out_len) {
 }
 
 i32 main(i32 argc, char** argv) {
-	opt_config cfg = opt_config_make_default();
+	opt_cfg cfg = opt_cfg_make_default();
 	i32 argi = 1;
 	char* source = 0;
 	u64 source_len = 0;

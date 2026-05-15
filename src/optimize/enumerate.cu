@@ -129,7 +129,7 @@ __device__ __forceinline__ u32 opt_try_one(const opt_layer_ctx& L, const opt_sta
 			if(slot < cap_cands) {
 				opt_program c;
 #pragma unroll
-				for(u32 k = 0; k < SYNTH_PROG_LEN; ++k) { c.code[k] = src.code[k]; }
+				for(u32 k = 0; k < OPT_PROGRAM_LEN; ++k) { c.code[k] = src.code[k]; }
 				opt_build_inst(m, rd, rs1, rs2_or_imm_idx, is_imm, L.imms, &c.code[src.idx]);
 				dst_cands[slot] = c;
 			}
@@ -137,7 +137,7 @@ __device__ __forceinline__ u32 opt_try_one(const opt_layer_ctx& L, const opt_sta
 			if(slot < cap_states) {
 				opt_state ns;
 #pragma unroll
-				for(u32 k = 0; k < SYNTH_PROG_LEN; ++k) { ns.code[k] = src.code[k]; }
+				for(u32 k = 0; k < OPT_PROGRAM_LEN; ++k) { ns.code[k] = src.code[k]; }
 				opt_build_inst(m, rd, rs1, rs2_or_imm_idx, is_imm, L.imms, &ns.code[src.idx]);
 				ns.demanded = new_demanded;
 				ns.used_scratch = new_used_scratch;
@@ -264,8 +264,8 @@ __global__ void opt_emit_kernel(const opt_state* __restrict__ src_front, u32 n_s
 i32 opt_enum_make(opt_enum_ctx* ec, u64 batch_size) {
 	*ec = {};
 
-	dmalloc(&ec->d_meta, (u64)OP_COUNT * sizeof(opt_op_meta), "enum_ctx d_meta");
-	dmalloc(&ec->d_imms, (u64)64 * sizeof(i64), "enum_ctx d_imms");
+	dmalloc(&ec->d_meta, (u64)OP_COUNT * sizeof(opt_op_meta));
+	dmalloc(&ec->d_imms, (u64)64 * sizeof(i64));
 	ec->n_meta = 0;
 	ec->n_imms_cap = 64;
 
@@ -285,16 +285,16 @@ i32 opt_enum_make(opt_enum_ctx* ec, u64 batch_size) {
 	}
 	ec->capacity = capacity;
 
-	dmalloc(&ec->d_front_a, capacity * sizeof(opt_state), "enum_ctx front_a");
-	dmalloc(&ec->d_front_b, capacity * sizeof(opt_state), "enum_ctx front_b");
-	dmalloc(&ec->d_counts, capacity * sizeof(u32), "enum_ctx d_counts");
-	dmalloc(&ec->d_offsets, capacity * sizeof(u64), "enum_ctx d_offsets");
-	dmalloc(&ec->d_out, capacity * sizeof(opt_program), "enum_ctx d_out");
+	dmalloc(&ec->d_front_a, capacity * sizeof(opt_state));
+	dmalloc(&ec->d_front_b, capacity * sizeof(opt_state));
+	dmalloc(&ec->d_counts, capacity * sizeof(u32));
+	dmalloc(&ec->d_offsets, capacity * sizeof(u64));
+	dmalloc(&ec->d_out, capacity * sizeof(opt_program));
 
 	ec->scan_tmp_bytes = 0;
 	cub::DeviceScan::ExclusiveSum(nullptr, ec->scan_tmp_bytes, (u32*)ec->d_counts,
 																(u64*)ec->d_offsets, (i32)capacity);
-	dmalloc(&ec->d_scan_tmp, ec->scan_tmp_bytes, "enum_ctx scan tmp");
+	dmalloc(&ec->d_scan_tmp, ec->scan_tmp_bytes);
 
 	return 0;
 }
@@ -311,7 +311,7 @@ void opt_enum_ctx_free(opt_enum_ctx* ec) {
 	*ec = {};
 }
 
-void opt_enumerate(opt_enum_ctx* ec, const opt_enum_config* cfg, u64 cap,
+void opt_enumerate(opt_enum_ctx* ec, const opt_enum_cfg* cfg, u64 cap,
 									 opt_program** out_d_cands, u64* out_n_cands) {
 	*out_d_cands = (opt_program*)ec->d_out;
 	*out_n_cands = 0;
@@ -326,8 +326,8 @@ void opt_enumerate(opt_enum_ctx* ec, const opt_enum_config* cfg, u64 cap,
 	const u64 live_in = cfg->live_in_mask & ~1ULL;
 	const u64 preserved = live_in | cfg->live_out_mask;
 
-	htod_memcpy(ec->d_meta, h_meta, n_meta * sizeof(opt_op_meta), "enum cp meta");
-	htod_memcpy(ec->d_imms, cfg->imms->vals, cfg->imms->n * sizeof(i64), "enum cp imms");
+	htod_memcpy(ec->d_meta, h_meta, n_meta * sizeof(opt_op_meta));
+	htod_memcpy(ec->d_imms, cfg->imms->vals, cfg->imms->n * sizeof(i64));
 	opt_op_meta* d_meta = (opt_op_meta*)ec->d_meta;
 	i64* d_imms = (i64*)ec->d_imms;
 	const u64 capacity = ec->capacity < cap ? ec->capacity : cap;
@@ -341,7 +341,7 @@ void opt_enumerate(opt_enum_ctx* ec, const opt_enum_config* cfg, u64 cap,
 	size_t scan_tmp_bytes = ec->scan_tmp_bytes;
 
 	opt_state h_root;
-	for(u32 k = 0; k < SYNTH_PROG_LEN; ++k) {
+	for(u32 k = 0; k < OPT_PROGRAM_LEN; ++k) {
 		h_root.code[k] = {};
 		h_root.code[k].op = OP_NOP;
 	}
@@ -349,7 +349,7 @@ void opt_enumerate(opt_enum_ctx* ec, const opt_enum_config* cfg, u64 cap,
 	h_root.used_scratch = 0;
 	h_root.idx = (i32)cfg->prog_len - 1;
 	h_root._pad = 0;
-	htod_memcpy(d_front_a, &h_root, sizeof(opt_state), "enum seed");
+	htod_memcpy(d_front_a, &h_root, sizeof(opt_state));
 	u64 n_front = 1;
 
 	u64 scratch_mask = 0;
@@ -407,8 +407,8 @@ void opt_enumerate(opt_enum_ctx* ec, const opt_enum_config* cfg, u64 cap,
 
 		u64 last_off = 0;
 		u32 last_cnt = 0;
-		dtoh_memcpy(&last_off, d_offsets + (n_front - 1), sizeof(u64), "enum offsets[-1]");
-		dtoh_memcpy(&last_cnt, d_counts + (n_front - 1), sizeof(u32), "enum counts[-1]");
+		dtoh_memcpy(&last_off, d_offsets + (n_front - 1), sizeof(u64));
+		dtoh_memcpy(&last_cnt, d_counts + (n_front - 1), sizeof(u32));
 		const u64 total = last_off + (u64)last_cnt;
 
 		if(profile) { cudaEventRecord(ev_d); }

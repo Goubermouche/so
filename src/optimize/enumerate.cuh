@@ -5,7 +5,7 @@
 #include "optimize/filter.cuh"
 
 typedef struct opt_program {
-	cpu_inst code[SYNTH_PROG_LEN];
+	cpu_inst code[OPT_PROGRAM_LEN];
 } opt_program;
 
 typedef struct opt_opcode_pool {
@@ -18,14 +18,14 @@ typedef struct opt_imm_pool {
 	u32 n;
 } opt_imm_pool;
 
-typedef struct opt_enum_config {
+typedef struct opt_enum_cfg {
 	const opt_opcode_pool* pool;
 	const opt_imm_pool* imms;
 	u64 live_in_mask;
 	u64 live_out_mask;
 	u32 prog_len;
 	u32 max_scratch;
-} opt_enum_config;
+} opt_enum_cfg;
 
 // TODO: unify
 typedef struct opt_op_meta {
@@ -47,7 +47,7 @@ typedef enum {
 } opt_shape;
 
 typedef struct opt_state {
-	cpu_inst code[SYNTH_PROG_LEN];
+	cpu_inst code[OPT_PROGRAM_LEN];
 	u64 demanded;
 	u64 used_scratch;
 	i32 idx;
@@ -74,7 +74,7 @@ void opt_enum_ctx_free(opt_enum_ctx* ec);
 
 opt_opcode_pool opt_build_opcode_pool(u32 ext_mask);
 opt_imm_pool opt_build_imm_pool();
-void opt_enumerate(opt_enum_ctx* ec, const opt_enum_config* cfg, u64 cap,
+void opt_enumerate(opt_enum_ctx* ec, const opt_enum_cfg* cfg, u64 cap,
 									 opt_program** out_d_cands, u64* out_n_cands);
 
 #endif // #ifndef OPT_ENUMERATE_CUH

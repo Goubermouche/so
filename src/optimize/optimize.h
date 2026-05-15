@@ -6,21 +6,21 @@
 #include "optimize/enumerate.cuh"
 #include "smt/smt.h"
 
-typedef struct opt_config {
+typedef struct opt_cfg {
 	u64 seed;
 	u32 ext_mask;
 	u64 batch_size;
 	u32 max_cegis_iters;
-} opt_config;
+} opt_cfg;
 
 typedef struct opt_ctx {
 	const cpu_program* prog;
-	const opt_config* cfg;
+	const opt_cfg* cfg;
 
 	u64 live_in;
 	u64 live_out;
-	cpu_state test_in[SYNTH_N_TESTS];
-	cpu_state target_out[SYNTH_N_TESTS];
+	cpu_state test_in[OPT_FILTER_TEST_COUNT];
+	cpu_state target_out[OPT_FILTER_TEST_COUNT];
 
 	arena mem;
 	u32 counterexample_count;
@@ -41,7 +41,7 @@ typedef struct opt_ctx {
 	f64 ms_total;
 } opt_ctx;
 
-opt_config opt_config_make_default();
+opt_cfg opt_cfg_make_default();
 
 void opt_print_reg_mask(u64 mask);
 void opt_log_startup(const opt_ctx* ctx);
@@ -52,6 +52,6 @@ void opt_init_tests(opt_ctx* ctx);
 b32 opt_filter_batch(opt_ctx* ctx, const opt_program* p, u64 p_cnt, u32 len);
 b32 opt_run_length(opt_ctx* ctx, u32 len);
 
-void opt_run(const cpu_program* prog, const opt_config* cfg);
+void opt_run(const cpu_program* prog, const opt_cfg* cfg);
 
 #endif // #ifndef OPT_OPTIMIZE_H
