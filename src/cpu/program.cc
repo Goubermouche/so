@@ -136,7 +136,7 @@ str cpu_program_to_str(arena* a, const cpu_program* program) {
 	for(u32 i = 0; i < program->size; ++i) {
 		const cpu_inst inst = program->instructions[i];
 		const cpu_inst_spec* spec = cpu_find_spec(inst.op);
-		str_list_push(a, &builder, STR_LIT("    "));
+		str_list_push(a, &builder, STR_LIT("  "));
 		str_list_push(a, &builder, str_pad_to_len(a, str_cstring(spec->name), ' ', 8));
 
 		const u8 nop = cpu_spec_get_operand_count(spec);

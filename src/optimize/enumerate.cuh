@@ -2,11 +2,11 @@
 #define OPT_ENUMERATE_CUH
 
 #include "cpu/instruction.cuh"
-#include "optimize/driver.cuh"
+#include "optimize/filter.cuh"
 
-typedef struct opt_candidate {
+typedef struct opt_program {
 	cpu_inst code[SYNTH_PROG_LEN];
-} opt_candidate;
+} opt_program;
 
 typedef struct opt_opcode_pool {
 	cpu_opcode ops[OP_COUNT];
@@ -54,7 +54,7 @@ typedef struct opt_state {
 	u32 _pad;
 } opt_state;
 
-typedef struct opt_enum_context {
+typedef struct opt_enum_ctx {
 	void* d_meta;
 	u32 n_meta;
 	void* d_imms;
@@ -67,14 +67,14 @@ typedef struct opt_enum_context {
 	void* d_out;
 	void* d_scan_tmp;
 	size_t scan_tmp_bytes;
-} opt_enum_context;
+} opt_enum_ctx;
 
-i32 opt_enum_context_make(opt_enum_context* ec, u64 batch_size);
-void opt_enum_context_free(opt_enum_context* ec);
+i32 opt_enum_make(opt_enum_ctx* ec, u64 batch_size);
+void opt_enum_ctx_free(opt_enum_ctx* ec);
 
 opt_opcode_pool opt_build_opcode_pool(u32 ext_mask);
-opt_imm_pool opt_build_default_imm_pool();
-void opt_enumerate(opt_enum_context* ec, const opt_enum_config* cfg, u64 cap,
-									 opt_candidate** out_d_cands, u64* out_n_cands);
+opt_imm_pool opt_build_imm_pool();
+void opt_enumerate(opt_enum_ctx* ec, const opt_enum_config* cfg, u64 cap,
+									 opt_program** out_d_cands, u64* out_n_cands);
 
 #endif // #ifndef OPT_ENUMERATE_CUH

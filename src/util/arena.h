@@ -3,7 +3,7 @@
 
 #include "util/type.h"
 
-#define ARENA_DEFAULT_BLOCK_SIZE MB(1)
+#define ARENA_DEFAULT_BLOCK_SIZE KB(2)
 #define ARENA_DEFAULT_ALIGN 8
 
 typedef struct arena_block {
@@ -26,10 +26,10 @@ void* arena_push(arena* a, u64 size);
 
 arena_block* arena_block_make(u64 size);
 
-#define push_array(a, T, n) ((T*)arena_push_aligned((a), sizeof(T) * (u64)(n), alignof(T)))
-#define push_array_zero(a, T, n)                                                                   \
+#define PUSH_ARRAY(a, T, n) ((T*)arena_push_aligned((a), sizeof(T) * (u64)(n), alignof(T)))
+#define PUSH_ARRAY_ZERO(a, T, n)                                                                   \
 	((T*)memset(arena_push_aligned((a), sizeof(T) * (u64)(n), alignof(T)), 0, sizeof(T) * (u64)(n)))
-#define push_struct(a, T) push_array((a), T, 1)
-#define push_struct_zero(a, T) push_array_zero((a), T, 1)
+#define PUSH_STRUCT(a, T) PUSH_ARRAY((a), T, 1)
+#define PUSH_STRUCT_ZERO(a, T) PUSH_ARRAY_ZERO((a), T, 1)
 
 #endif // #ifndef UTL_ARENA_H

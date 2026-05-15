@@ -26,7 +26,7 @@
 		if(arr->cap >= want) return;                                                                   \
 		u64 nc = arr->cap ? arr->cap : 16;                                                             \
 		while(nc < want) nc = nc + (nc >> 1) + 1;                                                      \
-		T* nv = push_array(arr->a, T, nc);                                                             \
+		T* nv = PUSH_ARRAY(arr->a, T, nc);                                                             \
 		if(arr->size) memcpy(nv, arr->v, sizeof(T) * arr->size);                                       \
 		arr->v = nv;                                                                                   \
 		arr->cap = nc;                                                                                 \

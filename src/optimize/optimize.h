@@ -2,58 +2,55 @@
 #define OPT_OPTIMIZE_H
 
 #include "cpu/program.h"
-#include "optimize/driver.cuh"
+#include "optimize/filter.cuh"
 #include "optimize/enumerate.cuh"
 #include "smt/smt.h"
 
 typedef struct opt_config {
-	u64 live_mask;
 	u64 seed;
 	u32 ext_mask;
-	u32 max_prog_len;
 	u64 batch_size;
-	u64 gpu_chunk_size;
 	u32 max_cegis_iters;
 } opt_config;
 
-typedef struct opt_context {
+typedef struct opt_ctx {
 	const cpu_program* prog;
 	const opt_config* cfg;
+
 	u64 live_in;
 	u64 live_out;
 	cpu_state test_in[SYNTH_N_TESTS];
 	cpu_state target_out[SYNTH_N_TESTS];
+
 	arena mem;
-	cpu_inst* best_prog;
-	u32 best_prog_len;
-	u32 best_len;
-	smt_verify_report rep;
+	u32 counterexample_count;
+
+	cpu_program best;
+
+	// enumerate
+	opt_enum_ctx enumerate;
+	// filter
+	opt_filter_ctx filter;
 	// stats
 	u64 total_candidates;
-	u64 total_gpu_passes;
-	f64 total_gpu_ms;
-	f64 total_smt_ms;
-	u64 total_smt_calls;
-	opt_gpu_context gpu;
-	// persistent enumerator state: owns the device-side frontier ping-pong buffers and
-	// the candidate output. allocated once at startup, reused across cegis iters
-	opt_enum_context enum_ctx;
-	u32 counterexample_count;
-} opt_context;
+	u64 filter_passes;
+	u64 smt_calls;
+	f64 ms_enum;
+	f64 ms_filter;
+	f64 ms_smt;
+	f64 ms_total;
+} opt_ctx;
 
-typedef struct opt_survivor_set {
-	u32_arr indices;
-} opt_survivor_set;
-
-opt_config opt_make_default_config();
+opt_config opt_config_make_default();
 
 void opt_print_reg_mask(u64 mask);
-void opt_log_startup(const opt_context* ctx);
-void opt_log_results(const opt_context* ctx, b32 found);
+void opt_log_startup(const opt_ctx* ctx);
+void opt_log_results(opt_ctx* ctx, b32 found);
+void opt_log_stats(const opt_ctx* ctx);
 
-void opt_seed_test_vectors(opt_context* ctx);
-void opt_filter_batch(opt_context* ctx, const opt_candidate* d_cands, u64 n_cands, u32 prog_len);
-b32 opt_run_length(opt_context* ctx, u32 len);
+void opt_init_tests(opt_ctx* ctx);
+b32 opt_filter_batch(opt_ctx* ctx, const opt_program* p, u64 p_cnt, u32 len);
+b32 opt_run_length(opt_ctx* ctx, u32 len);
 
 void opt_run(const cpu_program* prog, const opt_config* cfg);
 

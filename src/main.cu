@@ -17,7 +17,7 @@ i32 help() {
 	fprintf(stderr, "  --version    display version infromation\n");
 	fprintf(stderr, "  --help       display this information\n");
 	fprintf(stderr, "  -e <list>    pass <list> of extensions to use\n");
-	fprintf(stderr, "  -p <num>     pass <num> specifying max program length\n");
+	//fprintf(stderr, "  -p <num>     pass <num> specifying max program length\n");
 	fprintf(stderr, "  -l           list supported extensions\n");
 	fprintf(stderr, "\n");
 	fprintf(stderr, "for bug reports and issues, please visit:\n");
@@ -127,7 +127,7 @@ i32 read_file(const char* filename, char** out, u64* out_len) {
 }
 
 i32 main(i32 argc, char** argv) {
-	opt_config cfg = opt_make_default_config();
+	opt_config cfg = opt_config_make_default();
 	i32 argi = 1;
 	char* source = 0;
 	u64 source_len = 0;
@@ -144,10 +144,6 @@ i32 main(i32 argc, char** argv) {
 		} else if(!strcmp(argv[argi], "-e")) {
 			VERIFY_ARG("-e", "<list>");
 			i32 res = parse_e(&cfg, argv[++argi]);
-			if(res) { return res; }
-		} else if(!strcmp(argv[argi], "-p")) {
-			VERIFY_ARG("-p", "<num>");
-			i32 res = parse_u32(argv[++argi], cfg.max_prog_len);
 			if(res) { return res; }
 		} else if(!strcmp(argv[argi], "-l")) {
 			return list_e();

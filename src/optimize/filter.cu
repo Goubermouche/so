@@ -1,5 +1,5 @@
 #include "optimize/batch_runner.cuh"
-#include "optimize/driver.cuh"
+#include "optimize/filter.cuh"
 
 __global__ void synth_kernel(const cpu_inst* __restrict__ d_cands, u64 n_candidates,
 														 const cpu_state* __restrict__ d_test_in,
@@ -77,7 +77,7 @@ __global__ void synth_kernel(const cpu_inst* __restrict__ d_cands, u64 n_candida
 	}
 }
 
-i32 opt_gpu_runner_make(opt_gpu_context* ctx, u64 max_chunk_cands) {
+i32 opt_filter_make(opt_filter_ctx* ctx, u64 max_chunk_cands) {
 	ctx->max_chunk_cands = 0;
 	ctx->d_cands = 0;
 	ctx->d_test_in = 0;
@@ -143,7 +143,7 @@ i32 opt_gpu_runner_make(opt_gpu_context* ctx, u64 max_chunk_cands) {
 	return 0;
 }
 
-void opt_gpu_runner_free(opt_gpu_context* ctx) {
+void opt_filter_free(opt_filter_ctx* ctx) {
 	if(ctx->d_cands) cudaFree(ctx->d_cands);
 	if(ctx->d_test_in) cudaFree(ctx->d_test_in);
 	if(ctx->d_target_out) cudaFree(ctx->d_target_out);
@@ -153,8 +153,7 @@ void opt_gpu_runner_free(opt_gpu_context* ctx) {
 	if(ctx->h_pass_count) cudaFreeHost(ctx->h_pass_count);
 }
 
-void opt_gpu_runner_run(opt_gpu_context* ctx, opt_synth_config* cfg, opt_synth_result* results) {
-	cfg->elapsed_ms_total = 0.0;
+void opt_filter_run(opt_filter_ctx* ctx, opt_filter_config* cfg, opt_synth_result* results) {
 	if(cfg->candidates == 0) { return; }
 
 	const u64 test_size = SYNTH_N_TESTS * sizeof(cpu_state);
@@ -201,11 +200,6 @@ void opt_gpu_runner_run(opt_gpu_context* ctx, opt_synth_config* cfg, opt_synth_r
 		cudaEventRecord(e1);
 		check_cuda(cudaGetLastError(), "kernel launch");
 		check_cuda(cudaDeviceSynchronize(), "kernel sync");
-
-		// store timing
-		f32 ms = 0.0f;
-		cudaEventElapsedTime(&ms, e0, e1);
-		cfg->elapsed_ms_total += (f64)ms;
 
 		// copyback into pinned staging
 		dtoh_memcpy(ctx->h_fail_mask, ctx->d_fail_mask, this_chunk * sizeof(u32), "cpback fail");

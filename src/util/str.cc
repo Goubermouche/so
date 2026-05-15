@@ -26,7 +26,7 @@ b32 str_eq_cstr(str a, const char* c) {
 }
 
 str str_copy(arena* a, str s) {
-	u8* dst = push_array(a, u8, s.size);
+	u8* dst = PUSH_ARRAY(a, u8, s.size);
 	memcpy(dst, s.str, s.size);
 	return str_make(dst, s.size);
 }
@@ -39,7 +39,7 @@ str str_push_fmt(arena* a, const char* fmt, ...) {
 	int n = vsnprintf(0, 0, fmt, ap);
 	va_end(ap);
 	ASSERT(n >= 0, "str_push_fmt: vsnprintf failed\n");
-	u8* dst = push_array(a, u8, (u64)n + 1);
+	u8* dst = PUSH_ARRAY(a, u8, (u64)n + 1);
 	vsnprintf((char*)dst, (u64)n + 1, fmt, ap2);
 	va_end(ap2);
 	return str_make(dst, (u64)n);
@@ -47,14 +47,14 @@ str str_push_fmt(arena* a, const char* fmt, ...) {
 
 str str_pad_to_len(arena* a, str s, u8 pad, u64 target_len) {
 	const u64 pad_len = (target_len > s.size) ? (target_len - s.size) : 0;
-	u8* dst = push_array(a, u8, s.size + pad_len);
+	u8* dst = PUSH_ARRAY(a, u8, s.size + pad_len);
 	memcpy(dst, s.str, s.size);
 	if(pad_len) memset(dst + s.size, pad, pad_len);
 	return str_make(dst, s.size + pad_len);
 }
 
 void str_list_push(arena* a, str_list* list, str s) {
-	str_node* n = push_struct(a, str_node);
+	str_node* n = PUSH_STRUCT(a, str_node);
 	n->next = 0;
 	n->s = s;
 	if(list->last) {
@@ -75,7 +75,7 @@ void str_list_push_fmt(arena* a, str_list* list, const char* fmt, ...) {
 	int n = vsnprintf(0, 0, fmt, ap);
 	va_end(ap);
 	ASSERT(n >= 0, "str_list_pushf: vsnprintf failed\n");
-	u8* dst = push_array(a, u8, (u64)n + 1);
+	u8* dst = PUSH_ARRAY(a, u8, (u64)n + 1);
 	vsnprintf((char*)dst, (u64)n + 1, fmt, ap2);
 	va_end(ap2);
 	str_list_push(a, list, str_make(dst, (u64)n));
@@ -84,7 +84,7 @@ void str_list_push_fmt(arena* a, str_list* list, const char* fmt, ...) {
 str str_list_flatten(arena* a, str_list* list, str sep) {
 	const u64 nseps = list->node_count > 0 ? list->node_count - 1 : 0;
 	const u64 total = list->total_size + nseps * sep.size;
-	u8* dst = push_array(a, u8, total + 1);
+	u8* dst = PUSH_ARRAY(a, u8, total + 1);
 	u8* p = dst;
 	for(str_node* n = list->first; n; n = n->next) {
 		memcpy(p, n->s.str, n->s.size);

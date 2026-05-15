@@ -15,7 +15,8 @@ opt_opcode_pool opt_build_opcode_pool(u32 ext_mask) {
 	return p;
 }
 
-opt_imm_pool opt_build_default_imm_pool() {
+opt_imm_pool opt_build_imm_pool() {
+	// TODO: add imms from programm etc.
 	opt_imm_pool p = {};
 
 	for(i64 v = -8; v <= 8; ++v) { p.vals[p.n++] = v; }
@@ -100,7 +101,7 @@ template <bool EMIT>
 __device__ __forceinline__ u32 opt_try_one(const opt_layer_ctx& L, const opt_state& src,
 																					 const opt_op_meta& m, u32 rd, u32 rs1,
 																					 u32 rs2_or_imm_idx, b32 is_imm, b32 rd_is_new_scratch,
-																					 opt_state* dst_states, opt_candidate* dst_cands,
+																					 opt_state* dst_states, opt_program* dst_cands,
 																					 u64 write_base, u32* write_local, u64 cap_states,
 																					 u64 cap_cands) {
 	u64 new_demanded = src.demanded & ~(1ULL << rd);
@@ -126,7 +127,7 @@ __device__ __forceinline__ u32 opt_try_one(const opt_layer_ctx& L, const opt_sta
 		++(*write_local);
 		if(L.is_last_layer) {
 			if(slot < cap_cands) {
-				opt_candidate c;
+				opt_program c;
 #pragma unroll
 				for(u32 k = 0; k < SYNTH_PROG_LEN; ++k) { c.code[k] = src.code[k]; }
 				opt_build_inst(m, rd, rs1, rs2_or_imm_idx, is_imm, L.imms, &c.code[src.idx]);
@@ -152,7 +153,7 @@ __device__ __forceinline__ u32 opt_try_one(const opt_layer_ctx& L, const opt_sta
 
 template <bool EMIT>
 __device__ u32 opt_expand_one(const opt_layer_ctx& L, const opt_state& src, opt_state* dst_states,
-															opt_candidate* dst_cands, u64 write_base, u64 cap_states,
+															opt_program* dst_cands, u64 write_base, u64 cap_states,
 															u64 cap_cands) {
 	if(src.demanded == 0) { return 0; }
 	const u64 src_avail = L.src_avail;
@@ -250,7 +251,7 @@ __global__ void opt_count_kernel(const opt_state* __restrict__ src_front, u32 n_
 __global__ void opt_emit_kernel(const opt_state* __restrict__ src_front, u32 n_src,
 																const u64* __restrict__ d_offsets, opt_layer_ctx ctx,
 																opt_state* __restrict__ dst_states,
-																opt_candidate* __restrict__ dst_cands, u64 cap_states,
+																opt_program* __restrict__ dst_cands, u64 cap_states,
 																u64 cap_cands) {
 	const u32 tid = blockIdx.x * blockDim.x + threadIdx.x;
 	if(tid >= n_src) { return; }
@@ -260,7 +261,7 @@ __global__ void opt_emit_kernel(const opt_state* __restrict__ src_front, u32 n_s
 	opt_expand_one<true>(ctx, src, dst_states, dst_cands, base, cap_states, cap_cands);
 }
 
-i32 opt_enum_context_make(opt_enum_context* ec, u64 batch_size) {
+i32 opt_enum_make(opt_enum_ctx* ec, u64 batch_size) {
 	*ec = {};
 
 	dmalloc(&ec->d_meta, (u64)OP_COUNT * sizeof(opt_op_meta), "enum_ctx d_meta");
@@ -277,7 +278,7 @@ i32 opt_enum_context_make(opt_enum_context* ec, u64 batch_size) {
 		const u64 reserved = 128ULL * 1024ULL * 1024ULL;
 		const u64 usable = free_mem > reserved ? (free_mem - reserved) : 0;
 		const u64 per_slot =
-			2ULL * sizeof(opt_state) + sizeof(u64) + sizeof(u32) + sizeof(opt_candidate);
+			2ULL * sizeof(opt_state) + sizeof(u64) + sizeof(u32) + sizeof(opt_program);
 		const u64 vram_capacity = usable / per_slot;
 		if(vram_capacity < capacity) { capacity = vram_capacity; }
 		if(capacity < 1024) { capacity = 1024; }
@@ -288,7 +289,7 @@ i32 opt_enum_context_make(opt_enum_context* ec, u64 batch_size) {
 	dmalloc(&ec->d_front_b, capacity * sizeof(opt_state), "enum_ctx front_b");
 	dmalloc(&ec->d_counts, capacity * sizeof(u32), "enum_ctx d_counts");
 	dmalloc(&ec->d_offsets, capacity * sizeof(u64), "enum_ctx d_offsets");
-	dmalloc(&ec->d_out, capacity * sizeof(opt_candidate), "enum_ctx d_out");
+	dmalloc(&ec->d_out, capacity * sizeof(opt_program), "enum_ctx d_out");
 
 	ec->scan_tmp_bytes = 0;
 	cub::DeviceScan::ExclusiveSum(nullptr, ec->scan_tmp_bytes, (u32*)ec->d_counts,
@@ -298,7 +299,7 @@ i32 opt_enum_context_make(opt_enum_context* ec, u64 batch_size) {
 	return 0;
 }
 
-void opt_enum_context_free(opt_enum_context* ec) {
+void opt_enum_ctx_free(opt_enum_ctx* ec) {
 	if(ec->d_scan_tmp) { cudaFree(ec->d_scan_tmp); }
 	if(ec->d_out) { cudaFree(ec->d_out); }
 	if(ec->d_offsets) { cudaFree(ec->d_offsets); }
@@ -310,9 +311,9 @@ void opt_enum_context_free(opt_enum_context* ec) {
 	*ec = {};
 }
 
-void opt_enumerate(opt_enum_context* ec, const opt_enum_config* cfg, u64 cap,
-									 opt_candidate** out_d_cands, u64* out_n_cands) {
-	*out_d_cands = (opt_candidate*)ec->d_out;
+void opt_enumerate(opt_enum_ctx* ec, const opt_enum_config* cfg, u64 cap,
+									 opt_program** out_d_cands, u64* out_n_cands) {
+	*out_d_cands = (opt_program*)ec->d_out;
 	*out_n_cands = 0;
 
 	if(cap == 0 || cfg->prog_len == 0) { return; }
@@ -335,7 +336,7 @@ void opt_enumerate(opt_enum_context* ec, const opt_enum_config* cfg, u64 cap,
 	opt_state* d_front_b = (opt_state*)ec->d_front_b;
 	u32* d_counts = (u32*)ec->d_counts;
 	u64* d_offsets = (u64*)ec->d_offsets;
-	opt_candidate* d_out = (opt_candidate*)ec->d_out;
+	opt_program* d_out = (opt_program*)ec->d_out;
 	void* d_scan_tmp = ec->d_scan_tmp;
 	size_t scan_tmp_bytes = ec->scan_tmp_bytes;
 
@@ -417,24 +418,10 @@ void opt_enumerate(opt_enum_context* ec, const opt_enum_config* cfg, u64 cap,
 			const u64 cap_cands = ctx.is_last_layer ? (capacity - emitted_cands) : 0;
 
 			opt_state* dst_states = ctx.is_last_layer ? nullptr : d_front_b;
-			opt_candidate* dst_cands = ctx.is_last_layer ? (d_out + emitted_cands) : nullptr;
+			opt_program* dst_cands = ctx.is_last_layer ? (d_out + emitted_cands) : nullptr;
 			opt_emit_kernel<<<blocks, threads>>>(d_front_a, (u32)n_front, d_offsets, ctx, dst_states,
 																					 dst_cands, cap_states, cap_cands);
 			check_cuda(cudaGetLastError(), "enum emit kernel");
-		}
-
-		if(profile) {
-			cudaEventRecord(ev_e);
-			cudaEventSynchronize(ev_e);
-			f32 t_count = 0, t_scan = 0, t_sync = 0, t_emit = 0;
-			cudaEventElapsedTime(&t_count, ev_a, ev_b);
-			cudaEventElapsedTime(&t_scan, ev_b, ev_c);
-			cudaEventElapsedTime(&t_sync, ev_c, ev_d);
-			cudaEventElapsedTime(&t_emit, ev_d, ev_e);
-			fprintf(stderr,
-							"[enum] layer=%d n_front=%zu total=%zu count=%.2fms scan=%.2fms "
-							"sync=%.2fms emit=%.2fms\n",
-							layer, (size_t)n_front, (size_t)total, t_count, t_scan, t_sync, t_emit);
 		}
 
 		if(ctx.is_last_layer) {

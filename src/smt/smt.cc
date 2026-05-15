@@ -57,8 +57,8 @@ static void z3_error_cb(Z3_context c, Z3_error_code ec) {
 	g_err_set = true;
 }
 
-smt_verify_report smt_eq(const cpu_program* a, const cpu_program* b, u64 live_outs) {
-	smt_verify_report r = {};
+smt_result smt_eq(const cpu_program* a, const cpu_program* b, u64 live_outs) {
+	smt_result r = {};
 
 	Z3_config cfg = Z3_mk_config();
 	Z3_context ctx = Z3_mk_context_rc(cfg);
