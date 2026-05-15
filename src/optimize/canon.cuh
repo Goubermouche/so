@@ -53,7 +53,7 @@ SO_HD void opt_canonicalize(cpu_inst* prog, u32 prog_len, u64 preserved_mask) {
 		const cpu_inst_spec* spec = cpu_find_spec(in.op);
 
 		for(u32 k = 0; k < 4; ++k) {
-			if(spec->operands[k] != cpu_inst_spec::REG) { continue; }
+			if(spec->operands[k] != CPU_OPERAND_REG) { continue; }
 
 			const u32 old = (u32)in.operands[k].reg;
 

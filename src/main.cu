@@ -164,6 +164,7 @@ i32 main(i32 argc, char** argv) {
 
 	// run
 	if(device_init()) { return 1; }
+	cpu_inst_db_load();
 
 	cpu_program parsed = cpu_program_parse(str_make((u8*)source, source_len));
 	opt_run(&parsed, &cfg);

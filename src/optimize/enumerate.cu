@@ -39,7 +39,7 @@ static void opt_build_meta_host(const opt_opcode_pool* pool, opt_op_meta* out, u
 		m.src2_slot = spec.src2_slot;
 		m.imm_slot = -1;
 		for(u32 k = 0; k < 4; ++k) {
-			if(spec.operands[k] == cpu_inst_spec::IMM) {
+			if(spec.operands[k] == CPU_OPERAND_IMM) {
 				m.imm_slot = (i8)k;
 				break;
 			}

@@ -25,7 +25,7 @@ smt_state smt_run(Z3_context ctx, const smt_state* in, const cpu_program* prog) 
 		Z3_inc_ref(ctx, imm);
 
 		for(u32 k = 0; k < 4; ++k) {
-			if(spec->operands[k] == cpu_inst_spec::IMM) {
+			if(spec->operands[k] == CPU_OPERAND_IMM) {
 				Z3_ast new_imm = Z3_mk_unsigned_int64(ctx, (u64)ins->operands[k].i, s64);
 				Z3_inc_ref(ctx, new_imm);
 				Z3_dec_ref(ctx, imm);
