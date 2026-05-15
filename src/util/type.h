@@ -35,13 +35,13 @@
 #endif
 
 // #ifdef DEBUG_MODE
-#define ASSERT(__condition, __message, ...)                                                        \
-	do {                                                                                             \
-		if(!(__condition)) {                                                                           \
-			fprintf(stderr, __message, ##__VA_ARGS__);                                                   \
-			fflush(stderr);                                                                              \
-			DEBUG_BREAK();                                                                               \
-		}                                                                                              \
+#define ASSERT(__condition, __message, ...)                                    \
+	do {                                                                         \
+		if(!(__condition)) {                                                       \
+			fprintf(stderr, __message, ##__VA_ARGS__);                               \
+			fflush(stderr);                                                          \
+			DEBUG_BREAK();                                                           \
+		}                                                                          \
 	} while(false)
 // #else
 // #define ASSERT(__condition, __message, ...)

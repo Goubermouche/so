@@ -16,11 +16,10 @@ typedef enum smt_result_kind {
 typedef struct smt_result {
 	smt_result_kind kind;
 	cpu_state counterexample;
-	f64 solve_ms;
 	const char* error;
 } smt_result;
 
-smt_state smt_run(Z3_context ctx, const smt_state* in, const cpu_program* prog);
+smt_state smt_run(Z3_context ctx, const smt_state* in, const cpu_program* p);
 smt_result smt_eq(const cpu_program* a, const cpu_program* b, u64 live_outs);
 
 #endif // #ifndef SMT_SMT_H

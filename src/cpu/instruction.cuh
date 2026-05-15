@@ -9,23 +9,16 @@
 #include "util/arr.h"
 #include "util/str.h"
 
-// to add a new extension:
-// - append it to the EXTENSION_LIST macro below
-// - create src/extensions/<name>/ext.cuh defining the X-macro and the run handler
-// - #include it below in the extensions section and append to EXT_OPCODE_LIST
-// - add a Z3.cc file that exposes ext_<name>_smt(...)
-// - wire those into smt/smt.cc and optimize/batch_runner.cuh's dispatcher
-
-#define EXTENSION_LIST(X)                                                                          \
-	X(RV32I, "rv32i", 0)                                                                             \
-	X(RV64I, "rv64i", 1)                                                                             \
-	X(RV32M, "rv32m", 2)                                                                             \
+#define EXTENSION_LIST(X)                                                      \
+	X(RV32I, "rv32i", 0)                                                         \
+	X(RV64I, "rv64i", 1)                                                         \
+	X(RV32M, "rv32m", 2)                                                         \
 	X(RV64M, "rv64m", 3)
 
-#define EXT_OPCODE_LIST(X)                                                                         \
-	EXT_RV32I_OPCODES(X)                                                                             \
-	EXT_RV64I_OPCODES(X)                                                                             \
-	EXT_RV32M_OPCODES(X)                                                                             \
+#define EXT_OPCODE_LIST(X)                                                     \
+	EXT_RV32I_OPCODES(X)                                                         \
+	EXT_RV64I_OPCODES(X)                                                         \
+	EXT_RV32M_OPCODES(X)                                                         \
 	EXT_RV64M_OPCODES(X)
 
 typedef enum cpu_inst_shape {
@@ -158,7 +151,7 @@ ARR_DECL(cpu_inst, cpu_inst_arr)
 
 u8 cpu_spec_get_operand_count(const cpu_inst_spec* spec);
 b32 cpu_op_is_commutative(cpu_opcode op);
-cpu_opcode cpu_find_inst_op(str name, const cpu_operand_type* operands, u8 op_count);
+cpu_opcode cpu_find_inst_op(str name, const cpu_operand_type* ops, u8 op_cnt);
 str cpu_operand_to_string(arena* a, cpu_inst_operand op, cpu_operand_type ty);
 void cpu_print_enabled_extensions(u32 mask);
 

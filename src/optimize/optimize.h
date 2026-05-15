@@ -14,23 +14,21 @@ typedef struct opt_cfg {
 } opt_cfg;
 
 typedef struct opt_ctx {
+	arena mem; // NOTE: maybe not really worth it here
+	// input
 	const cpu_program* prog;
 	const opt_cfg* cfg;
-
 	u64 live_in;
 	u64 live_out;
-	cpu_state test_in[OPT_FILTER_TEST_COUNT];
-	cpu_state target_out[OPT_FILTER_TEST_COUNT];
-
-	arena mem;
-	u32 counterexample_count;
-
-	cpu_program best;
-
-	// enumerate
+	// pass contexts
 	opt_enum_ctx enumerate;
 	// filter
 	opt_filter_ctx filter;
+	cpu_state test_in[OPT_FILTER_TEST_COUNT];
+	cpu_state target_out[OPT_FILTER_TEST_COUNT];
+	u32 counterexample_count; // needed for the round robin test retire
+	// output
+	cpu_program best;
 	// stats
 	u64 total_candidates;
 	u64 filter_passes;
@@ -48,6 +46,7 @@ void opt_log_startup(const opt_ctx* ctx);
 void opt_log_results(opt_ctx* ctx, b32 found);
 void opt_log_stats(const opt_ctx* ctx);
 
+u64 opt_compute_live_in(const cpu_program* program);
 void opt_init_tests(opt_ctx* ctx);
 b32 opt_filter_batch(opt_ctx* ctx, const opt_program* p, u64 p_cnt, u32 len);
 b32 opt_run_length(opt_ctx* ctx, u32 len);

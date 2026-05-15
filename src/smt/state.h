@@ -9,10 +9,10 @@
 #define B (s->r[s2])
 
 // write and return tail
-#define WR(expr)                                                                                   \
-	do {                                                                                             \
-		smt_wr(ctx, s, d, (expr));                                                                     \
-		return true;                                                                                   \
+#define WR(expr)                                                               \
+	do {                                                                         \
+		smt_wr(ctx, s, d, (expr));                                                 \
+		return true;                                                               \
 	} while(0)
 
 // z3 wrappers
@@ -26,7 +26,7 @@
 #define SH5_32(x) ZEXT(27, EXTRACT(4, 0, (x)))
 
 // signed-overflow guard
-#define OVF_SIGNED(a, b, int_min, all_ones) AND2(EQ((a), (int_min)), EQ((b), (all_ones)))
+#define OVF_SIGNED(a, b, imin, ones) AND2(EQ((a), (imin)), EQ((b), (ones)))
 
 typedef struct smt_state {
 	Z3_ast r[32];

@@ -2,7 +2,6 @@
 #include "cpu/instruction.cuh"
 #include "cpu/program.h"
 #include "optimize/batch_runner.cuh"
-#include "optimize/canon.cuh"
 #include "optimize/filter.cuh"
 #include "util/type.h"
 
@@ -13,6 +12,32 @@ opt_cfg opt_cfg_make_default() {
 	cfg.batch_size = 4000000;
 	cfg.max_cegis_iters = 8;
 	return cfg;
+}
+
+u64 opt_compute_live_in(const cpu_program* program) {
+	u64 written = 0;
+	u64 live_in = 0;
+
+	for(u32 i = 0; i < program->size; ++i) {
+		const cpu_inst_spec* spec = cpu_find_spec(program->instructions[i].op);
+
+		if(spec->src_slot >= 0) {
+			const u32 r = (u32)program->instructions[i].operands[spec->src_slot].reg;
+			if(!(written & (1ull << r))) { live_in |= 1ull << r; }
+		}
+
+		if(spec->src2_slot >= 0) {
+			const u32 r = (u32)program->instructions[i].operands[spec->src2_slot].reg;
+			if(!(written & (1ull << r))) { live_in |= 1ull << r; }
+		}
+
+		if(spec->dst_slot >= 0) {
+			const u32 r = (u32)program->instructions[i].operands[spec->dst_slot].reg;
+			written |= 1ull << r;
+		}
+	}
+
+	return live_in & ~1ull; // remove x0
 }
 
 void opt_log_startup(const opt_ctx* ctx) {
@@ -136,7 +161,7 @@ b32 opt_filter_batch(opt_ctx* ctx, const opt_program* p, u64 p_cnt, u32 len) {
 				// equivalent program
 				cpu_inst* dst = PUSH_ARRAY(&ctx->mem, cpu_inst, len);
 				memcpy(dst, survivor_inst, sizeof(cpu_inst) * len);
-				ctx->best = { dst, len };
+				ctx->best = {dst, len};
 				arena_release(&scratch);
 				return true;
 			} else if(res.kind == SMT_COUNTEREXAMPLE) {
@@ -178,11 +203,14 @@ b32 opt_run_length(opt_ctx* ctx, u32 len) {
 		cfg.live_out_mask = ctx->live_out;
 		cfg.prog_len = len;
 		cfg.max_scratch = max_scratch;
+		cfg.cap = ctx->cfg->batch_size;
 		opt_program* p = nullptr;
 		u64 p_cnt = 0;
 
 		// generate candidates
-		opt_enumerate(&ctx->enumerate, &cfg, ctx->cfg->batch_size, &p, &p_cnt);
+		opt_enumerate(&ctx->enumerate, &cfg);
+		p = ctx->enumerate.out_d_cands;
+		p_cnt = ctx->enumerate.out_n_cands;
 		ctx->ms_enum += get_time_ms() - t0;
 		printf("    iter %u (%.2fM cand)\n", iter + 1, (f64)p_cnt / 1e6);
 
@@ -205,7 +233,7 @@ void opt_run(const cpu_program* prog, const opt_cfg* cfg) {
 	ctx.prog = prog;
 	ctx.cfg = cfg;
 	ctx.live_out = cpu_program_live_outs(prog);
-	ctx.live_in = opt_compute_live_in(prog->instructions, prog->size);
+	ctx.live_in = opt_compute_live_in(prog);
 	ctx.mem = arena_make(0);
 
 	opt_log_startup(&ctx);

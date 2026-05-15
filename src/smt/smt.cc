@@ -1,17 +1,17 @@
 #include "smt/smt.h"
-#include "extensions/rv32i/smt.cuh"
-#include "extensions/rv32m/smt.cuh"
-#include "extensions/rv64i/smt.cuh"
-#include "extensions/rv64m/smt.cuh"
+#include "extensions/rv32i/smt.h"
+#include "extensions/rv32m/smt.h"
+#include "extensions/rv64i/smt.h"
+#include "extensions/rv64m/smt.h"
 #include "util/type.h"
 
-smt_state smt_run(Z3_context ctx, const smt_state* in, const cpu_program* prog) {
+smt_state smt_run(Z3_context ctx, const smt_state* in, const cpu_program* p) {
 	smt_state regs = smt_clone_state(ctx, in);
 	smt_pin_x0(ctx, &regs);
 	Z3_sort s64 = Z3_mk_bv_sort(ctx, 64);
 
-	for(u32 i = 0; i < prog->size; ++i) {
-		const cpu_inst* ins = &prog->instructions[i];
+	for(u32 i = 0; i < p->size; ++i) {
+		const cpu_inst* ins = &p->instructions[i];
 		const u32 op = (u32)ins->op;
 
 		if(op == OP_NOP) { continue; }
@@ -51,15 +51,17 @@ smt_state smt_run(Z3_context ctx, const smt_state* in, const cpu_program* prog) 
 // catch any error reported through the Z3 error handler.
 static thread_local char g_err_buf[512];
 static thread_local bool g_err_set = false;
-static void z3_error_cb(Z3_context c, Z3_error_code ec) {
-	Z3_string msg = Z3_get_error_msg(c, ec);
+static void z3_error_cb(Z3_context c, Z3_error_code ctx) {
+	Z3_string msg = Z3_get_error_msg(c, ctx);
 	snprintf(g_err_buf, sizeof(g_err_buf), "%s", msg ? msg : "z3 error");
 	g_err_set = true;
 }
 
 smt_result smt_eq(const cpu_program* a, const cpu_program* b, u64 live_outs) {
+	const f64 t0 = get_time_ms();
 	smt_result r = {};
 
+	// init Z3
 	Z3_config cfg = Z3_mk_config();
 	Z3_context ctx = Z3_mk_context_rc(cfg);
 	Z3_del_config(cfg);
@@ -71,6 +73,7 @@ smt_result smt_eq(const cpu_program* a, const cpu_program* b, u64 live_outs) {
 	Z3_symbol timeout_sym = Z3_mk_string_symbol(ctx, "timeout");
 	Z3_params_set_uint(ctx, params, timeout_sym, SMT_TIMEOUT_MS);
 
+	// mmake input state
 	smt_state in = smt_make_input_state(ctx);
 	smt_pin_x0(ctx, &in);
 
@@ -113,8 +116,8 @@ smt_result smt_eq(const cpu_program* a, const cpu_program* b, u64 live_outs) {
 	}
 
 	if(n_disj == 0) {
+		// trivially equivalent
 		r.kind = SMT_EQUIVALENT;
-		r.solve_ms = 0;
 		smt_free_state(ctx, &in);
 		smt_free_state(ctx, &out_target);
 		smt_free_state(ctx, &out_rewrite);
@@ -127,18 +130,17 @@ smt_result smt_eq(const cpu_program* a, const cpu_program* b, u64 live_outs) {
 	Z3_inc_ref(ctx, formula);
 	for(u32 i = 0; i < n_disj; ++i) Z3_dec_ref(ctx, disjuncts[i]);
 
+	// solve
 	Z3_solver solver = Z3_mk_solver(ctx);
 	Z3_solver_inc_ref(ctx, solver);
 	Z3_solver_set_params(ctx, solver, params);
 	Z3_solver_assert(ctx, solver, formula);
-
-	const f64 t0 = get_time_ms();
 	Z3_lbool chk = Z3_solver_check(ctx, solver);
-	r.solve_ms = get_time_ms() - t0;
 
 	switch(chk) {
 		case Z3_L_FALSE: r.kind = SMT_EQUIVALENT; break;
 		case Z3_L_TRUE: {
+			// programs are not equivalent => build counterexample
 			Z3_model m = Z3_solver_get_model(ctx, solver);
 			Z3_model_inc_ref(ctx, m);
 			for(u32 i = 0; i < 32; ++i) {

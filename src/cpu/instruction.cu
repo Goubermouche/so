@@ -79,16 +79,15 @@ b32 cpu_op_is_commutative(cpu_opcode op) {
 	return CPU_INST_DB_HOST.row[op].commutative != 0;
 }
 
-cpu_opcode cpu_find_inst_op(str name, const cpu_operand_type* operands,
-														u8 op_count) {
+cpu_opcode cpu_find_inst_op(str name, const cpu_operand_type* ops, u8 op_cnt) {
 	for(u32 i = 0; i < (u32)OP_COUNT; ++i) {
 		const cpu_inst_spec* spec = &CPU_INST_DB_HOST.row[i];
 		if(!str_eq_cstr(name, spec->name)) { continue; }
-		if(cpu_spec_get_operand_count(spec) != op_count) { continue; }
+		if(cpu_spec_get_operand_count(spec) != op_cnt) { continue; }
 		b32 ok = true;
 
-		for(u8 k = 0; k < op_count; ++k) {
-			if(spec->operands[k] != operands[k]) {
+		for(u8 k = 0; k < op_cnt; ++k) {
+			if(spec->operands[k] != ops[k]) {
 				ok = false;
 				break;
 			}
