@@ -2,6 +2,8 @@
 pkgs.mkShell {
 	buildInputs = with pkgs; [
 		cudaPackages.cudatoolkit
+		cudaPackages.nsight_systems
+		cudaPackages.nsight_compute
 		gcc
 		bear
 		python3

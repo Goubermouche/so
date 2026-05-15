@@ -8,4 +8,9 @@ out
 .vscode
 
 compile_commands.json
+profile.perf
 
+profile.AnalysisSummary.html
+profile.DiagnosticsSummary.html
+profile.nsys-rep
+profile.sqlite

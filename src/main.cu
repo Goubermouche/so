@@ -18,6 +18,7 @@ i32 help() {
 	fprintf(stderr, "  --help       display this information\n");
 	fprintf(stderr, "  -e <list>    pass <list> of extensions to use\n");
 	//fprintf(stderr, "  -p <num>     pass <num> specifying max program length\n");
+	fprintf(stderr, "  -r <num>     pass <num> specifying number of runs to execute\n");
 	fprintf(stderr, "  -l           list supported extensions\n");
 	fprintf(stderr, "\n");
 	fprintf(stderr, "for bug reports and issues, please visit:\n");
@@ -131,6 +132,7 @@ i32 main(i32 argc, char** argv) {
 	i32 argi = 1;
 	char* source = 0;
 	u64 source_len = 0;
+	u32 run_count = 1;
 
 	// parse arguments
 	for(; argi < argc; ++argi) {
@@ -144,6 +146,10 @@ i32 main(i32 argc, char** argv) {
 		} else if(!strcmp(argv[argi], "-e")) {
 			VERIFY_ARG("-e", "<list>");
 			i32 res = parse_e(&cfg, argv[++argi]);
+			if(res) { return res; }
+		} else if(!strcmp(argv[argi], "-r")) {
+			VERIFY_ARG("-r", "<num>");
+			i32 res = parse_u32(argv[++argi], run_count);
 			if(res) { return res; }
 		} else if(!strcmp(argv[argi], "-l")) {
 			return list_e();
@@ -162,8 +168,11 @@ i32 main(i32 argc, char** argv) {
 	if(device_init()) { return 1; }
 	cpu_inst_db_load();
 
-	cpu_program parsed = cpu_program_parse(str_make((u8*)source, source_len));
-	opt_run(&parsed, &cfg);
-	cpu_program_free(&parsed);
+	for(u32 run = 0; run < run_count; ++run) {
+		cpu_program parsed = cpu_program_parse(str_make((u8*)source, source_len));
+		opt_run(&parsed, &cfg);
+		cpu_program_free(&parsed);
+	}
+
 	return 0;
 }

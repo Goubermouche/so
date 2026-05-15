@@ -58,15 +58,15 @@ inline i32 device_init() {
 	const i32 max_threads = p.multiProcessorCount * p.maxThreadsPerMultiProcessor;
 	const i32 max_warps = max_threads / 32;
 
-	printf("> device: %s (sm_%u%u)\n", p.name, p.major, p.minor);
-	printf("    threads: %u\n", max_threads);
-	printf("    warps: %u\n", max_warps);
-	printf("    dram: %.0fGB @ %dGB/s\n", ceil((f64)p.totalGlobalMem / GB(1)),
+	printf("device: %s (sm_%u%u)\n", p.name, p.major, p.minor);
+	printf("  threads: %u\n", max_threads);
+	printf("  warps: %u\n", max_warps);
+	printf("  dram: %.0fGB @ %dGB/s\n", ceil((f64)p.totalGlobalMem / GB(1)),
 				 (i32)mem_bw_gbs);
-	printf("    L2: %zuKB\n", p.l2CacheSize / KB(1));
-	printf("    shared memory per block: %zuKB\n", p.sharedMemPerBlock / KB(1));
-	printf("    SM clock: %dMHz\n", p.clockRate / 1000);
-	printf("    mem clock: %dMHz\n", p.memoryClockRate / 1000);
+	printf("  L2: %zuKB\n", p.l2CacheSize / KB(1));
+	printf("  shared memory per block: %zuKB\n", p.sharedMemPerBlock / KB(1));
+	printf("  SM clock: %dMHz\n", p.clockRate / 1000);
+	printf("  mem clock: %dMHz\n", p.memoryClockRate / 1000);
 
 	return 0;
 }
