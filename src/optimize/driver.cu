@@ -1,5 +1,5 @@
-#include "opt/batch_runner.cuh"
-#include "opt/driver.cuh"
+#include "optimize/batch_runner.cuh"
+#include "optimize/driver.cuh"
 
 __global__ void synth_kernel(const cpu_inst* __restrict__ d_cands, u64 n_candidates,
 														 const cpu_state* __restrict__ d_test_in,

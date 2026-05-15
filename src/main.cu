@@ -1,4 +1,4 @@
-#include "opt/optimize.h"
+#include "optimize/optimize.h"
 
 #define VERIFY_ARG(opt, arg)                                                                       \
 	if(argi + 1 >= argc) {                                                                           \

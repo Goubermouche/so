@@ -1,7 +1,7 @@
 #ifndef UTL_STR_H
 #define UTL_STR_H
 
-#include "utl/arena.h"
+#include "util/arena.h"
 
 typedef struct str {
 	u8* str;

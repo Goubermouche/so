@@ -1,7 +1,7 @@
 #ifndef CPU_CPU_CUH
 #define CPU_CPU_CUH
 
-#include "utl/device.h"
+#include "util/device.h"
 
 typedef enum cpu_reg_index {
 	REG_X0 = 0,

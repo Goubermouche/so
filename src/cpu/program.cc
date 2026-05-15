@@ -1,5 +1,5 @@
 #include "cpu/program.h"
-#include "lex/lexer.h"
+#include "lexer/lexer.h"
 
 cpu_program cpu_program_parse(str source) {
 	arena tmp = arena_make(0);

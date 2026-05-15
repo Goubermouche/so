@@ -1,7 +1,7 @@
 #ifndef UTL_arr_H
 #define UTL_arr_H
 
-#include "utl/arena.h"
+#include "util/arena.h"
 
 // TODO: temp solution
 

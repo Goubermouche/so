@@ -1,7 +1,7 @@
 #ifndef UTL_ARENA_H
 #define UTL_ARENA_H
 
-#include "utl/type.h"
+#include "util/type.h"
 
 #define ARENA_DEFAULT_BLOCK_SIZE MB(1)
 #define ARENA_DEFAULT_ALIGN 8

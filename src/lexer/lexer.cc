@@ -1,4 +1,4 @@
-#include "lex/lexer.h"
+#include "lexer/lexer.h"
 #include "cpu/cpu.cuh"
 #include <cstdlib>
 

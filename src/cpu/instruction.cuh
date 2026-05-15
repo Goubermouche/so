@@ -2,19 +2,19 @@
 #define CPU_INSTRUCTION_CUH
 
 #include "cpu/cpu.cuh"
-#include "ext/rv32i/opcodes.def"
-#include "ext/rv32m/opcodes.def"
-#include "ext/rv64i/opcodes.def"
-#include "ext/rv64m/opcodes.def"
-#include "utl/arr.h"
-#include "utl/str.h"
+#include "extensions/rv32i/opcodes.def"
+#include "extensions/rv32m/opcodes.def"
+#include "extensions/rv64i/opcodes.def"
+#include "extensions/rv64m/opcodes.def"
+#include "util/arr.h"
+#include "util/str.h"
 
 // to add a new extension:
 // - append it to the EXTENSION_LIST macro below
-// - create src/ext/<name>/ext.cuh defining the X-macro and the run handler
+// - create src/extensions/<name>/ext.cuh defining the X-macro and the run handler
 // - #include it below in the extensions section and append to EXT_OPCODE_LIST
 // - add a Z3.cc file that exposes ext_<name>_smt(...)
-// - wire those into smt/smt.cc and opt/batch_runner.cuh's dispatcher
+// - wire those into smt/smt.cc and optimize/batch_runner.cuh's dispatcher
 
 #define EXTENSION_LIST(X)                                                                          \
 	X(RV32I, "rv32i", 0)                                                                             \

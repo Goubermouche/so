@@ -2,7 +2,7 @@
 #define OPT_ENUMERATE_CUH
 
 #include "cpu/instruction.cuh"
-#include "opt/driver.cuh"
+#include "optimize/driver.cuh"
 
 typedef struct opt_candidate {
 	cpu_inst code[SYNTH_PROG_LEN];

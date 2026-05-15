@@ -1,7 +1,7 @@
 #ifndef LEX_LEXER_H
 #define LEX_LEXER_H
 
-#include "utl/str.h"
+#include "util/str.h"
 
 typedef enum lex_token {
 	TOK_UNKNOWN = 0,

@@ -1,10 +1,10 @@
 #ifndef OPT_BATCH_RUNNER_CUH
 #define OPT_BATCH_RUNNER_CUH
 
-#include "ext/rv32i/run.cuh"
-#include "ext/rv32m/run.cuh"
-#include "ext/rv64i/run.cuh"
-#include "ext/rv64m/run.cuh"
+#include "extensions/rv32i/run.cuh"
+#include "extensions/rv32m/run.cuh"
+#include "extensions/rv64i/run.cuh"
+#include "extensions/rv64m/run.cuh"
 #include "cpu/program.h"
 
 SO_HD void opt_lane_run(u64 regs[32], const cpu_inst* prog, u32 prog_len) {

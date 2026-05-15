@@ -2,8 +2,8 @@
 #define OPT_OPTIMIZE_H
 
 #include "cpu/program.h"
-#include "opt/driver.cuh"
-#include "opt/enumerate.cuh"
+#include "optimize/driver.cuh"
+#include "optimize/enumerate.cuh"
 #include "smt/smt.h"
 
 typedef struct opt_config {

@@ -1,9 +1,9 @@
-#include "opt/optimize.h"
+#include "optimize/optimize.h"
 #include "cpu/instruction.cuh"
 #include "cpu/program.h"
-#include "opt/batch_runner.cuh"
-#include "opt/canon.cuh"
-#include "opt/driver.cuh"
+#include "optimize/batch_runner.cuh"
+#include "optimize/canon.cuh"
+#include "optimize/driver.cuh"
 
 opt_config opt_make_default_config() {
 	opt_config cfg;

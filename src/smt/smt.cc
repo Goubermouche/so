@@ -1,9 +1,9 @@
 #include "smt/smt.h"
-#include "ext/rv32i/smt.cuh"
-#include "ext/rv32m/smt.cuh"
-#include "ext/rv64i/smt.cuh"
-#include "ext/rv64m/smt.cuh"
-#include "utl/type.h"
+#include "extensions/rv32i/smt.cuh"
+#include "extensions/rv32m/smt.cuh"
+#include "extensions/rv64i/smt.cuh"
+#include "extensions/rv64m/smt.cuh"
+#include "util/type.h"
 
 smt_state smt_run(Z3_context ctx, const smt_state* in, const cpu_program* prog) {
 	smt_state regs = smt_clone_state(ctx, in);

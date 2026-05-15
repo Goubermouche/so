@@ -1,5 +1,5 @@
-#include "opt/enumerate.cuh"
-#include "utl/device.h"
+#include "optimize/enumerate.cuh"
+#include "util/device.h"
 #include <cub/cub.cuh>
 
 opt_opcode_pool opt_build_opcode_pool(u32 ext_mask) {

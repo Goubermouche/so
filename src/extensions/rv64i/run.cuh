@@ -1,7 +1,7 @@
 #ifndef EXT_RV64I_RUN_CUH
 #define EXT_RV64I_RUN_CUH
 
-#include "ext/rv32i/run.cuh"
+#include "extensions/rv32i/run.cuh"
 #include "cpu/instruction.cuh"
 
 SO_HD bool ext_rv64i_run(u32 op, u64 regs[32], const cpu_inst* in) {
