@@ -1,0 +1,11 @@
+## code style
+- Respect the provided [**.clang-format**](.clang-format), run Clang format before committing
+- Use tabs (2 spaces wide)
+- Identifiers must use `snake_case`
+- Constants and macros must use `CAPITAL_SNAKE_CASE`
+- Don't use C++ features (WIP moving to pure C)
+- `src/` contains directories which represent namespaces (all objects declared within a given directory must have a 1-3 character long prefix followed by an underscore, which refers to its namespace)
+- Declare structs as: `typedef struct name { ... } name;`
+- Declare enums as: `typedef enum name { ... } name;`
+- Write idiomatic, concise, and well explained code
+- All header files must have C-style include guards (incl. namespace name)
