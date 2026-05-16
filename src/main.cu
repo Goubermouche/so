@@ -17,7 +17,6 @@ i32 help() {
 	fprintf(stderr, "  --version    display version infromation\n");
 	fprintf(stderr, "  --help       display this information\n");
 	fprintf(stderr, "  -e <list>    pass <list> of extensions to use\n");
-	//fprintf(stderr, "  -p <num>     pass <num> specifying max program length\n");
 	fprintf(stderr, "  -r <num>     pass <num> specifying number of runs to execute\n");
 	fprintf(stderr, "  -l           list supported extensions\n");
 	fprintf(stderr, "\n");
