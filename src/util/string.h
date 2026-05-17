@@ -4,28 +4,28 @@
 #include "util/arena.h"
 #include "util/array.h"
 
-struct str : slice<c8> {
-	str() : slice<c8>() {};
-	str(c8* ptr, u64 len) : slice<c8>(ptr, len) {}
-	str(const c8* c) {
+struct string : slice<c8> {
+	string() : slice<c8>() {};
+	string(c8* ptr, u64 len) : slice<c8>(ptr, len) {}
+	string(const c8* c) {
 		const c8* p = c;
 		while(*p) { ++p; }
 		ptr = (c8*)c;
 		size = (u64)(p - c);
 	}
 
-	static str format(arena& a, const c8* fmt, ...) {
+	static string format(arena& a, const c8* fmt, ...) {
 		va_list ap;
 		va_start(ap, fmt);
 		va_list ap2;
 		va_copy(ap2, ap);
 		int n = vsnprintf(0, 0, fmt, ap);
 		va_end(ap);
-		ASSERT(n >= 0, "str::format: vsnprintf failed\n");
+		ASSERT(n >= 0, "string::format: vsnprintf failed\n");
 		c8* dst = a.push<c8>((u64)n + 1);
 		vsnprintf((c8*)dst, (u64)n + 1, fmt, ap2);
 		va_end(ap2);
-		return str(dst, (u64)n);
+		return string(dst, (u64)n);
 	}
 
 	void pad(arena& a, u8 pad_byte, u64 target_size) {
@@ -46,9 +46,9 @@ struct str : slice<c8> {
 	}
 };
 
-inline str str_list_flatten(arena& a, const array<str>& parts, str sep) {
+inline string str_list_flatten(arena& a, const array<string>& parts, string sep) {
 	const u64 n = parts.size;
-	if(n == 0) { return str(); }
+	if(n == 0) { return string(); }
 
 	u64 total = 0;
 	for(u64 i = 0; i < n; ++i) { total += parts[i].size; }
@@ -57,7 +57,7 @@ inline str str_list_flatten(arena& a, const array<str>& parts, str sep) {
 	u64 off = 0;
 
 	for(u64 i = 0; i < n; ++i) {
-		const str& s = parts[i];
+		const string& s = parts[i];
 		if(s.size > 0) {
 			memcpy(dst + off, s.ptr, s.size);
 			off += s.size;
@@ -67,7 +67,7 @@ inline str str_list_flatten(arena& a, const array<str>& parts, str sep) {
 			off += sep.size;
 		}
 	}
-	return str(dst, total);
+	return string(dst, total);
 }
 
 #endif // #ifnded UTL_STR_H

@@ -5,28 +5,28 @@
 #include "extensions/rv64m/smt.h"
 #include "util/type.h"
 
-smt_state smt_run(Z3_context ctx, const smt_state* in, const cpu_program* p) {
+smt_state smt_run(Z3_context ctx, const smt_state* in, const sup::program& p) {
 	smt_state regs = smt_clone_state(ctx, in);
 	smt_pin_x0(ctx, &regs);
 	Z3_sort s64 = Z3_mk_bv_sort(ctx, 64);
 
-	for(u32 i = 0; i < p->size; ++i) {
-		const cpu_inst* ins = &p->instructions[i];
-		const u32 op = (u32)ins->op;
+	for(u32 i = 0; i < p.size; ++i) {
+		const cpu_inst& ins = p[i];
+		const u32 op = (u32)ins.op;
 
 		if(op == OP_NOP) { continue; }
 
 		const cpu_inst_spec* spec = &CPU_INST_DB_HOST.row[op];
-		const u32 d = spec->dst_slot >= 0 ? (u32)ins->operands[spec->dst_slot].reg : 0;
-		const u32 s1 = spec->src_slot >= 0 ? (u32)ins->operands[spec->src_slot].reg : 0;
-		const u32 s2 = spec->src2_slot >= 0 ? (u32)ins->operands[spec->src2_slot].reg : 0;
+		const u32 d = spec->dst_slot >= 0 ? (u32)ins.operands[spec->dst_slot].reg : 0;
+		const u32 s1 = spec->src_slot >= 0 ? (u32)ins.operands[spec->src_slot].reg : 0;
+		const u32 s2 = spec->src2_slot >= 0 ? (u32)ins.operands[spec->src2_slot].reg : 0;
 
 		Z3_ast imm = Z3_mk_unsigned_int64(ctx, 0, s64);
 		Z3_inc_ref(ctx, imm);
 
 		for(u32 k = 0; k < 4; ++k) {
 			if(spec->operands[k] == CPU_OPERAND_IMM) {
-				Z3_ast new_imm = Z3_mk_unsigned_int64(ctx, (u64)ins->operands[k].i, s64);
+				Z3_ast new_imm = Z3_mk_unsigned_int64(ctx, (u64)ins.operands[k].i, s64);
 				Z3_inc_ref(ctx, new_imm);
 				Z3_dec_ref(ctx, imm);
 				imm = new_imm;
@@ -57,7 +57,7 @@ static void z3_error_cb(Z3_context c, Z3_error_code ctx) {
 	g_err_set = true;
 }
 
-smt_result smt_eq(const cpu_program* a, const cpu_program* b, u64 live_outs) {
+smt_result smt_eq(const sup::program& a, const sup::program& b, u64 live_outs) {
 	const f64 t0 = get_time_ms();
 	smt_result r = {};
 

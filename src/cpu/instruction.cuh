@@ -7,7 +7,7 @@
 #include "extensions/rv64i/opcodes.def"
 #include "extensions/rv64m/opcodes.def"
 #include "util/array.h"
-#include "util/str.h"
+#include "util/string.h"
 
 #define EXTENSION_LIST(X)                                                      \
 	X(RV32I, "rv32i", 0)                                                         \
@@ -149,8 +149,8 @@ SO_HD const cpu_inst_spec* cpu_find_spec(cpu_opcode op) {
 
 u8 cpu_spec_get_operand_count(const cpu_inst_spec* spec);
 b32 cpu_op_is_commutative(cpu_opcode op);
-cpu_opcode cpu_find_inst_op(str name, const cpu_operand_type* ops, u8 op_cnt);
-str cpu_operand_to_string(arena* a, cpu_inst_operand op, cpu_operand_type ty);
+cpu_opcode cpu_find_inst_op(string name, const cpu_operand_type* ops, u8 op_cnt);
+string cpu_operand_to_string(arena& a, cpu_inst_operand op, cpu_operand_type ty);
 void cpu_print_enabled_extensions(u32 mask);
 
 #endif // #ifndef CPU_INSTRUCTION_CUH

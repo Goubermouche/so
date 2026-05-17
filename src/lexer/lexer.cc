@@ -36,7 +36,7 @@ u64 lex_token_to_reg_index(lex_token tok) {
 	return tok - TOK_REG_X0;
 }
 
-lex_lexer lex_make(str source) {
+lex_lexer lex_make(string source) {
 	lex_lexer lex;
 	lex.index = 0;
 	lex.source = source;
@@ -108,7 +108,7 @@ lex_token lex_next_tok_identifier(lex_lexer* lex) {
 	}
 
 	const u64 end = lex->index - 1;
-	lex->curr_string = str(lex->source.ptr + start, end - start);
+	lex->curr_string = string(lex->source.ptr + start, end - start);
 
 	const auto token = lex_str_to_tok(lex->curr_string);
 
@@ -141,7 +141,7 @@ lex_token lex_next_tok_char(lex_lexer* lex) {
 	return TOK_UNKNOWN;
 }
 
-lex_token lex_str_to_tok(str string) {
+lex_token lex_str_to_tok(string string) {
 	// numeric register (x1, x2,...)
 	if(string.size > 1 && string[0] == 'x') {
 		c8 buf[16] = {0};
@@ -183,7 +183,7 @@ lex_token lex_str_to_tok(str string) {
 	return TOK_UNKNOWN;
 }
 
-lex_token lex_str_to_num(lex_lexer* lex, str string) {
+lex_token lex_str_to_num(lex_lexer* lex, string string) {
 	i32 base = 10;
 	c8 buf[64];
 	ASSERT(string.size < sizeof(buf), "numeric literal too long ('%.*s')\n",

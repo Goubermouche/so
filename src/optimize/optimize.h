@@ -16,7 +16,7 @@ typedef struct opt_cfg {
 typedef struct opt_ctx {
 	arena mem; // NOTE: maybe not really worth it here
 	// input
-	const cpu_program* prog;
+	const sup::program* prog;
 	const opt_cfg* cfg;
 	u64 live_in;
 	u64 live_out;
@@ -28,15 +28,15 @@ typedef struct opt_ctx {
 	cpu_state target_out[OPT_FILTER_TEST_COUNT];
 	u32 counterexample_count; // needed for the round robin test retire
 	// output
-	cpu_program best;
+	sup::program best;
 	// stats
-	u64 total_candidates;
-	u64 filter_passes;
-	u64 smt_calls;
-	f64 ms_enum;
-	f64 ms_filter;
-	f64 ms_smt;
-	f64 ms_total;
+	u64 total_candidates = 0;
+	u64 filter_passes = 0;
+	u64 smt_calls = 0;
+	f64 ms_enum = 0.0;
+	f64 ms_filter = 0.0;
+	f64 ms_smt = 0.0;
+	f64 ms_total = 0.0;
 } opt_ctx;
 
 opt_cfg opt_cfg_make_default();
@@ -46,11 +46,11 @@ void opt_log_startup(const opt_ctx* ctx);
 void opt_log_results(opt_ctx* ctx, b32 found);
 void opt_log_stats(const opt_ctx* ctx);
 
-u64 opt_compute_live_in(const cpu_program* program);
+u64 opt_compute_live_in(const sup::program& program);
 void opt_init_tests(opt_ctx* ctx);
 b32 opt_filter_batch(opt_ctx* ctx, const opt_program* p, u64 p_cnt, u32 len);
 b32 opt_run_length(opt_ctx* ctx, u32 len);
 
-void opt_run(const cpu_program* prog, const opt_cfg* cfg);
+void opt_run(const sup::program* prog, const opt_cfg* cfg);
 
 #endif // #ifndef OPT_OPTIMIZE_H

@@ -1,7 +1,7 @@
 #ifndef LEX_LEXER_H
 #define LEX_LEXER_H
 
-#include "util/str.h"
+#include "util/string.h"
 
 typedef enum lex_token {
 	TOK_UNKNOWN = 0,
@@ -59,15 +59,15 @@ typedef enum lex_token {
 } lex_token;
 
 typedef struct lex_lexer {
-	str source;
+	string source;
 	c8 current_char;
 	u64 index;
 	lex_token curr;
-	str curr_string;
+	string curr_string;
 	i64 curr_imm; // signed
 } lex_lexer;
 
-lex_lexer lex_make(str source);
+lex_lexer lex_make(string source);
 lex_token lex_next_tok(lex_lexer* lex);
 lex_token lex_next_tok_identifier(lex_lexer* lex);
 lex_token lex_next_tok_comment(lex_lexer* lex);
@@ -79,8 +79,8 @@ b32 lex_is_at_end(lex_lexer* lex);
 void lex_consume_spaces(lex_lexer* lex);
 b32 lex_is_whitespace(c8 c);
 
-lex_token lex_str_to_tok(str string);
-lex_token lex_str_to_num(lex_lexer* lex, str string);
+lex_token lex_str_to_tok(string string);
+lex_token lex_str_to_num(lex_lexer* lex, string string);
 
 const c8* lex_token_to_str(lex_token tok);
 b32 lex_token_is_reg(lex_token tok);

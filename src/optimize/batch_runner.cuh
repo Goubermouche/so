@@ -23,10 +23,10 @@ SO_HD void opt_lane_run(u64 regs[32], const cpu_inst* prog, u32 prog_len) {
 	}
 }
 
-inline cpu_state opt_host_run(const cpu_program* prog, const cpu_state* in) {
+inline cpu_state opt_host_run(const sup::program& prog, const cpu_state* in) {
 	cpu_state out = *in;
 	out.regs[0] = 0;
-	opt_lane_run(out.regs, prog->instructions, prog->size);
+	opt_lane_run(out.regs, prog.ptr, prog.size);
 	return out;
 }
 

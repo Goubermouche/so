@@ -168,9 +168,9 @@ i32 main(i32 argc, c8** argv) {
 	cpu_inst_db_load();
 
 	for(u32 run = 0; run < run_count; ++run) {
-		cpu_program parsed = cpu_program_parse(str(source, source_len));
+		arena a;
+		sup::program parsed = sup::program::parse(a, string(source, source_len));
 		opt_run(&parsed, &cfg);
-		cpu_program_free(&parsed);
 	}
 
 	return 0;

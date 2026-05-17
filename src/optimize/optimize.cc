@@ -14,25 +14,25 @@ opt_cfg opt_cfg_make_default() {
 	return cfg;
 }
 
-u64 opt_compute_live_in(const cpu_program* program) {
+u64 opt_compute_live_in(const sup::program& program) {
 	u64 written = 0;
 	u64 live_in = 0;
 
-	for(u32 i = 0; i < program->size; ++i) {
-		const cpu_inst_spec* spec = cpu_find_spec(program->instructions[i].op);
+	for(u32 i = 0; i < program.size; ++i) {
+		const cpu_inst_spec* spec = cpu_find_spec(program[i].op);
 
 		if(spec->src_slot >= 0) {
-			const u32 r = (u32)program->instructions[i].operands[spec->src_slot].reg;
+			const u32 r = (u32)program[i].operands[spec->src_slot].reg;
 			if(!(written & (1ull << r))) { live_in |= 1ull << r; }
 		}
 
 		if(spec->src2_slot >= 0) {
-			const u32 r = (u32)program->instructions[i].operands[spec->src2_slot].reg;
+			const u32 r = (u32)program[i].operands[spec->src2_slot].reg;
 			if(!(written & (1ull << r))) { live_in |= 1ull << r; }
 		}
 
 		if(spec->dst_slot >= 0) {
-			const u32 r = (u32)program->instructions[i].operands[spec->dst_slot].reg;
+			const u32 r = (u32)program[i].operands[spec->dst_slot].reg;
 			written |= 1ull << r;
 		}
 	}
@@ -43,8 +43,8 @@ u64 opt_compute_live_in(const cpu_program* program) {
 void opt_log_startup(const opt_ctx* ctx) {
 	arena scratch;
 
-	printf("source (len: %u):\n", ctx->prog->size);
-	str src = cpu_program_to_str(&scratch, ctx->prog);
+	printf("source (len: %zu):\n", ctx->prog->size);
+	string src = ctx->prog->to_string(scratch);
 	printf("%s", (const c8*)src.ptr);
 	printf("live-in:  { ");
 	opt_print_reg_mask(ctx->live_in);
@@ -67,18 +67,20 @@ void opt_log_results(opt_ctx* ctx, b32 found) {
 		return;
 	}
 
-	printf("done: optimization found (len: %u):\n", ctx->best.size);
-	str s = cpu_program_to_str(&ctx->mem, &ctx->best);
+	printf("done: optimization found (len: %zu):\n", ctx->best.size);
+	string s = ctx->best.to_string(ctx->mem);
 	printf("%s", (const c8*)s.ptr);
 }
 
 void opt_log_stats(const opt_ctx* ctx) {
 	printf("statistics:\n");
 	printf("  candidates:  %.2fM\n", (f64)ctx->total_candidates / 1e6);
-	const f64 eps = (f64)ctx->total_candidates / (ctx->ms_enum / 1000.0);
+	const f64 safe_ms_enum = (ctx->ms_enum > 0.0) ? ctx->ms_enum : 0.001;
+	const f64 eps = (f64)ctx->total_candidates / (safe_ms_enum / 1000.0);
 	const f64 epsm = eps / 1e6;
 	printf("  enum time:   %.2fms (%.2fM cand/sec)\n", ctx->ms_enum, epsm);
-	const f64 fps = (f64)ctx->total_candidates / (ctx->ms_filter / 1000.0);
+	const f64 safe_ms_filter = (ctx->ms_filter > 0.0) ? ctx->ms_filter : 0.001;
+	const f64 fps = (f64)ctx->total_candidates / (safe_ms_filter / 1000.0);
 	const f64 fpsm = fps / 1e6;
 	printf("  filter time: %.2fms (%.2fM cand/sec)\n", ctx->ms_filter, fpsm);
 	printf("  smt time:    %.2fms (%zu calls)\n", ctx->ms_smt, ctx->smt_calls);
@@ -117,7 +119,7 @@ void opt_init_tests(opt_ctx* ctx) {
 
 		in.regs[0] = 0; // x0 invariant
 		ctx->test_in[t] = in;
-		ctx->target_out[t] = opt_host_run(ctx->prog, &in);
+		ctx->target_out[t] = opt_host_run(*ctx->prog, &in);
 	}
 }
 
@@ -149,9 +151,9 @@ b32 opt_filter_batch(opt_ctx* ctx, const opt_program* p, u64 p_cnt, u32 len) {
 			cpu_inst survivor_inst[OPT_PROGRAM_LEN];
 			dtoh_memcpy(survivor_inst, p + i, sizeof(opt_program));
 			const f64 t0_smt = get_time_ms();
-			cpu_program survivor = {survivor_inst, len};
+			sup::program survivor = {survivor_inst, len};
 			// verify via an SMT solver
-			smt_result res = smt_eq(ctx->prog, &survivor, ctx->live_out);
+			smt_result res = smt_eq(*ctx->prog, survivor, ctx->live_out);
 			ctx->ms_smt += get_time_ms() - t0_smt;
 			++ctx->smt_calls;
 
@@ -166,7 +168,7 @@ b32 opt_filter_batch(opt_ctx* ctx, const opt_program* p, u64 p_cnt, u32 len) {
 				const u32 slot = 16 + (ctx->counterexample_count % 16);
 				ctx->counterexample_count++;
 				ctx->test_in[slot] = res.counterexample;
-				ctx->target_out[slot] = opt_host_run(ctx->prog, &res.counterexample);
+				ctx->target_out[slot] = opt_host_run(*ctx->prog, &res.counterexample);
 				return false;
 			}
 		}
@@ -222,13 +224,13 @@ b32 opt_run_length(opt_ctx* ctx, u32 len) {
 	return false;
 }
 
-void opt_run(const cpu_program* prog, const opt_cfg* cfg) {
+void opt_run(const sup::program* prog, const opt_cfg* cfg) {
 	f64 t0 = get_time_ms();
-	opt_ctx ctx = {0};
+	opt_ctx ctx = {};
 	ctx.prog = prog;
 	ctx.cfg = cfg;
-	ctx.live_out = cpu_program_live_outs(prog);
-	ctx.live_in = opt_compute_live_in(prog);
+	ctx.live_out = prog->get_live_out();
+	ctx.live_in = opt_compute_live_in(*prog);
 
 	opt_log_startup(&ctx);
 	opt_init_tests(&ctx);

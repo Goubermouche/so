@@ -3,16 +3,15 @@
 
 #include "cpu/instruction.cuh"
 
-typedef struct cpu_program {
-	cpu_inst* instructions;
-	u32 size;
-} cpu_program;
+namespace sup {
+struct program : slice<cpu_inst> {
+	program() : slice<cpu_inst>() {}
+	program(cpu_inst* ptr, u64 size) : slice<cpu_inst>(ptr, size) {}
+	static program parse(arena& a, string source);
 
-cpu_program cpu_program_parse(str source);
-cpu_program cpu_program_dce(const cpu_program* program, u64 live_mask);
-
-void cpu_program_free(const cpu_program* program);
-str cpu_program_to_str(arena* a, const cpu_program* program);
-u64 cpu_program_live_outs(const cpu_program* program);
+	string to_string(arena& a) const;
+	u64 get_live_out()  const;
+};
+} // namespace sup
 
 #endif // #ifndef CPU_PROGRAM_H

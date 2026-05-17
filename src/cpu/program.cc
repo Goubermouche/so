@@ -1,7 +1,9 @@
 #include "cpu/program.h"
 #include "lexer/lexer.h"
 
-cpu_program cpu_program_parse(str source) {
+namespace sup {
+
+program program::parse(arena& a, string source) {
 	array<cpu_inst> result;
 	lex_lexer lex = lex_make(source);
 	lex_next_char(&lex);
@@ -13,7 +15,7 @@ cpu_program cpu_program_parse(str source) {
 		if(lex.curr == TOK_EOF) break;
 
 		if(lex.curr == TOK_IDENTIFIER) {
-			str saved = lex.curr_string;
+			string saved = lex.curr_string;
 			lex_next_tok(&lex);
 			if(lex.curr == TOK_COLON) {
 				lex_next_tok(&lex);
@@ -74,100 +76,42 @@ cpu_program cpu_program_parse(str source) {
 		ASSERT(false, "expected mnemonic, got '%s'", lex_token_to_str(lex.curr));
 	}
 
-	cpu_inst* data = (cpu_inst*)malloc(sizeof(cpu_inst) * result.size);
+	cpu_inst* data = a.push<cpu_inst>(result.size);
 	memcpy(data, result.ptr, sizeof(cpu_inst) * result.size);
-	cpu_program out = {data, (u32)result.size};
+	program out = {data, result.size};
 	return out;
 }
 
-void cpu_program_free(const cpu_program* program) {
-	free(program->instructions);
-}
+string program::to_string(arena& a) const {
+	array<string> builder;
 
-cpu_program cpu_program_dce(const cpu_program* program, u64 live_mask) {
-	// x0 is never live in the user-facing sense (writes are dropped)
-	u64 live = live_mask & ~1ULL;
-	u64 live_bits_by_slot = 0;
-	u32 count = 0;
-
-	for(i32 i = (i32)program->size - 1; i >= 0; --i) {
-		const cpu_inst_spec* spec = cpu_find_spec(program->instructions[i].op);
-
-		if(spec->dst_slot < 0) { continue; }
-
-		const u32 dst = (u32)program->instructions[i].operands[spec->dst_slot].reg;
-
-		// writes to x0 are nops
-		if(dst == 0) { continue; }
-
-		const u64 dst_bit = 1ULL << dst;
-
-		if(live & dst_bit) {
-			++count;
-			live_bits_by_slot |= (1ULL << i);
-
-			// no rmw semantics
-			live &= ~dst_bit;
-
-			if(spec->src_slot >= 0) {
-				const u32 src =
-					(u32)program->instructions[i].operands[spec->src_slot].reg;
-				live |= 1ULL << src;
-			}
-
-			if(spec->src2_slot >= 0) {
-				const u32 src2 =
-					(u32)program->instructions[i].operands[spec->src2_slot].reg;
-				live |= 1ULL << src2;
-			}
-		}
-	}
-
-	cpu_program out;
-	out.size = 0;
-	for(u32 i = 0; i < program->size; ++i) {
-		if(live_bits_by_slot & (1ULL << i)) { out.size++; }
-	}
-	out.instructions = (cpu_inst*)malloc(sizeof(cpu_inst) * out.size);
-	u32 index = 0;
-	for(u32 i = 0; i < program->size; ++i) {
-		if(live_bits_by_slot & (1ULL << i)) {
-			out.instructions[index++] = program->instructions[i];
-		}
-	}
-
-	return out;
-}
-
-str cpu_program_to_str(arena* a, const cpu_program* program) {
-	array<str> builder;
-
-	for(u32 i = 0; i < program->size; ++i) {
-		const cpu_inst inst = program->instructions[i];
+	for(u32 i = 0; i < size; ++i) {
+		const cpu_inst inst = ptr[i];
 		const cpu_inst_spec* spec = cpu_find_spec(inst.op);
 		builder.push("  ");
-		str inst_name = str(spec->name);
-		inst_name.pad(*a, ' ', 8);
+		string inst_name = string(spec->name);
+		inst_name.pad(a, ' ', 8);
 		builder.push(inst_name);
 
 		const u8 nop = cpu_spec_get_operand_count(spec);
 		for(u8 j = 0; j < nop; ++j) {
-			builder.push(cpu_operand_to_string(a, inst.operands[j], spec->operands[j]));
+			builder.push(
+				cpu_operand_to_string(a, inst.operands[j], spec->operands[j]));
 			if(j + 1 < nop) { builder.push(", "); }
 		}
 
 		builder.push("\n");
 	}
 
-	return str_list_flatten(*a, builder, "");
+	return str_list_flatten(a, builder, "");
 }
 
-u64 cpu_program_live_outs(const cpu_program* program) {
+u64 program::get_live_out() const {
 	u64 touched = 0;
 	u64 live_out = 0;
 
-	for(u64 idx = program->size; idx-- > 0;) {
-		const cpu_inst& in = program->instructions[idx];
+	for(u64 idx = size; idx-- > 0;) {
+		const cpu_inst& in = ptr[idx];
 		const cpu_inst_spec* spec = cpu_find_spec(in.op);
 
 		// write side first
@@ -199,3 +143,4 @@ u64 cpu_program_live_outs(const cpu_program* program) {
 
 	return live_out;
 }
+} // namespace sup

@@ -79,7 +79,7 @@ b32 cpu_op_is_commutative(cpu_opcode op) {
 	return CPU_INST_DB_HOST.row[op].commutative != 0;
 }
 
-cpu_opcode cpu_find_inst_op(str name, const cpu_operand_type* ops, u8 op_cnt) {
+cpu_opcode cpu_find_inst_op(string name, const cpu_operand_type* ops, u8 op_cnt) {
 	for(u32 i = 0; i < (u32)OP_COUNT; ++i) {
 		const cpu_inst_spec* spec = &CPU_INST_DB_HOST.row[i];
 		if(name != spec->name) { continue; }
@@ -99,10 +99,10 @@ cpu_opcode cpu_find_inst_op(str name, const cpu_operand_type* ops, u8 op_cnt) {
 	return OP_COUNT; // sentinel: no match
 }
 
-str cpu_operand_to_string(arena* a, cpu_inst_operand op, cpu_operand_type ty) {
+string cpu_operand_to_string(arena& a, cpu_inst_operand op, cpu_operand_type ty) {
 	switch(ty) {
 		case CPU_OPERAND_REG: return cpu_reg_name((u32)op.reg);
-		case CPU_OPERAND_IMM: return str::format(*a, "%lld", (i64)op.i);
+		case CPU_OPERAND_IMM: return string::format(a, "%lld", (i64)op.i);
 		default: return "?";
 	}
 }

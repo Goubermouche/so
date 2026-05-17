@@ -19,7 +19,7 @@ typedef struct smt_result {
 	const c8* error;
 } smt_result;
 
-smt_state smt_run(Z3_context ctx, const smt_state* in, const cpu_program* p);
-smt_result smt_eq(const cpu_program* a, const cpu_program* b, u64 live_outs);
+smt_state smt_run(Z3_context ctx, const smt_state* in, const sup::program& p);
+smt_result smt_eq(const sup::program& a, const sup::program& b, u64 live_outs);
 
 #endif // #ifndef SMT_SMT_H
