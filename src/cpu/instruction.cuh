@@ -147,8 +147,6 @@ SO_HD const cpu_inst_spec* cpu_find_spec(cpu_opcode op) {
 #endif // #ifdef __CUDA_ARCH__
 }
 
-ARR_DECL(cpu_inst, cpu_inst_arr)
-
 u8 cpu_spec_get_operand_count(const cpu_inst_spec* spec);
 b32 cpu_op_is_commutative(cpu_opcode op);
 cpu_opcode cpu_find_inst_op(str name, const cpu_operand_type* ops, u8 op_cnt);

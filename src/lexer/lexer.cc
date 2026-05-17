@@ -42,13 +42,12 @@ lex_lexer lex_make(str source) {
 	lex.source = source;
 	lex.current_char = 0;
 	lex.curr = TOK_UNKNOWN;
-	lex.curr_string = str_make(0, 0);
 	lex.curr_imm = 0;
 	return lex;
 }
 
 lex_token lex_next_tok(lex_lexer* lex) {
-	lex->curr_string = str_make(0, 0);
+	lex->curr_string = {};
 
 	// get rid of leading space-like characters
 	lex_consume_spaces(lex);
@@ -86,7 +85,7 @@ lex_token lex_next_tok(lex_lexer* lex) {
 
 char lex_next_char(lex_lexer* lex) {
 	if(lex_is_at_end(lex)) { return lex->current_char = EOF; }
-	return lex->current_char = (char)lex->source.str[lex->index++];
+	return lex->current_char = (char)lex->source[lex->index++];
 }
 
 b32 lex_is_at_end(lex_lexer* lex) { return lex->index >= lex->source.size; }
@@ -109,14 +108,14 @@ lex_token lex_next_tok_identifier(lex_lexer* lex) {
 	}
 
 	const u64 end = lex->index - 1;
-	lex->curr_string = str_make(lex->source.str + start, end - start);
+	lex->curr_string = str(lex->source.ptr + start, end - start);
 
 	const auto token = lex_str_to_tok(lex->curr_string);
 
 	if(token != TOK_UNKNOWN) { return lex->curr = token; }
 
 	// numerical literal
-	if(lex->curr_string.size > 0 && isdigit(lex->curr_string.str[0])) {
+	if(lex->curr_string.size > 0 && isdigit(lex->curr_string[0])) {
 		return lex_str_to_num(lex, lex->curr_string);
 	}
 
@@ -144,10 +143,10 @@ lex_token lex_next_tok_char(lex_lexer* lex) {
 
 lex_token lex_str_to_tok(str string) {
 	// numeric register (x1, x2,...)
-	if(string.size > 1 && string.str[0] == 'x') {
+	if(string.size > 1 && string[0] == 'x') {
 		char buf[16] = {0};
 		const u64 n = string.size < 15 ? string.size : 15;
-		memcpy(buf, string.str, n);
+		memcpy(buf, string.ptr, n);
 		buf[n] = 0;
 
 		char* end;
@@ -178,7 +177,7 @@ lex_token lex_str_to_tok(str string) {
 
 	static const u64 abi_size = sizeof(abi_map) / sizeof(abi_map[0]);
 	for(size_t i = 0; i < abi_size; ++i) {
-		if(str_eq_cstr(string, abi_map[i].name)) return abi_map[i].tok;
+		if(string == abi_map[i].name) return abi_map[i].tok;
 	}
 
 	return TOK_UNKNOWN;
@@ -188,8 +187,8 @@ lex_token lex_str_to_num(lex_lexer* lex, str string) {
 	i32 base = 10;
 	char buf[64];
 	ASSERT(string.size < sizeof(buf), "numeric literal too long ('%.*s')\n",
-				 (int)string.size, (const char*)string.str);
-	memcpy(buf, string.str, string.size);
+				 (int)string.size, (const char*)string.ptr);
+	memcpy(buf, string.ptr, string.size);
 	if(string.size >= sizeof(buf)) __builtin_unreachable();
 	buf[string.size] = 0;
 	char* data = buf;

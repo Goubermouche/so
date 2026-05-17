@@ -2,38 +2,72 @@
 #define UTL_STR_H
 
 #include "util/arena.h"
+#include "util/arr.h"
 
-typedef struct str {
-	u8* str;
-	u64 size;
-} str;
+struct str : slice<char> {
+	str() : slice<char>() {};
+	str(char* ptr, u64 len) : slice<char>(ptr, len) {}
+	str(const char* c) {
+		const char* p = c;
+		while(*p) { ++p; }
+		ptr = (char*)c;
+		size = (u64)(p - c);
+	}
 
-// string list
-typedef struct str_node {
-	struct str_node* next;
-	str s;
-} str_node;
+	static str format(arena& a, const char* fmt, ...) {
+		va_list ap;
+		va_start(ap, fmt);
+		va_list ap2;
+		va_copy(ap2, ap);
+		int n = vsnprintf(0, 0, fmt, ap);
+		va_end(ap);
+		ASSERT(n >= 0, "str::format: vsnprintf failed\n");
+		char* dst = PUSH_ARRAY(&a, char, (u64)n + 1);
+		vsnprintf((char*)dst, (u64)n + 1, fmt, ap2);
+		va_end(ap2);
+		return str(dst, (u64)n);
+	}
 
-typedef struct str_list {
-	str_node* first;
-	str_node* last;
-	u64 node_count;
-	u64 total_size;
-} str_list;
+	void pad(arena& a, u8 pad_byte, u64 target_size) {
+		if(target_size <= size) { return; }
+		const u64 pad_len = target_size - size;
+		char* dst = PUSH_ARRAY(&a, char, target_size);
+		memcpy(dst, ptr, size);
+		memset(dst + size, pad_byte, pad_len);
+		ptr = dst;
+		size = target_size;
+	}
 
-#define STR_LIT(s) str_make((u8*)("" s ""), sizeof(s) - 1)
+	b32 operator==(const char* cstr) const {
+		for(u64 i = 0; i < size; ++i) {
+			if(cstr[i] == '\0' || ptr[i] != cstr[i]) { return false; }
+		}
+		return cstr[size] == '\0';
+	}
+};
 
-str str_make(u8* p, u64 n);
-str str_cstring(const char* c);
-b32 str_eq(str a, str b);
-b32 str_eq_cstr(str a, const char* c);
-str str_copy(arena* a, str s);
-str str_push_fmt(arena* a, const char* fmt, ...);
-str str_pad_to_len(arena* a, str s, u8 pad, u64 target_len);
+inline str str_list_flatten(arena* a, const array<str>& parts, str sep) {
+	const u64 n = parts.size();
+	if(n == 0) { return str(); }
 
-// string list
-void str_list_push(arena* a, str_list* list, str s);
-void str_list_push_fmt(arena* a, str_list* list, const char* fmt, ...);
-str str_list_flatten(arena* a, str_list* list, str sep);
+	u64 total = 0;
+	for(u64 i = 0; i < n; ++i) { total += parts[i].size; }
+	if(sep.size > 0 && n > 1) { total += sep.size * (n - 1); }
+	char* dst = PUSH_ARRAY(a, char, total);
+	u64 off = 0;
+
+	for(u64 i = 0; i < n; ++i) {
+		const str& s = parts[i];
+		if(s.size > 0) {
+			memcpy(dst + off, s.ptr, s.size);
+			off += s.size;
+		}
+		if(sep.size > 0 && i + 1 < n) {
+			memcpy(dst + off, sep.ptr, sep.size);
+			off += sep.size;
+		}
+	}
+	return str(dst, total);
+}
 
 #endif // #ifnded UTL_STR_H

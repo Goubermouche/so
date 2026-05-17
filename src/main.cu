@@ -168,7 +168,7 @@ i32 main(i32 argc, char** argv) {
 	cpu_inst_db_load();
 
 	for(u32 run = 0; run < run_count; ++run) {
-		cpu_program parsed = cpu_program_parse(str_make((u8*)source, source_len));
+		cpu_program parsed = cpu_program_parse(str(source, source_len));
 		opt_run(&parsed, &cfg);
 		cpu_program_free(&parsed);
 	}

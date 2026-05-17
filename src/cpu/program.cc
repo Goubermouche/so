@@ -2,8 +2,7 @@
 #include "lexer/lexer.h"
 
 cpu_program cpu_program_parse(str source) {
-	arena tmp = arena_make(0);
-	cpu_inst_arr result = cpu_inst_arr_make(&tmp);
+	array<cpu_inst> result;
 	lex_lexer lex = lex_make(source);
 	lex_next_char(&lex);
 	lex_next_tok(&lex);
@@ -53,10 +52,10 @@ cpu_program cpu_program_parse(str source) {
 
 			// pseudo-op rewriting
 			//   sext.w rd, rs1   ->   addiw rd, rs1, 0
-			if(str_eq_cstr(saved, "sext.w") && operand_count == 2 &&
+			if(saved == "sext.w" && operand_count == 2 &&
 				 operand_types[0] == CPU_OPERAND_REG &&
 				 operand_types[1] == CPU_OPERAND_REG) {
-				saved = STR_LIT("addiw");
+				saved = "addiw";
 				curr_inst.operands[2].i = 0;
 				operand_types[2] = CPU_OPERAND_IMM;
 				operand_count = 3;
@@ -65,8 +64,8 @@ cpu_program cpu_program_parse(str source) {
 			curr_inst.op = cpu_find_inst_op(saved, operand_types, operand_count);
 			ASSERT(curr_inst.op != OP_COUNT,
 						 "no opcode matches mnemonic '%.*s' with %d operand(s)\n",
-						 (int)saved.size, (const char*)saved.str, (int)operand_count);
-			cpu_inst_arr_push(&result, curr_inst);
+						 (int)saved.size, (const char*)saved.ptr, (int)operand_count);
+			result.push_back(curr_inst);
 
 			if(lex.curr == TOK_NEWLINE) { lex_next_tok(&lex); }
 			continue;
@@ -75,10 +74,9 @@ cpu_program cpu_program_parse(str source) {
 		ASSERT(false, "expected mnemonic, got '%s'", lex_token_to_str(lex.curr));
 	}
 
-	cpu_inst* data = (cpu_inst*)malloc(sizeof(cpu_inst) * result.size);
-	memcpy(data, result.v, sizeof(cpu_inst) * result.size);
-	cpu_program out = {data, (u32)result.size};
-	arena_release(&tmp);
+	cpu_inst* data = (cpu_inst*)malloc(sizeof(cpu_inst) * result.size());
+	memcpy(data, result.data(), sizeof(cpu_inst) * result.size());
+	cpu_program out = {data, (u32)result.size()};
 	return out;
 }
 
@@ -142,27 +140,26 @@ cpu_program cpu_program_dce(const cpu_program* program, u64 live_mask) {
 }
 
 str cpu_program_to_str(arena* a, const cpu_program* program) {
-	str_list builder = {};
+	array<str> builder;
 
 	for(u32 i = 0; i < program->size; ++i) {
 		const cpu_inst inst = program->instructions[i];
 		const cpu_inst_spec* spec = cpu_find_spec(inst.op);
-		str_list_push(a, &builder, STR_LIT("  "));
-		str_list_push(a, &builder,
-									str_pad_to_len(a, str_cstring(spec->name), ' ', 8));
+		builder.push_back("  ");
+		str inst_name = str(spec->name);
+		inst_name.pad(*a, ' ', 8);
+		builder.push_back(inst_name);
 
 		const u8 nop = cpu_spec_get_operand_count(spec);
 		for(u8 j = 0; j < nop; ++j) {
-			str_list_push(
-				a, &builder,
-				cpu_operand_to_string(a, inst.operands[j], spec->operands[j]));
-			if(j + 1 < nop) { str_list_push(a, &builder, STR_LIT(", ")); }
+			builder.push_back(cpu_operand_to_string(a, inst.operands[j], spec->operands[j]));
+			if(j + 1 < nop) { builder.push_back(", "); }
 		}
 
-		str_list_push(a, &builder, STR_LIT("\n"));
+		builder.push_back("\n");
 	}
 
-	return str_list_flatten(a, &builder, STR_LIT(""));
+	return str_list_flatten(a, builder, "");
 }
 
 u64 cpu_program_live_outs(const cpu_program* program) {

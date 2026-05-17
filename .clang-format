@@ -48,6 +48,7 @@ SpacesInParentheses: false
 SpacesInSquareBrackets: false
 SpacesInCStyleCastParentheses: false
 Cpp11BracedListStyle: true
+SpaceAfterTemplateKeyword: false
 
 IndentPPDirectives: None
 IndentCaseLabels: true

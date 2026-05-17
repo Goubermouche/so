@@ -69,7 +69,7 @@ typedef float f32;
 typedef double f64;
 typedef bool b32;
 
-static inline f64 get_time_ms(void) {
+static inline f64 get_time_ms() {
 	struct timespec ts;
 	clock_gettime(CLOCK_MONOTONIC, &ts);
 	return (f64)ts.tv_sec * 1000.0 + (f64)ts.tv_nsec / 1000000.0;

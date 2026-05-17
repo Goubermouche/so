@@ -45,7 +45,7 @@ void opt_log_startup(const opt_ctx* ctx) {
 
 	printf("source (len: %u):\n", ctx->prog->size);
 	str src = cpu_program_to_str(&scratch, ctx->prog);
-	printf("%s", (const char*)src.str);
+	printf("%s", (const char*)src.ptr);
 	printf("live-in:  { ");
 	opt_print_reg_mask(ctx->live_in);
 	printf(" }\n");
@@ -71,7 +71,7 @@ void opt_log_results(opt_ctx* ctx, b32 found) {
 
 	printf("done: optimization found (len: %u):\n", ctx->best.size);
 	str s = cpu_program_to_str(&ctx->mem, &ctx->best);
-	printf("%s", (const char*)s.str);
+	printf("%s", (const char*)s.ptr);
 }
 
 void opt_log_stats(const opt_ctx* ctx) {
