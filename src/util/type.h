@@ -15,7 +15,7 @@
 #define DEBUG_MODE
 #else
 #define RELEASE_MODE
-#endif
+#endif // #ifdef DEBUG
 
 #ifdef _WIN32
 // windows
@@ -32,7 +32,7 @@
 #else
 // unknown system
 #error "unsupported platform!"
-#endif
+#endif // #ifdef _WIN32
 
 // #ifdef DEBUG_MODE
 #define ASSERT(__condition, __message, ...)                                    \
@@ -45,7 +45,7 @@
 	} while(false)
 // #else
 // #define ASSERT(__condition, __message, ...)
-// #endif
+// #endif // #ifdef DEBUG_MODE
 
 #define KB(n) (((u64)(n)) << 10)
 #define MB(n) (((u64)(n)) << 20)
