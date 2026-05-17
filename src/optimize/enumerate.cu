@@ -2,8 +2,6 @@
 #include "util/device.h"
 #include <cub/cub.cuh>
 
-// TODO: cpp
-
 opt_opcode_pool opt_build_opcode_pool(u32 ext_mask) {
 	opt_opcode_pool p = {};
 
@@ -28,13 +26,14 @@ opt_imm_pool opt_build_imm_pool() {
 	return p;
 }
 
-void opt_build_meta_host(const opt_opcode_pool* pool, opt_op_meta* out, u32* out_n) {
+void opt_build_meta_host(const opt_opcode_pool* pool, opt_meta* out,
+												 u32* out_n) {
 	u32 n = 0;
 	for(u32 i = 0; i < pool->n; ++i) {
 		const cpu_opcode op = pool->ops[i];
 		const cpu_inst_spec& spec = CPU_INST_DB_HOST.row[op];
 
-		opt_op_meta m;
+		opt_meta m;
 		m.op = (u16)op;
 		m.commutative = (u8)spec.commutative;
 		m.dst_slot = spec.dst_slot;
@@ -70,7 +69,7 @@ void opt_build_meta_host(const opt_opcode_pool* pool, opt_op_meta* out, u32* out
 	*out_n = n;
 }
 
-__device__ __forceinline__ void opt_build_inst(const opt_op_meta& m, u32 rd,
+__device__ __forceinline__ void opt_build_inst(const opt_meta& m, u32 rd,
 																							 u32 rs1, u32 rs2_or_imm_idx,
 																							 b32 is_imm, const i64* imms,
 																							 cpu_inst* out) {
@@ -93,7 +92,7 @@ __device__ __forceinline__ void opt_build_inst(const opt_op_meta& m, u32 rd,
 
 template <bool EMIT>
 __device__ __forceinline__ u32 opt_try_one(
-	const opt_layer_ctx& L, const opt_state& src, const opt_op_meta& m, u32 rd,
+	const opt_layer_ctx& L, const opt_state& src, const opt_meta& m, u32 rd,
 	u32 rs1, u32 rs2_or_imm_idx, b32 is_imm, b32 rd_is_new_scratch,
 	opt_state* dst_states, opt_program* dst_cands, u64 write_base,
 	u32* write_local, u64 cap_states, u64 cap_cands) {
@@ -147,6 +146,7 @@ __device__ __forceinline__ u32 opt_try_one(
 	return 1;
 }
 
+// expand one frontier node
 template <bool EMIT>
 __device__ u32 opt_expand_one(const opt_layer_ctx& L, const opt_state& src,
 															opt_state* dst_states, opt_program* dst_cands,
@@ -170,7 +170,7 @@ __device__ u32 opt_expand_one(const opt_layer_ctx& L, const opt_state& src,
 	u32 write_local = 0;
 
 	for(u32 oi = 0; oi < L.n_meta; ++oi) {
-		const opt_op_meta m = L.meta[oi];
+		const opt_meta m = L.meta[oi];
 
 		// iterate dst registers
 		u64 dst_iter = dst_avail;
@@ -260,12 +260,13 @@ __global__ void opt_emit_kernel(const opt_state* __restrict__ src_front,
 
 	const opt_state src = src_front[tid];
 	const u64 base = d_offsets[tid];
-	opt_expand_one<true>(ctx, src, dst_states, dst_cands, base, cap_states, cap_cands);
+	opt_expand_one<true>(ctx, src, dst_states, dst_cands, base, cap_states,
+											 cap_cands);
 }
 
 i32 opt_enum_make(opt_enum_ctx* ctx, u64 batch_size) {
 	*ctx = {};
-	dmalloc(&ctx->d_meta, (u64)OP_COUNT * sizeof(opt_op_meta));
+	dmalloc(&ctx->d_meta, (u64)OP_COUNT * sizeof(opt_meta));
 	dmalloc(&ctx->d_imms, (u64)64 * sizeof(i64));
 	ctx->n_meta = 0;
 	ctx->n_imms_cap = 64;
@@ -279,7 +280,7 @@ i32 opt_enum_make(opt_enum_ctx* ctx, u64 batch_size) {
 		const u64 reserved = 128ull * MB(1);
 		const u64 usable = free_mem > reserved ? (free_mem - reserved) : 0;
 		const u64 state_mem = (2ull * sizeof(opt_state)) + sizeof(opt_program);
-		const u64 meta_mem  = sizeof(u64) + sizeof(u32);
+		const u64 meta_mem = sizeof(u64) + sizeof(u32);
 		const u64 per_slot = state_mem + meta_mem;
 		const u64 vram_capacity = usable / per_slot;
 		if(vram_capacity < capacity) { capacity = vram_capacity; }
@@ -320,7 +321,7 @@ void opt_enumerate(opt_enum_ctx* ctx, const opt_enum_cfg* cfg) {
 	if(cfg->cap == 0 || cfg->prog_len == 0) { return; }
 
 	// meta host
-	opt_op_meta h_meta[OP_COUNT];
+	opt_meta h_meta[OP_COUNT];
 	u32 n_meta = 0;
 	opt_build_meta_host(cfg->pool, h_meta, &n_meta);
 	if(n_meta == 0) { return; }
@@ -328,9 +329,9 @@ void opt_enumerate(opt_enum_ctx* ctx, const opt_enum_cfg* cfg) {
 	const u64 live_in = cfg->live_in_mask & ~1ULL;
 	const u64 preserved = live_in | cfg->live_out_mask;
 
-	htod_memcpy(ctx->d_meta, h_meta, n_meta * sizeof(opt_op_meta));
+	htod_memcpy(ctx->d_meta, h_meta, n_meta * sizeof(opt_meta));
 	htod_memcpy(ctx->d_imms, cfg->imms->vals, cfg->imms->n * sizeof(i64));
-	opt_op_meta* d_meta = (opt_op_meta*)ctx->d_meta;
+	opt_meta* d_meta = (opt_meta*)ctx->d_meta;
 	i64* d_imms = (i64*)ctx->d_imms;
 	const u64 capacity = ctx->capacity < cfg->cap ? ctx->capacity : cfg->cap;
 

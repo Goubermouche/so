@@ -1,13 +1,11 @@
 ## sup [wip]
 Instruction superoptimizer accelerated with CUDA.
-
 ## build
 ```
 nix-shell
 ./build
 ./out/sup
 ```
- 
 ## resources
 - [**riscv-opcodes**](https://github.com/riscv/riscv-opcodes)
 - [**HieraSynth**](https://dl.acm.org/doi/10.1145/3763162)

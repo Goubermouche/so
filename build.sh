@@ -7,21 +7,13 @@ rm -f ./out/obj -rf
 
 unset SOURCE_DATE_EPOCH
 mkdir -p out/obj
+
 export LD_LIBRARY_PATH=/run/opengl-driver/lib:$LD_LIBRARY_PATH
+export nvcc_flags="-I src -O2 -Wno-deprecated-gpu-targets -arch=sm_61"
 
 srcs_c=$(find src -name '*.c' 2>/dev/null)
 srcs_cu=$(find src -name '*.cu' 2>/dev/null)
 srcs_cc=$(find src -name '*.cc' 2>/dev/null)
-
-if [ "$1" = "profile" ] || [ "$USE_PROFILE" = "1" ]; then
-	# profile mode
-	export USE_PROFILE=1
-	export nvcc_flags="-I src -O2 -g -Xcompiler -fno-omit-frame-pointer,-fno-inline -lineinfo -Wno-deprecated-gpu-targets -arch=sm_61"
-else
-	# release mode
-	export nvcc_flags="-I src -O2 -Wno-deprecated-gpu-targets -arch=sm_61"
-fi
-
 nvcc_libs="-lz3"
 output="out/sup"
 cores=$(nproc)
@@ -44,5 +36,5 @@ export srcs_c srcs_cu srcs_cc output nvcc_libs jobs
 if [ "$1" = "_build" ]; then
 	build
 else
-	bear -- "$0" _build
+	time bear -- "$0" _build
 fi
