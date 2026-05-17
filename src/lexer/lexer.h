@@ -60,7 +60,7 @@ typedef enum lex_token {
 
 typedef struct lex_lexer {
 	str source;
-	char current_char;
+	c8 current_char;
 	u64 index;
 	lex_token curr;
 	str curr_string;
@@ -74,15 +74,15 @@ lex_token lex_next_tok_comment(lex_lexer* lex);
 lex_token lex_next_tok_string(lex_lexer* lex);
 lex_token lex_next_tok_char(lex_lexer* lex);
 
-char lex_next_char(lex_lexer* lex);
+c8 lex_next_char(lex_lexer* lex);
 b32 lex_is_at_end(lex_lexer* lex);
 void lex_consume_spaces(lex_lexer* lex);
-b32 lex_is_whitespace(char c);
+b32 lex_is_whitespace(c8 c);
 
 lex_token lex_str_to_tok(str string);
 lex_token lex_str_to_num(lex_lexer* lex, str string);
 
-const char* lex_token_to_str(lex_token tok);
+const c8* lex_token_to_str(lex_token tok);
 b32 lex_token_is_reg(lex_token tok);
 u64 lex_token_to_reg_index(lex_token tok);
 

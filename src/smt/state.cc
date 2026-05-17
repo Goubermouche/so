@@ -41,7 +41,7 @@ void smt_pin_x0(Z3_context ctx, smt_state* state) {
 	state->r[0] = zero;
 }
 
-Z3_ast smt_mk_bv64_const(Z3_context ctx, const char* name) {
+Z3_ast smt_mk_bv64_const(Z3_context ctx, const c8* name) {
 	Z3_sort s64 = Z3_mk_bv_sort(ctx, 64);
 	Z3_symbol sym = Z3_mk_string_symbol(ctx, name);
 	Z3_ast c = Z3_mk_const(ctx, sym, s64);
@@ -68,7 +68,7 @@ smt_state smt_clone_state(Z3_context ctx, const smt_state* src) {
 }
 
 smt_state smt_make_input_state(Z3_context ctx) {
-	static const char* names[32] = {
+	static const c8* names[32] = {
 		"s_x0",	 "s_x1",	"s_x2",	 "s_x3",	"s_x4",	 "s_x5",	"s_x6",	 "s_x7",
 		"s_x8",	 "s_x9",	"s_x10", "s_x11", "s_x12", "s_x13", "s_x14", "s_x15",
 		"s_x16", "s_x17", "s_x18", "s_x19", "s_x20", "s_x21", "s_x22", "s_x23",

@@ -64,8 +64,8 @@ cpu_program cpu_program_parse(str source) {
 			curr_inst.op = cpu_find_inst_op(saved, operand_types, operand_count);
 			ASSERT(curr_inst.op != OP_COUNT,
 						 "no opcode matches mnemonic '%.*s' with %d operand(s)\n",
-						 (int)saved.size, (const char*)saved.ptr, (int)operand_count);
-			result.push_back(curr_inst);
+						 (int)saved.size, (const c8*)saved.ptr, (int)operand_count);
+			result.push(curr_inst);
 
 			if(lex.curr == TOK_NEWLINE) { lex_next_tok(&lex); }
 			continue;
@@ -74,9 +74,9 @@ cpu_program cpu_program_parse(str source) {
 		ASSERT(false, "expected mnemonic, got '%s'", lex_token_to_str(lex.curr));
 	}
 
-	cpu_inst* data = (cpu_inst*)malloc(sizeof(cpu_inst) * result.size());
-	memcpy(data, result.data(), sizeof(cpu_inst) * result.size());
-	cpu_program out = {data, (u32)result.size()};
+	cpu_inst* data = (cpu_inst*)malloc(sizeof(cpu_inst) * result.size);
+	memcpy(data, result.ptr, sizeof(cpu_inst) * result.size);
+	cpu_program out = {data, (u32)result.size};
 	return out;
 }
 
@@ -145,21 +145,21 @@ str cpu_program_to_str(arena* a, const cpu_program* program) {
 	for(u32 i = 0; i < program->size; ++i) {
 		const cpu_inst inst = program->instructions[i];
 		const cpu_inst_spec* spec = cpu_find_spec(inst.op);
-		builder.push_back("  ");
+		builder.push("  ");
 		str inst_name = str(spec->name);
 		inst_name.pad(*a, ' ', 8);
-		builder.push_back(inst_name);
+		builder.push(inst_name);
 
 		const u8 nop = cpu_spec_get_operand_count(spec);
 		for(u8 j = 0; j < nop; ++j) {
-			builder.push_back(cpu_operand_to_string(a, inst.operands[j], spec->operands[j]));
-			if(j + 1 < nop) { builder.push_back(", "); }
+			builder.push(cpu_operand_to_string(a, inst.operands[j], spec->operands[j]));
+			if(j + 1 < nop) { builder.push(", "); }
 		}
 
-		builder.push_back("\n");
+		builder.push("\n");
 	}
 
-	return str_list_flatten(a, builder, "");
+	return str_list_flatten(*a, builder, "");
 }
 
 u64 cpu_program_live_outs(const cpu_program* program) {

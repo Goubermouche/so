@@ -2,7 +2,7 @@
 #include "cpu/cpu.cuh"
 #include <cstdlib>
 
-const char* lex_token_to_str(lex_token tok) {
+const c8* lex_token_to_str(lex_token tok) {
 	switch(tok) {
 		case TOK_UNKNOWN: return "unknown";
 		case TOK_IDENTIFIER: return "identifier";
@@ -83,9 +83,9 @@ lex_token lex_next_tok(lex_lexer* lex) {
 	return TOK_UNKNOWN;
 }
 
-char lex_next_char(lex_lexer* lex) {
+c8 lex_next_char(lex_lexer* lex) {
 	if(lex_is_at_end(lex)) { return lex->current_char = EOF; }
-	return lex->current_char = (char)lex->source[lex->index++];
+	return lex->current_char = (c8)lex->source[lex->index++];
 }
 
 b32 lex_is_at_end(lex_lexer* lex) { return lex->index >= lex->source.size; }
@@ -95,7 +95,7 @@ void lex_consume_spaces(lex_lexer* lex) {
 	while(lex_is_whitespace(lex->current_char)) { lex_next_char(lex); }
 }
 
-b32 lex_is_whitespace(char c) {
+b32 lex_is_whitespace(c8 c) {
 	return (c == '\t' || c == '\v' || c == '\f' || c == '\r' || c == ' ');
 }
 
@@ -144,12 +144,12 @@ lex_token lex_next_tok_char(lex_lexer* lex) {
 lex_token lex_str_to_tok(str string) {
 	// numeric register (x1, x2,...)
 	if(string.size > 1 && string[0] == 'x') {
-		char buf[16] = {0};
+		c8 buf[16] = {0};
 		const u64 n = string.size < 15 ? string.size : 15;
 		memcpy(buf, string.ptr, n);
 		buf[n] = 0;
 
-		char* end;
+		c8* end;
 		i64 reg_num = strtol(buf + 1, &end, 10);
 		if(*end == '\0' && reg_num >= 0 && reg_num <= 31) {
 			return (lex_token)(TOK_REG_X0 + reg_num);
@@ -157,7 +157,7 @@ lex_token lex_str_to_tok(str string) {
 	}
 
 	struct reg_mapping {
-		const char* name;
+		const c8* name;
 		lex_token tok;
 	};
 
@@ -185,13 +185,13 @@ lex_token lex_str_to_tok(str string) {
 
 lex_token lex_str_to_num(lex_lexer* lex, str string) {
 	i32 base = 10;
-	char buf[64];
+	c8 buf[64];
 	ASSERT(string.size < sizeof(buf), "numeric literal too long ('%.*s')\n",
-				 (int)string.size, (const char*)string.ptr);
+				 (int)string.size, (const c8*)string.ptr);
 	memcpy(buf, string.ptr, string.size);
 	if(string.size >= sizeof(buf)) __builtin_unreachable();
 	buf[string.size] = 0;
-	char* data = buf;
+	c8* data = buf;
 
 	if(string.size > 1 && buf[0] == '0') {
 		switch(buf[1]) {

@@ -49,7 +49,7 @@ smt_state smt_run(Z3_context ctx, const smt_state* in, const cpu_program* p) {
 }
 
 // catch any error reported through the Z3 error handler.
-static thread_local char g_err_buf[512];
+static thread_local c8 g_err_buf[512];
 static thread_local bool g_err_set = false;
 static void z3_error_cb(Z3_context c, Z3_error_code ctx) {
 	Z3_string msg = Z3_get_error_msg(c, ctx);

@@ -17,7 +17,7 @@ void hmalloc(void** ptr, u64 size);
 void htod_memcpy(void* dst, const void* src, u64 count);
 void dtoh_memcpy(void* dst, const void* src, u64 count);
 
-void check_cuda(cudaError_t err, const char* msg);
+void check_cuda(cudaError_t err, const c8* msg);
 
 i32 device_init();
 

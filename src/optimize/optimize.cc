@@ -41,11 +41,11 @@ u64 opt_compute_live_in(const cpu_program* program) {
 }
 
 void opt_log_startup(const opt_ctx* ctx) {
-	arena scratch = arena_make(0);
+	arena scratch;
 
 	printf("source (len: %u):\n", ctx->prog->size);
 	str src = cpu_program_to_str(&scratch, ctx->prog);
-	printf("%s", (const char*)src.ptr);
+	printf("%s", (const c8*)src.ptr);
 	printf("live-in:  { ");
 	opt_print_reg_mask(ctx->live_in);
 	printf(" }\n");
@@ -59,8 +59,6 @@ void opt_log_startup(const opt_ctx* ctx) {
 	printf("\n");
 	printf("max prog len: %u\n", OPT_PROGRAM_LEN);
 	printf("batch size: %zu cands\n", ctx->cfg->batch_size);
-
-	arena_release(&scratch);
 }
 
 void opt_log_results(opt_ctx* ctx, b32 found) {
@@ -71,7 +69,7 @@ void opt_log_results(opt_ctx* ctx, b32 found) {
 
 	printf("done: optimization found (len: %u):\n", ctx->best.size);
 	str s = cpu_program_to_str(&ctx->mem, &ctx->best);
-	printf("%s", (const char*)s.ptr);
+	printf("%s", (const c8*)s.ptr);
 }
 
 void opt_log_stats(const opt_ctx* ctx) {
@@ -125,7 +123,7 @@ void opt_init_tests(opt_ctx* ctx) {
 
 b32 opt_filter_batch(opt_ctx* ctx, const opt_program* p, u64 p_cnt, u32 len) {
 	if(p_cnt == 0) { return false; }
-	arena scratch = arena_make(0);
+	arena scratch;
 	opt_filter_cfg cfg;
 	cfg.live_mask = ctx->live_out;
 	cfg.prog_len = len;
@@ -133,7 +131,7 @@ b32 opt_filter_batch(opt_ctx* ctx, const opt_program* p, u64 p_cnt, u32 len) {
 	cfg.n_candidates = p_cnt;
 	cfg.test_in = ctx->test_in;
 	cfg.target_out = ctx->target_out;
-	u8* pass_counts = PUSH_ARRAY(&scratch, u8, p_cnt);
+	u8* pass_counts = scratch.push<u8>(p_cnt);
 
 	// run mass filter - remove the majority of candidate programs by verifying
 	// their correctness against a set of random and counterexample tests
@@ -159,10 +157,9 @@ b32 opt_filter_batch(opt_ctx* ctx, const opt_program* p, u64 p_cnt, u32 len) {
 
 			if(res.kind == SMT_EQUIVALENT) {
 				// equivalent program
-				cpu_inst* dst = PUSH_ARRAY(&ctx->mem, cpu_inst, len);
+				cpu_inst* dst = ctx->mem.push<cpu_inst>(len);
 				memcpy(dst, survivor_inst, sizeof(cpu_inst) * len);
 				ctx->best = {dst, len};
-				arena_release(&scratch);
 				return true;
 			} else if(res.kind == SMT_COUNTEREXAMPLE) {
 				// add the counterexample (round robin), then abort this batch
@@ -170,13 +167,11 @@ b32 opt_filter_batch(opt_ctx* ctx, const opt_program* p, u64 p_cnt, u32 len) {
 				ctx->counterexample_count++;
 				ctx->test_in[slot] = res.counterexample;
 				ctx->target_out[slot] = opt_host_run(ctx->prog, &res.counterexample);
-				arena_release(&scratch);
 				return false;
 			}
 		}
 	}
 
-	arena_release(&scratch);
 	return false;
 }
 
@@ -234,7 +229,6 @@ void opt_run(const cpu_program* prog, const opt_cfg* cfg) {
 	ctx.cfg = cfg;
 	ctx.live_out = cpu_program_live_outs(prog);
 	ctx.live_in = opt_compute_live_in(prog);
-	ctx.mem = arena_make(0);
 
 	opt_log_startup(&ctx);
 	opt_init_tests(&ctx);
@@ -242,14 +236,12 @@ void opt_run(const cpu_program* prog, const opt_cfg* cfg) {
 
 	if(opt_filter_make(&ctx.filter, chunk_cap)) {
 		fprintf(stderr, "error: filter::init failed\n");
-		arena_release(&ctx.mem);
 		return;
 	}
 
 	if(opt_enum_make(&ctx.enumerate, ctx.cfg->batch_size)) {
 		fprintf(stderr, "error: enum_ctx::init failed\n");
 		opt_filter_free(&ctx.filter);
-		arena_release(&ctx.mem);
 		return;
 	}
 
@@ -268,5 +260,4 @@ void opt_run(const cpu_program* prog, const opt_cfg* cfg) {
 	opt_log_stats(&ctx);
 	opt_enum_ctx_free(&ctx.enumerate);
 	opt_filter_free(&ctx.filter);
-	arena_release(&ctx.mem);
 }

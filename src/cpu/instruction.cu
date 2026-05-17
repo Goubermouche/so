@@ -8,7 +8,7 @@ __device__ const cpu_inst_spec* cpu_find_spec_dev(cpu_opcode op) {
 	return &CPU_INST_DB_DEV.row[op];
 }
 
-static void cpu_inst_db_set_row(cpu_inst_db* d, cpu_opcode op, const char* name,
+static void cpu_inst_db_set_row(cpu_inst_db* d, cpu_opcode op, const c8* name,
 																cpu_inst_shape shape, u8 commutative,
 																u32 ext_bit) {
 	cpu_inst_spec* r = &d->row[op];

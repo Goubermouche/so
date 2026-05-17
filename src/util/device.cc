@@ -1,6 +1,6 @@
 #include "device.h"
 
-void check_cuda(cudaError_t err, const char* msg) {
+void check_cuda(cudaError_t err, const c8* msg) {
 	if(err != cudaSuccess) {
 		fprintf(stderr, "error: [%s]: %s\n", msg, cudaGetErrorString(err));
 		fflush(stderr);

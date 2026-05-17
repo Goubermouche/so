@@ -16,7 +16,7 @@ typedef enum smt_result_kind {
 typedef struct smt_result {
 	smt_result_kind kind;
 	cpu_state counterexample;
-	const char* error;
+	const c8* error;
 } smt_result;
 
 smt_state smt_run(Z3_context ctx, const smt_state* in, const cpu_program* p);

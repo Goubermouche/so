@@ -31,19 +31,19 @@ i32 list_e() {
 	return 0;
 }
 
-i32 parse_e(opt_cfg* cfg, const char* p) {
+i32 parse_e(opt_cfg* cfg, const c8* p) {
 	cfg->ext_mask = 0;
 	while(*p) {
 		while(*p == ' ' || *p == ',' || *p == '+') p++;
 		if(!*p) break;
 
-		const char* start = p;
+		const c8* start = p;
 		while(*p && *p != ' ' && *p != ',' && *p != '+') p++;
 
 		bool found = false;
 		for(u32 i = 0; i < CPU_EXT_COUNT; ++i) {
-			const char* ext = CPU_EXT_NAMES[i];
-			const char* s = start;
+			const c8* ext = CPU_EXT_NAMES[i];
+			const c8* s = start;
 
 			while(s < p && *ext == *s) {
 				ext++;
@@ -58,7 +58,7 @@ i32 parse_e(opt_cfg* cfg, const char* p) {
 		}
 
 		if(!found) {
-			char buf[32] = {0};
+			c8 buf[32] = {0};
 			u64 len = (p - start < 31) ? (p - start) : 31;
 			for(u64 k = 0; k < len; ++k) buf[k] = start[k];
 			fprintf(stderr, "error: unknown extension '%s'\n", buf);
@@ -69,8 +69,8 @@ i32 parse_e(opt_cfg* cfg, const char* p) {
 	return 0;
 }
 
-i32 parse_u32(const char* src, u32& out) {
-	char* endptr;
+i32 parse_u32(const c8* src, u32& out) {
+	c8* endptr;
 	errno = 0;
 	u32 num = strtoul(src, &endptr, 10);
 
@@ -93,7 +93,7 @@ i32 parse_u32(const char* src, u32& out) {
 	return 0;
 }
 
-i32 read_file(const char* filename, char** out, u64* out_len) {
+i32 read_file(const c8* filename, c8** out, u64* out_len) {
 	FILE* file = fopen(filename, "rb");
 	if(!file) {
 		fprintf(stderr, "error: cannot open file '%s'\n", filename);
@@ -110,7 +110,7 @@ i32 read_file(const char* filename, char** out, u64* out_len) {
 		return 1;
 	}
 
-	char* buffer = (char*)malloc(length + 1);
+	c8* buffer = (c8*)malloc(length + 1);
 	if(!buffer) {
 		fclose(file);
 		fprintf(stderr, "error: cannot allocate file buffer\n");
@@ -126,10 +126,10 @@ i32 read_file(const char* filename, char** out, u64* out_len) {
 	return 0;
 }
 
-i32 main(i32 argc, char** argv) {
+i32 main(i32 argc, c8** argv) {
 	opt_cfg cfg = opt_cfg_make_default();
 	i32 argi = 1;
-	char* source = 0;
+	c8* source = 0;
 	u64 source_len = 0;
 	u32 run_count = 1;
 

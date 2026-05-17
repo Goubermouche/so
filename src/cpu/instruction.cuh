@@ -6,7 +6,7 @@
 #include "extensions/rv32m/opcodes.def"
 #include "extensions/rv64i/opcodes.def"
 #include "extensions/rv64m/opcodes.def"
-#include "util/arr.h"
+#include "util/array.h"
 #include "util/str.h"
 
 #define EXTENSION_LIST(X)                                                      \
@@ -39,7 +39,7 @@ typedef enum cpu_inst_ext_bits {
 } cpu_inst_ext_bits;
 
 // array of all extension directory names
-static const char* const CPU_EXT_NAMES[] = {
+static const c8* const CPU_EXT_NAMES[] = {
 #define X(TAG, DIR, BIT) DIR,
 	EXTENSION_LIST(X)
 #undef X
@@ -78,7 +78,7 @@ typedef enum cpu_operand_type {
 } cpu_operand_type;
 
 typedef struct cpu_inst_spec {
-	const char* name;
+	const c8* name;
 	cpu_operand_type operands[4];
 	cpu_opcode op;
 	i8 dst_slot;

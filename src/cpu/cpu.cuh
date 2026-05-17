@@ -43,7 +43,7 @@ typedef struct cpu_state {
 	u64 regs[32];
 } cpu_state;
 
-SO_HD const char* cpu_reg_name(u32 r) {
+SO_HD const c8* cpu_reg_name(u32 r) {
 	switch(r) {
 		case 0: return "x0";
 		case 1: return "x1";
