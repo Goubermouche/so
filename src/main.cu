@@ -31,8 +31,8 @@ i32 list_e() {
 	return 0;
 }
 
-i32 parse_e(sup::opt_cfg* cfg, const c8* p) {
-	cfg->ext_mask = 0;
+i32 parse_e(sup::optimizer::options& opt, const c8* p) {
+	opt.ext_mask = 0;
 	while(*p) {
 		while(*p == ' ' || *p == ',' || *p == '+') p++;
 		if(!*p) break;
@@ -51,7 +51,7 @@ i32 parse_e(sup::opt_cfg* cfg, const c8* p) {
 			}
 
 			if(s == p && *ext == '\0') {
-				cfg->ext_mask |= (1u << i);
+				opt.ext_mask |= (1u << i);
 				found = true;
 				break;
 			}
@@ -127,7 +127,7 @@ i32 read_file(const c8* filename, c8** out, u64* out_len) {
 }
 
 i32 main(i32 argc, c8** argv) {
-	sup::opt_cfg cfg = sup::opt_cfg_make_default();
+	sup::optimizer::options opt;
 	i32 argi = 1;
 	c8* source = 0;
 	u64 source_len = 0;
@@ -144,7 +144,7 @@ i32 main(i32 argc, c8** argv) {
 			return help();
 		} else if(!strcmp(argv[argi], "-e")) {
 			VERIFY_ARG("-e", "<list>");
-			i32 res = parse_e(&cfg, argv[++argi]);
+			i32 res = parse_e(opt, argv[++argi]);
 			if(res) { return res; }
 		} else if(!strcmp(argv[argi], "-r")) {
 			VERIFY_ARG("-r", "<num>");
@@ -170,7 +170,7 @@ i32 main(i32 argc, c8** argv) {
 	for(u32 run = 0; run < run_count; ++run) {
 		arena a;
 		sup::program parsed = sup::program::parse(a, string(source, source_len));
-		opt_run(&parsed, &cfg);
+		sup::optimizer::run(parsed, opt);
 	}
 
 	return 0;

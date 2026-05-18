@@ -4,88 +4,88 @@
 #include "util/string.h"
 
 namespace sup {
-typedef enum lex_token {
-	TOK_UNKNOWN = 0,
+enum class token {
+	UNKNOWN = 0,
 
-	TOK_IDENTIFIER,
-	TOK_NUMBER,
+	IDENTIFIER,
+	NUMBER,
 
 	// regs
-	TOK_REG_X0,
-	TOK_REG_X1,
-	TOK_REG_X2,
-	TOK_REG_X3,
-	TOK_REG_X4,
-	TOK_REG_X5,
-	TOK_REG_X6,
-	TOK_REG_X7,
-	TOK_REG_X8,
-	TOK_REG_X9,
-	TOK_REG_X10,
-	TOK_REG_X11,
-	TOK_REG_X12,
-	TOK_REG_X13,
-	TOK_REG_X14,
-	TOK_REG_X15,
-	TOK_REG_X16,
-	TOK_REG_X17,
-	TOK_REG_X18,
-	TOK_REG_X19,
-	TOK_REG_X20,
-	TOK_REG_X21,
-	TOK_REG_X22,
-	TOK_REG_X23,
-	TOK_REG_X24,
-	TOK_REG_X25,
-	TOK_REG_X26,
-	TOK_REG_X27,
-	TOK_REG_X28,
-	TOK_REG_X29,
-	TOK_REG_X30,
-	TOK_REG_X31,
+	REG_X0,
+	REG_X1,
+	REG_X2,
+	REG_X3,
+	REG_X4,
+	REG_X5,
+	REG_X6,
+	REG_X7,
+	REG_X8,
+	REG_X9,
+	REG_X10,
+	REG_X11,
+	REG_X12,
+	REG_X13,
+	REG_X14,
+	REG_X15,
+	REG_X16,
+	REG_X17,
+	REG_X18,
+	REG_X19,
+	REG_X20,
+	REG_X21,
+	REG_X22,
+	REG_X23,
+	REG_X24,
+	REG_X25,
+	REG_X26,
+	REG_X27,
+	REG_X28,
+	REG_X29,
+	REG_X30,
+	REG_X31,
 
 	// other
-	TOK_COMMA,
-	TOK_LBRACKET,
-	TOK_RBRACKET,
-	TOK_LBRACE,
-	TOK_RBRACE,
-	TOK_PLUS,
-	TOK_MINUS,
-	TOK_ASTERISK,
-	TOK_DOLLARSIGN,
-	TOK_COLON,
-	TOK_NEWLINE,
-	TOK_EOF,
-} lex_token;
+	COMMA,
+	LBRACKET,
+	RBRACKET,
+	LBRACE,
+	RBRACE,
+	PLUS,
+	MINUS,
+	ASTERISK,
+	DOLLARSIGN,
+	COLON,
+	NEWLINE,
+	END_OF_FILE,
+};
 
-typedef struct lex_lexer {
+struct lexer {
 	string source;
 	c8 current_char;
 	u64 index;
-	lex_token curr;
+	token curr;
 	string curr_string;
 	i64 curr_imm; // signed
-} lex_lexer;
+};
 
-lex_lexer lex_make(string source);
-lex_token lex_next_tok(lex_lexer* lex);
-lex_token lex_next_tok_identifier(lex_lexer* lex);
-lex_token lex_next_tok_comment(lex_lexer* lex);
-lex_token lex_next_tok_string(lex_lexer* lex);
-lex_token lex_next_tok_char(lex_lexer* lex);
+lexer lex_make(string source);
+token lex_next_tok(lexer* lex);
+token lex_next_tok_identifier(lexer* lex);
+token lex_next_tok_comment(lexer* lex);
+token lex_next_tok_string(lexer* lex);
+token lex_next_tok_char(lexer* lex);
 
-c8 lex_next_char(lex_lexer* lex);
-b32 lex_is_at_end(lex_lexer* lex);
-void lex_consume_spaces(lex_lexer* lex);
+c8 lex_next_char(lexer* lex);
+b32 lex_is_at_end(lexer* lex);
+void lex_consume_spaces(lexer* lex);
 b32 lex_is_whitespace(c8 c);
 
-lex_token lex_str_to_tok(string string);
-lex_token lex_str_to_num(lex_lexer* lex, string string);
+token lex_str_to_tok(string string);
+token lex_str_to_num(lexer* lex, string string);
 
-const c8* lex_token_to_str(lex_token tok);
-b32 lex_token_is_reg(lex_token tok);
-u64 lex_token_to_reg_index(lex_token tok);
+const c8* lex_token_to_str(token tok);
+b32 lex_token_is_reg(token tok);
+u64 lex_token_to_reg_index(token tok);
 } // namespace sup
 
 #endif // LEX_LEXER_H

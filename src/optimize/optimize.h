@@ -4,22 +4,36 @@
 #include "cpu/program.h"
 #include "optimize/enumerate.cuh"
 #include "optimize/filter.cuh"
-#include "smt/smt.h"
 
 namespace sup {
+struct optimizer {
+	struct options {
+		u64 seed = 1;
+		u32 ext_mask = EXT_RV32I;
+		u64 batch_size = 4000000;
+		u32 max_cegis_iters = 8;
+	};
 
-typedef struct opt_cfg {
-	u64 seed;
-	u32 ext_mask;
-	u64 batch_size;
-	u32 max_cegis_iters;
-} opt_cfg;
+	static void run(const program& prog, const options& opt);
 
-typedef struct opt_ctx {
+private:
+	optimizer(const program& prog, const options& opt);
+	~optimizer();
+
+	b32 run();
+	b32 run_length(u32 len);
+	b32 filter_batch(const opt_program* p, u64 p_cnt, u32 len);
+
+	void log_startup();
+	void log_results(b32 found);
+	void log_stats();
+	void init_tests();
+
+private:
+	const program& prog;
+	const options& opt;
 	arena mem; // NOTE: maybe not really worth it here
 	// input
-	const program* prog;
-	const opt_cfg* cfg;
 	u64 live_in;
 	u64 live_out;
 	// pass contexts
@@ -39,20 +53,6 @@ typedef struct opt_ctx {
 	f64 ms_filter = 0.0;
 	f64 ms_smt = 0.0;
 	f64 ms_total = 0.0;
-} opt_ctx;
-
-opt_cfg opt_cfg_make_default();
-
-void opt_print_reg_mask(u64 mask);
-void opt_log_startup(const opt_ctx* ctx);
-void opt_log_results(opt_ctx* ctx, b32 found);
-void opt_log_stats(const opt_ctx* ctx);
-
-u64 opt_compute_live_in(const program& program);
-void opt_init_tests(opt_ctx* ctx);
-b32 opt_filter_batch(opt_ctx* ctx, const opt_program* p, u64 p_cnt, u32 len);
-b32 opt_run_length(opt_ctx* ctx, u32 len);
-
-void opt_run(const program* prog, const opt_cfg* cfg);
+};
 } // namespace sup
 #endif // #ifndef OPT_OPTIMIZE_H

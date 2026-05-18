@@ -11,6 +11,7 @@ struct program : slice<inst> {
 
 	string to_string(arena& a) const;
 	u64 get_live_out() const;
+	u64 get_live_in() const;
 };
 } // namespace sup
 

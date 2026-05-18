@@ -5,21 +5,21 @@ namespace sup {
 
 program program::parse(arena& a, string source) {
 	array<inst> result;
-	lex_lexer lex = lex_make(source);
+	lexer lex = lex_make(source);
 	lex_next_char(&lex);
 	lex_next_tok(&lex);
 
-	while(lex.curr != TOK_EOF) {
+	while(lex.curr != token::END_OF_FILE) {
 		// skip leading blank lines between instructions
-		while(lex.curr == TOK_NEWLINE) lex_next_tok(&lex);
-		if(lex.curr == TOK_EOF) break;
+		while(lex.curr == token::NEWLINE) lex_next_tok(&lex);
+		if(lex.curr == token::END_OF_FILE) break;
 
-		if(lex.curr == TOK_IDENTIFIER) {
+		if(lex.curr == token::IDENTIFIER) {
 			string saved = lex.curr_string;
 			lex_next_tok(&lex);
-			if(lex.curr == TOK_COLON) {
+			if(lex.curr == token::COLON) {
 				lex_next_tok(&lex);
-				if(lex.curr == TOK_NEWLINE) lex_next_tok(&lex);
+				if(lex.curr == token::NEWLINE) lex_next_tok(&lex);
 				continue;
 			}
 			// not a label after all - rewind by re-parsing as a mnemonic
@@ -27,18 +27,18 @@ program program::parse(arena& a, string source) {
 			operand_type operand_types[4] = {};
 			u8 operand_count = 0;
 
-			while(lex.curr != TOK_NEWLINE && lex.curr != TOK_EOF &&
+			while(lex.curr != token::NEWLINE && lex.curr != token::END_OF_FILE &&
 						operand_count < 4) {
 				if(lex_token_is_reg(lex.curr)) {
 					curr_inst.operands[operand_count].reg =
 						(reg_index)(lex_token_to_reg_index(lex.curr));
 					operand_types[operand_count] = OPERAND_REG;
-				} else if(lex.curr == TOK_NUMBER) {
+				} else if(lex.curr == token::NUMBER) {
 					curr_inst.operands[operand_count].i = (u64)lex.curr_imm;
 					operand_types[operand_count] = OPERAND_IMM;
-				} else if(lex.curr == TOK_MINUS) {
+				} else if(lex.curr == token::MINUS) {
 					lex_next_tok(&lex);
-					ASSERT(lex.curr == TOK_NUMBER, "expected number after '-'");
+					ASSERT(lex.curr == token::NUMBER, "expected number after '-'");
 					curr_inst.operands[operand_count].i = (u64)(-lex.curr_imm);
 					operand_types[operand_count] = OPERAND_IMM;
 				} else {
@@ -48,7 +48,7 @@ program program::parse(arena& a, string source) {
 
 				operand_count++;
 
-				if(lex_next_tok(&lex) != TOK_COMMA) break;
+				if(lex_next_tok(&lex) != token::COMMA) break;
 				lex_next_tok(&lex);
 			}
 
@@ -68,7 +68,7 @@ program program::parse(arena& a, string source) {
 						 (int)saved.size, (const c8*)saved.ptr, (int)operand_count);
 			result.push(curr_inst);
 
-			if(lex.curr == TOK_NEWLINE) { lex_next_tok(&lex); }
+			if(lex.curr == token::NEWLINE) { lex_next_tok(&lex); }
 			continue;
 		}
 
@@ -140,5 +140,31 @@ u64 program::get_live_out() const {
 	}
 
 	return live_out;
+}
+
+u64 program::get_live_in() const {
+	u64 written = 0;
+	u64 live_in = 0;
+
+	for(u32 i = 0; i < size; ++i) {
+		const inst_spec* spec = find_spec(ptr[i].op);
+
+		if(spec->src_slot >= 0) {
+			const u32 r = (u32)ptr[i].operands[spec->src_slot].reg;
+			if(!(written & (1ull << r))) { live_in |= 1ull << r; }
+		}
+
+		if(spec->src2_slot >= 0) {
+			const u32 r = (u32)ptr[i].operands[spec->src2_slot].reg;
+			if(!(written & (1ull << r))) { live_in |= 1ull << r; }
+		}
+
+		if(spec->dst_slot >= 0) {
+			const u32 r = (u32)ptr[i].operands[spec->dst_slot].reg;
+			written |= 1ull << r;
+		}
+	}
+
+	return live_in & ~1ull; // remove x0
 }
 } // namespace sup

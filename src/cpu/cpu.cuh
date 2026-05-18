@@ -81,6 +81,19 @@ SO_HD const c8* reg_name(u32 r) {
 		default: return "?";
 	}
 }
+
+inline void opt_print_reg_mask(u64 mask) {
+	b32 first = true;
+
+	for(u32 r = 0; r < 32; ++r) {
+		if(mask & (1ull << r)) {
+			printf("%s%s", first ? "" : ",", reg_name(r));
+			first = false;
+		}
+	}
+
+	if(first) { printf("(none)"); }
+}
 } // namespace sup
 
 #endif // #ifndef CPU_CPU_CUH
