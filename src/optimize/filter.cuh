@@ -14,8 +14,8 @@ typedef struct opt_filter_cfg {
 	u32 prog_len;
 	const cpu_inst* candidates;
 	u64 n_candidates;
-	const cpu_state* test_in;		 // reference inputs
-	const cpu_state* target_out; // reference outputs
+	const sup::cpu_state* test_in;		 // reference inputs
+	const sup::cpu_state* target_out; // reference outputs
 } opt_filter_cfg;
 
 typedef struct opt_filter_ctx {

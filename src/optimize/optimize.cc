@@ -92,7 +92,7 @@ void opt_print_reg_mask(u64 mask) {
 
 	for(u32 r = 0; r < 32; ++r) {
 		if(mask & (1ull << r)) {
-			printf("%s%s", first ? "" : ",", cpu_reg_name(r));
+			printf("%s%s", first ? "" : ",", sup::reg_name(r));
 			first = false;
 		}
 	}
@@ -106,7 +106,7 @@ void opt_init_tests(opt_ctx* ctx) {
 	u64 s = ctx->cfg->seed ^ 0x9E3779B97F4A7C15ull;
 
 	for(u32 t = 0; t < OPT_FILTER_TEST_COUNT; ++t) {
-		cpu_state in = {};
+		sup::cpu_state in = {};
 
 		for(u32 i = 0; i < 32; ++i) {
 			s ^= s >> 30;

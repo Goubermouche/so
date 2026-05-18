@@ -2,8 +2,8 @@
 #include "optimize/filter.cuh"
 
 __global__ void opt_filter_kernel(const cpu_inst* __restrict__ cands,
-																	const cpu_state* __restrict__ test_in,
-																	const cpu_state* __restrict__ target_out,
+																	const sup::cpu_state* __restrict__ test_in,
+																	const sup::cpu_state* __restrict__ target_out,
 																	u8* __restrict__ pass_count, u64 n_candidates,
 																	u64 live_mask, u32 prog_len) {
 	// go through candidate programs and run 32 quick tests to determine if a
@@ -95,7 +95,7 @@ i32 opt_filter_make(opt_filter_ctx* ctx, u64 max_chunk_cands) {
 	if(cudaMemGetInfo(&free_mem, &total_mem) != cudaSuccess) { return 3; }
 	u64 usable_mem = (u64)((f64)free_mem * 0.30);
 
-	const u64 fixed_mem_bytes = 2ull * OPT_FILTER_TEST_COUNT * sizeof(cpu_state);
+	const u64 fixed_mem_bytes = 2ull * OPT_FILTER_TEST_COUNT * sizeof(sup::cpu_state);
 	if(usable_mem <= fixed_mem_bytes) {
 		fprintf(stderr, "error: insufficient VRAM for fixed buffers\n");
 		return 4;
@@ -127,8 +127,8 @@ i32 opt_filter_make(opt_filter_ctx* ctx, u64 max_chunk_cands) {
 	// allocate persistent buffers
 	const u64 cands_bytes = ctx->max_chunk_cands * per_cand_bytes;
 	dmalloc(&ctx->d_cands, cands_bytes);
-	dmalloc(&ctx->d_test_in, OPT_FILTER_TEST_COUNT * sizeof(cpu_state));
-	dmalloc(&ctx->d_target_out, OPT_FILTER_TEST_COUNT * sizeof(cpu_state));
+	dmalloc(&ctx->d_test_in, OPT_FILTER_TEST_COUNT * sizeof(sup::cpu_state));
+	dmalloc(&ctx->d_target_out, OPT_FILTER_TEST_COUNT * sizeof(sup::cpu_state));
 	dmalloc(&ctx->d_pass_count, ctx->max_chunk_cands * sizeof(u8));
 
 	const u64 mask_bytes = ctx->max_chunk_cands * sizeof(u32) * 2;
@@ -150,7 +150,7 @@ void opt_filter_free(opt_filter_ctx* ctx) {
 
 void opt_filter_run(opt_filter_ctx* ctx, opt_filter_cfg* cfg, u8* pass_counts) {
 	if(cfg->candidates == 0) { return; }
-	const u64 test_size = OPT_FILTER_TEST_COUNT * sizeof(cpu_state);
+	const u64 test_size = OPT_FILTER_TEST_COUNT * sizeof(sup::cpu_state);
 
 	// upload test vectors once
 	htod_memcpy(ctx->d_test_in, cfg->test_in, test_size);
@@ -176,8 +176,8 @@ void opt_filter_run(opt_filter_ctx* ctx, opt_filter_cfg* cfg, u8* pass_counts) {
 
 		// run chunk
 		opt_filter_kernel<<<grid, block>>>(
-			d_chunk_cands, (const cpu_state*)ctx->d_test_in,
-			(const cpu_state*)ctx->d_target_out, (u8*)ctx->d_pass_count, this_chunk,
+			d_chunk_cands, (const sup::cpu_state*)ctx->d_test_in,
+			(const sup::cpu_state*)ctx->d_target_out, (u8*)ctx->d_pass_count, this_chunk,
 			cfg->live_mask, cfg->prog_len);
 		check_cuda(cudaGetLastError(), "kernel launch");
 		check_cuda(cudaDeviceSynchronize(), "kernel sync");

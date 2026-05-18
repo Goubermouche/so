@@ -31,7 +31,7 @@ program program::parse(arena& a, string source) {
 						operand_count < 4) {
 				if(lex_token_is_reg(lex.curr)) {
 					curr_inst.operands[operand_count].reg =
-						(cpu_reg_index)(lex_token_to_reg_index(lex.curr));
+						(sup::reg_index)(lex_token_to_reg_index(lex.curr));
 					operand_types[operand_count] = CPU_OPERAND_REG;
 				} else if(lex.curr == TOK_NUMBER) {
 					curr_inst.operands[operand_count].i = (u64)lex.curr_imm;

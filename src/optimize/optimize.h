@@ -24,8 +24,8 @@ typedef struct opt_ctx {
 	opt_enum_ctx enumerate;
 	// filter
 	opt_filter_ctx filter;
-	cpu_state test_in[OPT_FILTER_TEST_COUNT];
-	cpu_state target_out[OPT_FILTER_TEST_COUNT];
+	sup::cpu_state test_in[OPT_FILTER_TEST_COUNT];
+	sup::cpu_state target_out[OPT_FILTER_TEST_COUNT];
 	u32 counterexample_count; // needed for the round robin test retire
 	// output
 	sup::program best;

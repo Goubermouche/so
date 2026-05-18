@@ -78,10 +78,10 @@ __device__ __forceinline__ void opt_build_inst(const opt_meta& m, u32 rd,
 #pragma unroll
 	for(u32 k = 0; k < 4; ++k) { in.operands[k].i = 0; }
 
-	in.operands[m.dst_slot].reg = (cpu_reg_index)rd;
-	if(m.src_slot >= 0) { in.operands[m.src_slot].reg = (cpu_reg_index)rs1; }
+	in.operands[m.dst_slot].reg = (sup::reg_index)rd;
+	if(m.src_slot >= 0) { in.operands[m.src_slot].reg = (sup::reg_index)rs1; }
 	if(!is_imm && m.src2_slot >= 0) {
-		in.operands[m.src2_slot].reg = (cpu_reg_index)rs2_or_imm_idx;
+		in.operands[m.src2_slot].reg = (sup::reg_index)rs2_or_imm_idx;
 	}
 	if(is_imm && m.imm_slot >= 0) {
 		in.operands[m.imm_slot].i = (u64)imms[rs2_or_imm_idx];

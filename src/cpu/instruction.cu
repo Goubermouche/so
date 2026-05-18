@@ -101,7 +101,7 @@ cpu_opcode cpu_find_inst_op(string name, const cpu_operand_type* ops, u8 op_cnt)
 
 string cpu_operand_to_string(arena& a, cpu_inst_operand op, cpu_operand_type ty) {
 	switch(ty) {
-		case CPU_OPERAND_REG: return cpu_reg_name((u32)op.reg);
+		case CPU_OPERAND_REG: return sup::reg_name((u32)op.reg);
 		case CPU_OPERAND_IMM: return string::format(a, "%lld", (i64)op.i);
 		default: return "?";
 	}

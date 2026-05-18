@@ -21,7 +21,7 @@ const c8* lex_token_to_str(lex_token tok) {
 		case TOK_EOF: return "eof";
 		default:
 			if(tok >= TOK_REG_X0 && tok <= TOK_REG_X31) {
-				return cpu_reg_name((u32)(tok - TOK_REG_X0));
+				return sup::reg_name((u32)(tok - TOK_REG_X0));
 			}
 			return "?";
 	}

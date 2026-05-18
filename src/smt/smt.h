@@ -15,7 +15,7 @@ typedef enum smt_result_kind {
 
 typedef struct smt_result {
 	smt_result_kind kind;
-	cpu_state counterexample;
+	sup::cpu_state counterexample;
 	const c8* error;
 } smt_result;
 

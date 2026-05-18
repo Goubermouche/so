@@ -62,7 +62,7 @@ typedef enum cpu_opcode {
 } cpu_opcode;
 
 typedef union cpu_inst_operand {
-	cpu_reg_index reg;
+	sup::reg_index reg;
 	u64 i;
 } cpu_inst_operand;
 
