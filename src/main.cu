@@ -27,11 +27,11 @@ i32 help() {
 }
 
 i32 list_e() {
-	for(u64 i = 0; i < CPU_EXT_COUNT; ++i) printf("%s\n", CPU_EXT_NAMES[i]);
+	for(u64 i = 0; i < sup::EXT_COUNT; ++i) printf("%s\n", sup::EXT_NAMES[i]);
 	return 0;
 }
 
-i32 parse_e(opt_cfg* cfg, const c8* p) {
+i32 parse_e(sup::opt_cfg* cfg, const c8* p) {
 	cfg->ext_mask = 0;
 	while(*p) {
 		while(*p == ' ' || *p == ',' || *p == '+') p++;
@@ -41,8 +41,8 @@ i32 parse_e(opt_cfg* cfg, const c8* p) {
 		while(*p && *p != ' ' && *p != ',' && *p != '+') p++;
 
 		bool found = false;
-		for(u32 i = 0; i < CPU_EXT_COUNT; ++i) {
-			const c8* ext = CPU_EXT_NAMES[i];
+		for(u32 i = 0; i < sup::EXT_COUNT; ++i) {
+			const c8* ext = sup::EXT_NAMES[i];
 			const c8* s = start;
 
 			while(s < p && *ext == *s) {
@@ -127,7 +127,7 @@ i32 read_file(const c8* filename, c8** out, u64* out_len) {
 }
 
 i32 main(i32 argc, c8** argv) {
-	opt_cfg cfg = opt_cfg_make_default();
+	sup::opt_cfg cfg = sup::opt_cfg_make_default();
 	i32 argi = 1;
 	c8* source = 0;
 	u64 source_len = 0;
@@ -165,7 +165,7 @@ i32 main(i32 argc, c8** argv) {
 
 	// run
 	if(device_init()) { return 1; }
-	cpu_inst_db_load();
+	sup::inst_db_load();
 
 	for(u32 run = 0; run < run_count; ++run) {
 		arena a;

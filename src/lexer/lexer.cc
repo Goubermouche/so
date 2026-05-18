@@ -2,6 +2,7 @@
 #include "cpu/cpu.cuh"
 #include <cstdlib>
 
+namespace sup {
 const c8* lex_token_to_str(lex_token tok) {
 	switch(tok) {
 		case TOK_UNKNOWN: return "unknown";
@@ -21,7 +22,7 @@ const c8* lex_token_to_str(lex_token tok) {
 		case TOK_EOF: return "eof";
 		default:
 			if(tok >= TOK_REG_X0 && tok <= TOK_REG_X31) {
-				return sup::reg_name((u32)(tok - TOK_REG_X0));
+				return reg_name((u32)(tok - TOK_REG_X0));
 			}
 			return "?";
 	}
@@ -217,3 +218,4 @@ lex_token lex_str_to_num(lex_lexer* lex, string string) {
 	lex->curr_imm = (i64)number;
 	return lex->curr = TOK_NUMBER;
 }
+} // namespace sup

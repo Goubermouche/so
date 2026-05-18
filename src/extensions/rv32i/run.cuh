@@ -3,6 +3,8 @@
 
 #include "cpu/instruction.cuh"
 
+namespace sup {
+
 // sign-extend the low 32 bits of v to 64 bits
 SO_HD i64 ext_rv_sext32(u64 v) { return (i64)(i32)(u32)v; }
 
@@ -12,7 +14,7 @@ SO_HD void ext_rv_wr(u64 regs[32], u32 d, u64 v) {
 	regs[0] = 0;
 }
 
-SO_HD bool ext_rv32i_run(u32 op, u64 regs[32], const cpu_inst* in) {
+SO_HD bool ext_rv32i_run(u32 op, u64 regs[32], const inst* in) {
 	const u32 d = (u32)in->operands[0].reg;
 
 	switch(op) {
@@ -71,5 +73,6 @@ SO_HD bool ext_rv32i_run(u32 op, u64 regs[32], const cpu_inst* in) {
 
 	return false;
 }
+} // namespace sup
 
 #endif // #ifndef EXT_RV32I_RUN_CUH

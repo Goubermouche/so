@@ -4,13 +4,13 @@
 #include "cpu/instruction.cuh"
 
 namespace sup {
-struct program : slice<cpu_inst> {
-	program() : slice<cpu_inst>() {}
-	program(cpu_inst* ptr, u64 size) : slice<cpu_inst>(ptr, size) {}
+struct program : slice<inst> {
+	program() : slice<inst>() {}
+	program(inst* ptr, u64 size) : slice<inst>(ptr, size) {}
 	static program parse(arena& a, string source);
 
 	string to_string(arena& a) const;
-	u64 get_live_out()  const;
+	u64 get_live_out() const;
 };
 } // namespace sup
 

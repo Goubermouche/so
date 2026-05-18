@@ -5,6 +5,7 @@
 #include "optimize/filter.cuh"
 #include "util/type.h"
 
+namespace sup {
 opt_cfg opt_cfg_make_default() {
 	opt_cfg cfg;
 	cfg.seed = 1;
@@ -14,12 +15,12 @@ opt_cfg opt_cfg_make_default() {
 	return cfg;
 }
 
-u64 opt_compute_live_in(const sup::program& program) {
+u64 opt_compute_live_in(const program& program) {
 	u64 written = 0;
 	u64 live_in = 0;
 
 	for(u32 i = 0; i < program.size; ++i) {
-		const cpu_inst_spec* spec = cpu_find_spec(program[i].op);
+		const inst_spec* spec = find_spec(program[i].op);
 
 		if(spec->src_slot >= 0) {
 			const u32 r = (u32)program[i].operands[spec->src_slot].reg;
@@ -55,7 +56,7 @@ void opt_log_startup(const opt_ctx* ctx) {
 	u32 effective_mask = ctx->cfg->ext_mask | EXT_RV32I;
 	if(effective_mask & EXT_RV64M) effective_mask |= EXT_RV32M;
 	printf("extensions: ");
-	cpu_print_enabled_extensions(effective_mask);
+	print_enabled_extensions(effective_mask);
 	printf("\n");
 	printf("max prog len: %u\n", OPT_PROGRAM_LEN);
 	printf("batch size: %zu cands\n", ctx->cfg->batch_size);
@@ -92,7 +93,7 @@ void opt_print_reg_mask(u64 mask) {
 
 	for(u32 r = 0; r < 32; ++r) {
 		if(mask & (1ull << r)) {
-			printf("%s%s", first ? "" : ",", sup::reg_name(r));
+			printf("%s%s", first ? "" : ",", reg_name(r));
 			first = false;
 		}
 	}
@@ -106,7 +107,7 @@ void opt_init_tests(opt_ctx* ctx) {
 	u64 s = ctx->cfg->seed ^ 0x9E3779B97F4A7C15ull;
 
 	for(u32 t = 0; t < OPT_FILTER_TEST_COUNT; ++t) {
-		sup::cpu_state in = {};
+		cpu_state in = {};
 
 		for(u32 i = 0; i < 32; ++i) {
 			s ^= s >> 30;
@@ -129,7 +130,7 @@ b32 opt_filter_batch(opt_ctx* ctx, const opt_program* p, u64 p_cnt, u32 len) {
 	opt_filter_cfg cfg;
 	cfg.live_mask = ctx->live_out;
 	cfg.prog_len = len;
-	cfg.candidates = (const cpu_inst*)p;
+	cfg.candidates = (const inst*)p;
 	cfg.n_candidates = p_cnt;
 	cfg.test_in = ctx->test_in;
 	cfg.target_out = ctx->target_out;
@@ -148,10 +149,10 @@ b32 opt_filter_batch(opt_ctx* ctx, const opt_program* p, u64 p_cnt, u32 len) {
 	for(u64 i = 0; i < p_cnt; ++i) {
 		if(pass_counts[i] == OPT_FILTER_TEST_COUNT) {
 			// pull the candidate instructions
-			cpu_inst survivor_inst[OPT_PROGRAM_LEN];
+			inst survivor_inst[OPT_PROGRAM_LEN];
 			dtoh_memcpy(survivor_inst, p + i, sizeof(opt_program));
 			const f64 t0_smt = get_time_ms();
-			sup::program survivor = {survivor_inst, len};
+			program survivor = {survivor_inst, len};
 			// verify via an SMT solver
 			smt_result res = smt_eq(*ctx->prog, survivor, ctx->live_out);
 			ctx->ms_smt += get_time_ms() - t0_smt;
@@ -159,8 +160,8 @@ b32 opt_filter_batch(opt_ctx* ctx, const opt_program* p, u64 p_cnt, u32 len) {
 
 			if(res.kind == SMT_EQUIVALENT) {
 				// equivalent program
-				cpu_inst* dst = ctx->mem.push<cpu_inst>(len);
-				memcpy(dst, survivor_inst, sizeof(cpu_inst) * len);
+				inst* dst = ctx->mem.push<inst>(len);
+				memcpy(dst, survivor_inst, sizeof(inst) * len);
 				ctx->best = {dst, len};
 				return true;
 			} else if(res.kind == SMT_COUNTEREXAMPLE) {
@@ -224,7 +225,7 @@ b32 opt_run_length(opt_ctx* ctx, u32 len) {
 	return false;
 }
 
-void opt_run(const sup::program* prog, const opt_cfg* cfg) {
+void opt_run(const program* prog, const opt_cfg* cfg) {
 	f64 t0 = get_time_ms();
 	opt_ctx ctx = {};
 	ctx.prog = prog;
@@ -263,3 +264,4 @@ void opt_run(const sup::program* prog, const opt_cfg* cfg) {
 	opt_enum_ctx_free(&ctx.enumerate);
 	opt_filter_free(&ctx.filter);
 }
+} // namespace sup

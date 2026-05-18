@@ -2,14 +2,15 @@
 #include "util/device.h"
 #include <cub/cub.cuh>
 
+namespace sup {
 opt_opcode_pool opt_build_opcode_pool(u32 ext_mask) {
 	opt_opcode_pool p = {};
 
 	for(u32 i = 0; i < (u32)OP_COUNT; ++i) {
-		const cpu_inst_spec& s = CPU_INST_DB_HOST.row[i];
+		const inst_spec& s = INST_DB_HOST.row[i];
 		if(s.op == OP_NOP) { continue; }
 		if(!(s.ext & ext_mask)) { continue; }
-		p.ops[p.n++] = (cpu_opcode)i;
+		p.ops[p.n++] = (opcode)i;
 	}
 
 	return p;
@@ -26,12 +27,11 @@ opt_imm_pool opt_build_imm_pool() {
 	return p;
 }
 
-void opt_build_meta_host(const opt_opcode_pool* pool, opt_meta* out,
-												 u32* out_n) {
+void opt_build_meta_host(const opt_opcode_pool* pool, opt_meta* out, u32* out_n) {
 	u32 n = 0;
 	for(u32 i = 0; i < pool->n; ++i) {
-		const cpu_opcode op = pool->ops[i];
-		const cpu_inst_spec& spec = CPU_INST_DB_HOST.row[op];
+		const opcode op = pool->ops[i];
+		const inst_spec& spec = INST_DB_HOST.row[op];
 
 		opt_meta m;
 		m.op = (u16)op;
@@ -42,7 +42,7 @@ void opt_build_meta_host(const opt_opcode_pool* pool, opt_meta* out,
 		m.imm_slot = -1;
 
 		for(u32 k = 0; k < 4; ++k) {
-			if(spec.operands[k] == CPU_OPERAND_IMM) {
+			if(spec.operands[k] == OPERAND_IMM) {
 				m.imm_slot = (i8)k;
 				break;
 			}
@@ -72,16 +72,16 @@ void opt_build_meta_host(const opt_opcode_pool* pool, opt_meta* out,
 __device__ __forceinline__ void opt_build_inst(const opt_meta& m, u32 rd,
 																							 u32 rs1, u32 rs2_or_imm_idx,
 																							 b32 is_imm, const i64* imms,
-																							 cpu_inst* out) {
-	cpu_inst in;
-	in.op = (cpu_opcode)m.op;
+																							 inst* out) {
+	inst in;
+	in.op = (opcode)m.op;
 #pragma unroll
 	for(u32 k = 0; k < 4; ++k) { in.operands[k].i = 0; }
 
-	in.operands[m.dst_slot].reg = (sup::reg_index)rd;
-	if(m.src_slot >= 0) { in.operands[m.src_slot].reg = (sup::reg_index)rs1; }
+	in.operands[m.dst_slot].reg = (reg_index)rd;
+	if(m.src_slot >= 0) { in.operands[m.src_slot].reg = (reg_index)rs1; }
 	if(!is_imm && m.src2_slot >= 0) {
-		in.operands[m.src2_slot].reg = (sup::reg_index)rs2_or_imm_idx;
+		in.operands[m.src2_slot].reg = (reg_index)rs2_or_imm_idx;
 	}
 	if(is_imm && m.imm_slot >= 0) {
 		in.operands[m.imm_slot].i = (u64)imms[rs2_or_imm_idx];
@@ -90,7 +90,7 @@ __device__ __forceinline__ void opt_build_inst(const opt_meta& m, u32 rd,
 	*out = in;
 }
 
-template <bool EMIT>
+template<bool EMIT>
 __device__ __forceinline__ u32 opt_try_one(
 	const opt_layer_ctx& L, const opt_state& src, const opt_meta& m, u32 rd,
 	u32 rs1, u32 rs2_or_imm_idx, b32 is_imm, b32 rd_is_new_scratch,
@@ -147,7 +147,7 @@ __device__ __forceinline__ u32 opt_try_one(
 }
 
 // expand one frontier node
-template <bool EMIT>
+template<bool EMIT>
 __device__ u32 opt_expand_one(const opt_layer_ctx& L, const opt_state& src,
 															opt_state* dst_states, opt_program* dst_cands,
 															u64 write_base, u64 cap_states, u64 cap_cands) {
@@ -441,3 +441,4 @@ void opt_enumerate(opt_enum_ctx* ctx, const opt_enum_cfg* cfg) {
 	ctx->out_d_cands = d_out;
 	ctx->out_n_cands = emitted_cands;
 }
+} // namespace sup

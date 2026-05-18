@@ -3,6 +3,7 @@
 
 #include "util/string.h"
 
+namespace sup {
 typedef enum lex_token {
 	TOK_UNKNOWN = 0,
 
@@ -85,5 +86,6 @@ lex_token lex_str_to_num(lex_lexer* lex, string string);
 const c8* lex_token_to_str(lex_token tok);
 b32 lex_token_is_reg(lex_token tok);
 u64 lex_token_to_reg_index(lex_token tok);
+} // namespace sup
 
 #endif // LEX_LEXER_H

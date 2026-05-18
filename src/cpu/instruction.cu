@@ -1,57 +1,57 @@
 #include "cpu/instruction.cuh"
 #include "util/device.h"
 
-cpu_inst_db CPU_INST_DB_HOST;
-__constant__ cpu_inst_db CPU_INST_DB_DEV;
+namespace sup {
+inst_db INST_DB_HOST;
+__constant__ inst_db INST_DB_DEV;
 
-__device__ const cpu_inst_spec* cpu_find_spec_dev(cpu_opcode op) {
-	return &CPU_INST_DB_DEV.row[op];
+__device__ const inst_spec* find_spec_dev(opcode op) {
+	return &INST_DB_DEV.row[op];
 }
 
-static void cpu_inst_db_set_row(cpu_inst_db* d, cpu_opcode op, const c8* name,
-																cpu_inst_shape shape, u8 commutative,
-																u32 ext_bit) {
-	cpu_inst_spec* r = &d->row[op];
+static void inst_db_set_row(inst_db* d, opcode op, const c8* name,
+														inst_shape shape, u8 commutative, u32 ext_bit) {
+	inst_spec* r = &d->row[op];
 	r->name = name;
-	r->operands[0] = cpu_shape_op0(shape);
-	r->operands[1] = cpu_shape_op1(shape);
-	r->operands[2] = cpu_shape_op2(shape);
-	r->operands[3] = CPU_OPERAND_NONE;
+	r->operands[0] = shape_op0(shape);
+	r->operands[1] = shape_op1(shape);
+	r->operands[2] = shape_op2(shape);
+	r->operands[3] = OPERAND_NONE;
 	r->op = op;
-	r->dst_slot = cpu_shape_dst_slot(shape);
-	r->src_slot = cpu_shape_src_slot(shape);
-	r->src2_slot = cpu_shape_src2_slot(shape);
+	r->dst_slot = shape_dst_slot(shape);
+	r->src_slot = shape_src_slot(shape);
+	r->src2_slot = shape_src2_slot(shape);
 	r->ext = ext_bit;
 	r->commutative = commutative;
 }
 
-static void cpu_inst_db_build_host(cpu_inst_db* d) {
+static void inst_db_build_host(inst_db* d) {
 	memset(d, 0, sizeof(*d));
 
 #define X(TAG, MN, SHAPE, COMM)                                                \
-	cpu_inst_db_set_row(d, OP_##TAG, MN, SHAPE, (u8)(COMM), EXT_RV32I);
+	inst_db_set_row(d, OP_##TAG, MN, SHAPE, (u8)(COMM), EXT_RV32I);
 	EXT_RV32I_OPCODES(X)
 #undef X
 #define X(TAG, MN, SHAPE, COMM)                                                \
-	cpu_inst_db_set_row(d, OP_##TAG, MN, SHAPE, (u8)(COMM), EXT_RV64I);
+	inst_db_set_row(d, OP_##TAG, MN, SHAPE, (u8)(COMM), EXT_RV64I);
 	EXT_RV64I_OPCODES(X)
 #undef X
 #define X(TAG, MN, SHAPE, COMM)                                                \
-	cpu_inst_db_set_row(d, OP_##TAG, MN, SHAPE, (u8)(COMM), EXT_RV32M);
+	inst_db_set_row(d, OP_##TAG, MN, SHAPE, (u8)(COMM), EXT_RV32M);
 	EXT_RV32M_OPCODES(X)
 #undef X
 #define X(TAG, MN, SHAPE, COMM)                                                \
-	cpu_inst_db_set_row(d, OP_##TAG, MN, SHAPE, (u8)(COMM), EXT_RV64M);
+	inst_db_set_row(d, OP_##TAG, MN, SHAPE, (u8)(COMM), EXT_RV64M);
 	EXT_RV64M_OPCODES(X)
 #undef X
 
 	// NOP
-	cpu_inst_spec* nop = &d->row[OP_NOP];
+	inst_spec* nop = &d->row[OP_NOP];
 	nop->name = "nop";
-	nop->operands[0] = CPU_OPERAND_NONE;
-	nop->operands[1] = CPU_OPERAND_NONE;
-	nop->operands[2] = CPU_OPERAND_NONE;
-	nop->operands[3] = CPU_OPERAND_NONE;
+	nop->operands[0] = OPERAND_NONE;
+	nop->operands[1] = OPERAND_NONE;
+	nop->operands[2] = OPERAND_NONE;
+	nop->operands[3] = OPERAND_NONE;
 	nop->op = OP_NOP;
 	nop->dst_slot = -1;
 	nop->src_slot = -1;
@@ -60,30 +60,29 @@ static void cpu_inst_db_build_host(cpu_inst_db* d) {
 	nop->commutative = 0;
 }
 
-void cpu_inst_db_load(void) {
-	cpu_inst_db_build_host(&CPU_INST_DB_HOST);
-	check_cuda(
-		cudaMemcpyToSymbol(CPU_INST_DB_DEV, &CPU_INST_DB_HOST, sizeof(cpu_inst_db)),
-		"cpu_inst_db_load");
+void inst_db_load(void) {
+	inst_db_build_host(&INST_DB_HOST);
+	check_cuda(cudaMemcpyToSymbol(INST_DB_DEV, &INST_DB_HOST, sizeof(inst_db)),
+						 "inst_db_load");
 }
 
-u8 cpu_spec_get_operand_count(const cpu_inst_spec* spec) {
+u8 spec_get_operand_count(const inst_spec* spec) {
 	u8 i = 0;
 	for(; i < 4; ++i) {
-		if(spec->operands[i] == CPU_OPERAND_NONE) { break; }
+		if(spec->operands[i] == OPERAND_NONE) { break; }
 	}
 	return i;
 }
 
-b32 cpu_op_is_commutative(cpu_opcode op) {
-	return CPU_INST_DB_HOST.row[op].commutative != 0;
+b32 op_is_commutative(opcode op) {
+	return INST_DB_HOST.row[op].commutative != 0;
 }
 
-cpu_opcode cpu_find_inst_op(string name, const cpu_operand_type* ops, u8 op_cnt) {
+opcode find_inst_op(string name, const operand_type* ops, u8 op_cnt) {
 	for(u32 i = 0; i < (u32)OP_COUNT; ++i) {
-		const cpu_inst_spec* spec = &CPU_INST_DB_HOST.row[i];
+		const inst_spec* spec = &INST_DB_HOST.row[i];
 		if(name != spec->name) { continue; }
-		if(cpu_spec_get_operand_count(spec) != op_cnt) { continue; }
+		if(spec_get_operand_count(spec) != op_cnt) { continue; }
 		b32 ok = true;
 
 		for(u8 k = 0; k < op_cnt; ++k) {
@@ -93,26 +92,27 @@ cpu_opcode cpu_find_inst_op(string name, const cpu_operand_type* ops, u8 op_cnt)
 			}
 		}
 
-		if(ok) { return (cpu_opcode)i; }
+		if(ok) { return (opcode)i; }
 	}
 
 	return OP_COUNT; // sentinel: no match
 }
 
-string cpu_operand_to_string(arena& a, cpu_inst_operand op, cpu_operand_type ty) {
+string operand_to_string(arena& a, inst_operand op, operand_type ty) {
 	switch(ty) {
-		case CPU_OPERAND_REG: return sup::reg_name((u32)op.reg);
-		case CPU_OPERAND_IMM: return string::format(a, "%lld", (i64)op.i);
+		case OPERAND_REG: return reg_name((u32)op.reg);
+		case OPERAND_IMM: return string::format(a, "%lld", (i64)op.i);
 		default: return "?";
 	}
 }
 
-void cpu_print_enabled_extensions(u32 mask) {
+void print_enabled_extensions(u32 mask) {
 	bool first = true;
-	for(u32 i = 0; i < CPU_EXT_COUNT; ++i) {
-		if(mask & CPU_EXT_BITS[i]) {
-			printf("%s%s", first ? "" : ", ", CPU_EXT_NAMES[i]);
+	for(u32 i = 0; i < EXT_COUNT; ++i) {
+		if(mask & EXT_BITS[i]) {
+			printf("%s%s", first ? "" : ", ", EXT_NAMES[i]);
 			first = false;
 		}
 	}
 }
+} // namespace sup

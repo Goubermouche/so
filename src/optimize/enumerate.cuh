@@ -6,12 +6,14 @@
 
 #define OPT_IMM_POOL_CAP 64
 
+namespace sup {
+
 typedef struct opt_program {
-	cpu_inst code[OPT_PROGRAM_LEN];
+	inst code[OPT_PROGRAM_LEN];
 } opt_program;
 
 typedef struct opt_opcode_pool {
-	cpu_opcode ops[OP_COUNT];
+	opcode ops[OP_COUNT];
 	u32 n;
 } opt_opcode_pool;
 
@@ -50,7 +52,7 @@ typedef struct opt_meta {
 
 // node in the backward-search frontier
 typedef struct opt_state {
-	cpu_inst code[OPT_PROGRAM_LEN];
+	inst code[OPT_PROGRAM_LEN];
 	u64 demanded;			// registers that must be produced by earlier layers
 	u64 used_scratch; // scratch regs already allocated by this branch
 	i32 idx;
@@ -97,5 +99,6 @@ void opt_build_meta_host(const opt_opcode_pool* pool, opt_meta* out, u32* out_n)
 
 opt_opcode_pool opt_build_opcode_pool(u32 ext_mask);
 opt_imm_pool opt_build_imm_pool();
+} // namespace sup
 
 #endif // OPT_ENUMERATE_CUH

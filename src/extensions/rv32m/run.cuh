@@ -4,7 +4,8 @@
 #include "extensions/rv32i/run.cuh"
 #include "cpu/instruction.cuh"
 
-SO_HD bool ext_rv32m_run(u32 op, u64 regs[32], const cpu_inst* in) {
+namespace sup {
+SO_HD bool ext_rv32m_run(u32 op, u64 regs[32], const inst* in) {
 	const u32 d = (u32)in->operands[0].reg;
 	const u64 a = regs[in->operands[1].reg];
 	const u64 b = regs[in->operands[2].reg];
@@ -73,5 +74,6 @@ SO_HD bool ext_rv32m_run(u32 op, u64 regs[32], const cpu_inst* in) {
 
 	return false;
 }
+} // namespace sup
 
 #endif // #ifndef EXT_RV32M_RUN_CUH

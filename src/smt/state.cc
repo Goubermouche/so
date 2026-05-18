@@ -1,5 +1,6 @@
 #include "smt/state.h"
 
+namespace sup {
 Z3_ast smt_low6(Z3_context ctx, Z3_ast v) {
 	Z3_sort s64 = Z3_mk_bv_sort(ctx, 64);
 	Z3_ast mask = Z3_mk_unsigned_int64(ctx, 0x3F, s64);
@@ -78,3 +79,4 @@ smt_state smt_make_input_state(Z3_context ctx) {
 	for(u32 i = 0; i < 32; ++i) { a.r[i] = smt_mk_bv64_const(ctx, names[i]); }
 	return a;
 }
+} // namespace sup

@@ -28,6 +28,7 @@
 // signed-overflow guard
 #define OVF_SIGNED(a, b, imin, ones) AND2(EQ((a), (imin)), EQ((b), (ones)))
 
+namespace sup {
 typedef struct smt_state {
 	Z3_ast r[32];
 } smt_state;
@@ -45,5 +46,6 @@ void smt_pin_x0(Z3_context ctx, smt_state* state);
 smt_state smt_make_input_state(Z3_context ctx);
 smt_state smt_clone_state(Z3_context ctx, const smt_state* src);
 void smt_free_state(Z3_context ctx, smt_state* state);
+} // namespace sup
 
 #endif // ifndef SMT_STATE_H

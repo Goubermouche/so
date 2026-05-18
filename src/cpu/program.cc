@@ -4,7 +4,7 @@
 namespace sup {
 
 program program::parse(arena& a, string source) {
-	array<cpu_inst> result;
+	array<inst> result;
 	lex_lexer lex = lex_make(source);
 	lex_next_char(&lex);
 	lex_next_tok(&lex);
@@ -23,24 +23,24 @@ program program::parse(arena& a, string source) {
 				continue;
 			}
 			// not a label after all - rewind by re-parsing as a mnemonic
-			cpu_inst curr_inst = {};
-			cpu_operand_type operand_types[4] = {};
+			inst curr_inst = {};
+			operand_type operand_types[4] = {};
 			u8 operand_count = 0;
 
 			while(lex.curr != TOK_NEWLINE && lex.curr != TOK_EOF &&
 						operand_count < 4) {
 				if(lex_token_is_reg(lex.curr)) {
 					curr_inst.operands[operand_count].reg =
-						(sup::reg_index)(lex_token_to_reg_index(lex.curr));
-					operand_types[operand_count] = CPU_OPERAND_REG;
+						(reg_index)(lex_token_to_reg_index(lex.curr));
+					operand_types[operand_count] = OPERAND_REG;
 				} else if(lex.curr == TOK_NUMBER) {
 					curr_inst.operands[operand_count].i = (u64)lex.curr_imm;
-					operand_types[operand_count] = CPU_OPERAND_IMM;
+					operand_types[operand_count] = OPERAND_IMM;
 				} else if(lex.curr == TOK_MINUS) {
 					lex_next_tok(&lex);
 					ASSERT(lex.curr == TOK_NUMBER, "expected number after '-'");
 					curr_inst.operands[operand_count].i = (u64)(-lex.curr_imm);
-					operand_types[operand_count] = CPU_OPERAND_IMM;
+					operand_types[operand_count] = OPERAND_IMM;
 				} else {
 					ASSERT(false, "unrecognized operand type received ('%s')",
 								 lex_token_to_str(lex.curr));
@@ -55,15 +55,14 @@ program program::parse(arena& a, string source) {
 			// pseudo-op rewriting
 			//   sext.w rd, rs1   ->   addiw rd, rs1, 0
 			if(saved == "sext.w" && operand_count == 2 &&
-				 operand_types[0] == CPU_OPERAND_REG &&
-				 operand_types[1] == CPU_OPERAND_REG) {
+				 operand_types[0] == OPERAND_REG && operand_types[1] == OPERAND_REG) {
 				saved = "addiw";
 				curr_inst.operands[2].i = 0;
-				operand_types[2] = CPU_OPERAND_IMM;
+				operand_types[2] = OPERAND_IMM;
 				operand_count = 3;
 			}
 
-			curr_inst.op = cpu_find_inst_op(saved, operand_types, operand_count);
+			curr_inst.op = find_inst_op(saved, operand_types, operand_count);
 			ASSERT(curr_inst.op != OP_COUNT,
 						 "no opcode matches mnemonic '%.*s' with %d operand(s)\n",
 						 (int)saved.size, (const c8*)saved.ptr, (int)operand_count);
@@ -76,8 +75,8 @@ program program::parse(arena& a, string source) {
 		ASSERT(false, "expected mnemonic, got '%s'", lex_token_to_str(lex.curr));
 	}
 
-	cpu_inst* data = a.push<cpu_inst>(result.size);
-	memcpy(data, result.ptr, sizeof(cpu_inst) * result.size);
+	inst* data = a.push<inst>(result.size);
+	memcpy(data, result.ptr, sizeof(inst) * result.size);
 	program out = {data, result.size};
 	return out;
 }
@@ -86,17 +85,16 @@ string program::to_string(arena& a) const {
 	array<string> builder;
 
 	for(u32 i = 0; i < size; ++i) {
-		const cpu_inst inst = ptr[i];
-		const cpu_inst_spec* spec = cpu_find_spec(inst.op);
+		const inst inst = ptr[i];
+		const inst_spec* spec = find_spec(inst.op);
 		builder.push("  ");
 		string inst_name = string(spec->name);
 		inst_name.pad(a, ' ', 8);
 		builder.push(inst_name);
 
-		const u8 nop = cpu_spec_get_operand_count(spec);
+		const u8 nop = spec_get_operand_count(spec);
 		for(u8 j = 0; j < nop; ++j) {
-			builder.push(
-				cpu_operand_to_string(a, inst.operands[j], spec->operands[j]));
+			builder.push(operand_to_string(a, inst.operands[j], spec->operands[j]));
 			if(j + 1 < nop) { builder.push(", "); }
 		}
 
@@ -111,8 +109,8 @@ u64 program::get_live_out() const {
 	u64 live_out = 0;
 
 	for(u64 idx = size; idx-- > 0;) {
-		const cpu_inst& in = ptr[idx];
-		const cpu_inst_spec* spec = cpu_find_spec(in.op);
+		const inst& in = ptr[idx];
+		const inst_spec* spec = find_spec(in.op);
 
 		// write side first
 		if(spec->dst_slot >= 0) {

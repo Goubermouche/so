@@ -7,11 +7,12 @@
 #include "extensions/rv64i/run.cuh"
 #include "extensions/rv64m/run.cuh"
 
-SO_HD void opt_lane_run(u64 regs[32], const cpu_inst* prog, u32 prog_len) {
+namespace sup {
+SO_HD void opt_lane_run(u64 regs[32], const inst* prog, u32 prog_len) {
 	regs[0] = 0;
 
 	for(u32 i = 0; i < prog_len; ++i) {
-		const cpu_inst* in = &prog[i];
+		const inst* in = &prog[i];
 		const u32 op = (u32)in->op;
 
 		if(op == OP_NOP) { continue; }
@@ -23,11 +24,12 @@ SO_HD void opt_lane_run(u64 regs[32], const cpu_inst* prog, u32 prog_len) {
 	}
 }
 
-inline sup::cpu_state opt_host_run(const sup::program& prog, const sup::cpu_state* in) {
-	sup::cpu_state out = *in;
+inline cpu_state opt_host_run(const program& prog, const cpu_state* in) {
+	cpu_state out = *in;
 	out.regs[0] = 0;
 	opt_lane_run(out.regs, prog.ptr, prog.size);
 	return out;
 }
+} // namespace sup
 
 #endif // #ifndef OPT_BATCH_RUNNER_CUH

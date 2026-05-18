@@ -3,6 +3,7 @@
 
 #include "smt/state.h"
 
+namespace sup {
 inline bool ext_rv32i_smt(Z3_context ctx, smt_state* s, u32 op, u32 d, u32 s1, u32 s2, Z3_ast imm) {
 	switch(op) {
 		case OP_ADD:   WR(Z3_mk_bvadd(ctx, A, B));
@@ -28,5 +29,6 @@ inline bool ext_rv32i_smt(Z3_context ctx, smt_state* s, u32 op, u32 d, u32 s1, u
 	}
 	return false;
 }
+} // namespace sup
 
 #endif // EXT_RV32I_SMT_CUH
