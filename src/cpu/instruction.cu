@@ -79,7 +79,7 @@ b32 op_is_commutative(opcode op) {
 }
 
 opcode find_inst_op(string name, const operand_type* ops, u8 op_cnt) {
-	for(u32 i = 0; i < (u32)OP_COUNT; ++i) {
+	for(u32 i = 0; i < (u32)OpCount; ++i) {
 		const inst_spec* spec = &INST_DB_HOST.row[i];
 		if(name != spec->name) { continue; }
 		if(spec_get_operand_count(spec) != op_cnt) { continue; }
@@ -95,7 +95,7 @@ opcode find_inst_op(string name, const operand_type* ops, u8 op_cnt) {
 		if(ok) { return (opcode)i; }
 	}
 
-	return OP_COUNT; // sentinel: no match
+	return OpCount; // sentinel: no match
 }
 
 string operand_to_string(arena& a, inst_operand op, operand_type ty) {

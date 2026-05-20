@@ -5,7 +5,7 @@
   - `#include` the new `opcodes.def` file
   - Append the extension to `EXTENSION_LIST`, `EXT_OPCODE_LIST`
   - Add the extension to `cpu_inst_db_build_host`
-- In `src/optimize/batch_runner.cuh`
+- In `src/optimize/filter.cuh`
   - `#include` the new `run.cuh` file
   - add a call to your emulator function
 - In `src/smt.cc`

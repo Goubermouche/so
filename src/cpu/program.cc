@@ -63,7 +63,7 @@ program program::parse(arena& a, string source) {
 			}
 
 			curr_inst.op = find_inst_op(saved, operand_types, operand_count);
-			ASSERT(curr_inst.op != OP_COUNT,
+			ASSERT(curr_inst.op != OpCount,
 						 "no opcode matches mnemonic '%.*s' with %d operand(s)\n",
 						 (int)saved.size, (const c8*)saved.ptr, (int)operand_count);
 			result.push(curr_inst);

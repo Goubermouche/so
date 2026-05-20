@@ -10,6 +10,7 @@
 #include "util/string.h"
 
 namespace sup {
+#define MaxProgramLen 8
 
 #define EXTENSION_LIST(X)                                                      \
 	X(RV32I, "rv32i", 0)                                                         \
@@ -60,7 +61,7 @@ enum opcode {
 	EXT_OPCODE_LIST(X)
 #undef X
 		OP_NOP,
-	OP_COUNT,
+	OpCount,
 };
 
 union inst_operand {
@@ -91,7 +92,7 @@ struct inst_spec {
 };
 
 struct inst_db {
-	inst_spec row[OP_COUNT];
+	inst_spec row[OpCount];
 };
 
 static inline operand_type shape_op0(inst_shape s) {
