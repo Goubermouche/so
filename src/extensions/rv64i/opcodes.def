@@ -1,10 +1,10 @@
-#define EXT_RV64I_OPCODES(X)      \
-	X(ADDIW, "addiw", SHAPE_RRI, 0) \
-	X(SLLIW, "slliw", SHAPE_RRI, 0) \
-	X(SRLIW, "srliw", SHAPE_RRI, 0) \
-	X(SRAIW, "sraiw", SHAPE_RRI, 0) \
-	X(ADDW,  "addw",  SHAPE_RRR, 1) \
-	X(SUBW,  "subw",  SHAPE_RRR, 0) \
-	X(SLLW,  "sllw",  SHAPE_RRR, 0) \
-	X(SRLW,  "srlw",  SHAPE_RRR, 0) \
-	X(SRAW,  "sraw",  SHAPE_RRR, 0)
+#define ExtensionsRV64IOpcodes(X)            \
+	X(Addiw, "addiw", InstructionShape_RRI, 0) \
+	X(Slliw, "slliw", InstructionShape_RRI, 0) \
+	X(Srliw, "srliw", InstructionShape_RRI, 0) \
+	X(Sraiw, "sraiw", InstructionShape_RRI, 0) \
+	X(Addw,  "addw",  InstructionShape_RRR, 1) \
+	X(Subw,  "subw",  InstructionShape_RRR, 0) \
+	X(Sllw,  "sllw",  InstructionShape_RRR, 0) \
+	X(Srlw,  "srlw",  InstructionShape_RRR, 0) \
+	X(Sraw,  "sraw",  InstructionShape_RRR, 0)

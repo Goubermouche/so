@@ -1,6 +1,6 @@
-#define EXT_RV64M_OPCODES(X)      \
-	X(MULW,  "mulw",  SHAPE_RRR, 1) \
-	X(DIVW,  "divw",  SHAPE_RRR, 0) \
-	X(DIVUW, "divuw", SHAPE_RRR, 0) \
-	X(REMW,  "remw",  SHAPE_RRR, 0) \
-	X(REMUW, "remuw", SHAPE_RRR, 0)
+#define ExtensionsRV64MOpcodes(X)            \
+	X(Mulw,  "mulw",  InstructionShape_RRR, 1) \
+	X(Divw,  "divw",  InstructionShape_RRR, 0) \
+	X(Divuw, "divuw", InstructionShape_RRR, 0) \
+	X(Remw,  "remw",  InstructionShape_RRR, 0) \
+	X(Remuw, "remuw", InstructionShape_RRR, 0)

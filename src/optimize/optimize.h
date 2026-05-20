@@ -24,8 +24,8 @@ typedef struct Optimizer {
 	Enum enumerate;
 	// filter
 	Filter filter;
-	cpu_state test_in[FilterTestCount];
-	cpu_state target_out[FilterTestCount];
+	CpuState test_in[FilterTestCount];
+	CpuState target_out[FilterTestCount];
 	u32 counterexample_count; // needed for the round robin test retire
 	// output
 	program best;

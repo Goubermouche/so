@@ -9,7 +9,7 @@
 namespace sup {
 void optimizer_make_default_options(OptimizerOptions* opt) {
 	opt->seed = 1;
-	opt->ext_mask = EXT_RV32I;
+	opt->ext_mask = ExtRV32I;
 	opt->batch_size = 4000000;
 	opt->max_cegis_iters = 8;
 }
@@ -70,8 +70,8 @@ i32 optimizer_run(Optimizer* optimizer, const program* program) {
 }
 
 b32 optimizer_run_length(Optimizer* optimizer, u32 len) {
-	u32 effective_mask = optimizer->opt->ext_mask | EXT_RV32I;
-	if(effective_mask & EXT_RV64M) effective_mask |= EXT_RV32M;
+	u32 effective_mask = optimizer->opt->ext_mask | ExtRV32I;
+	if(effective_mask & ExtRV64M) effective_mask |= ExtRV32M;
 
 	EnumOpcodePool opcodes;
 	EnumImmPool immediates;
@@ -124,7 +124,7 @@ b32 optimizer_filter_batch(Optimizer* optimizer, const EnumProgram* p, u64 p_cnt
 	FilterOptions cfg;
 	cfg.live_mask = optimizer->live_out;
 	cfg.prog_len = len;
-	cfg.candidates = (const inst*)p;
+	cfg.candidates = (const Instruction*)p;
 	cfg.n_candidates = p_cnt;
 	cfg.test_in = optimizer->test_in;
 	cfg.target_out = optimizer->target_out;
@@ -143,7 +143,7 @@ b32 optimizer_filter_batch(Optimizer* optimizer, const EnumProgram* p, u64 p_cnt
 	for(u64 i = 0; i < p_cnt; ++i) {
 		if(pass_counts[i] == FilterTestCount) {
 			// pull the candidate instructions
-			inst survivor_inst[MaxProgramLen];
+			Instruction survivor_inst[MaxProgramLen];
 			dtoh_memcpy(survivor_inst, p + i, sizeof(EnumProgram));
 			const f64 t0_smt = get_time_ms();
 			program survivor = {survivor_inst, len};
@@ -154,8 +154,8 @@ b32 optimizer_filter_batch(Optimizer* optimizer, const EnumProgram* p, u64 p_cnt
 
 			if(res.kind == smt::result::EQUIVALENT) {
 				// equivalent program
-				inst* dst = optimizer->mem.push<inst>(len);
-				memcpy(dst, survivor_inst, sizeof(inst) * len);
+				Instruction* dst = optimizer->mem.push<Instruction>(len);
+				memcpy(dst, survivor_inst, sizeof(Instruction) * len);
 				optimizer->best = {dst, len};
 				return true;
 			} else if(res.kind == smt::result::COUNTEREXAMPLE) {
@@ -184,10 +184,16 @@ void optimizer_log_startup(Optimizer* optimizer) {
 	printf("live-out: { ");
 	opt_print_reg_mask(optimizer->live_out);
 	printf(" }\n");
-	u32 effective_mask = optimizer->opt->ext_mask | EXT_RV32I;
-	if(effective_mask & EXT_RV64M) effective_mask |= EXT_RV32M;
+	u32 effective_mask = optimizer->opt->ext_mask | ExtRV32I;
+	if(effective_mask & ExtRV64M) effective_mask |= ExtRV32M;
 	printf("extensions: ");
-	print_enabled_extensions(effective_mask);
+	b32 first = true;
+	for(u32 i = 0; i < DatabaseExtensionCount; ++i) {
+		if(effective_mask & DatabaseExtensionBits[i]) {
+			printf("%s%s", first ? "" : ", ", DatabaseExtensionNames[i].ptr);
+			first = false;
+		}
+	}
 	printf("\n");
 	printf("max prog len: %u\n", MaxProgramLen);
 	printf("batch size: %zu cands\n", optimizer->opt->batch_size);
@@ -225,7 +231,7 @@ void optimizer_init_tests(Optimizer* optimizer) {
 	u64 s = optimizer->opt->seed ^ 0x9E3779B97F4A7C15ull;
 
 	for(u32 t = 0; t < FilterTestCount; ++t) {
-		cpu_state in = {};
+		CpuState in = {};
 
 		for(u32 i = 0; i < 32; ++i) {
 			s ^= s >> 30;

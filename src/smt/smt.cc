@@ -127,28 +127,28 @@ state run(z3::context& ctx, const state& in, const program& p) {
 	pin_x0(ctx, regs);
 
 	for(u32 i = 0; i < p.size; ++i) {
-		const inst& ins = p[i];
+		const Instruction& ins = p[i];
 		const u32 op = (u32)ins.op;
 
-		if(op == OP_NOP) { continue; }
+		if(op == InstructionOpcode_Nop) { continue; }
 
 		// get operands
-		const inst_spec* spec = &INST_DB_HOST.row[op];
+		const InstructionInfo* info = &instruction_db_host.row[op];
 		z3::expr imm = ctx.bv_val(0, 64);
 
 		// init operands
 		for(u32 k = 0; k < 4; ++k) {
-			if(spec->operands[k] == OPERAND_IMM) {
-				imm = ctx.bv_val((uint64_t)ins.operands[k].i, 64);
+			if(info->operands[k] == InstructionOperandType_Imm) {
+				imm = ctx.bv_val((uint64_t)ins.operands[k].imm, 64);
 				break;
 			}
 		}
 
 		decode dec = {.imm = imm};
 		dec.op = op;
-		dec.d = spec->dst_slot >= 0 ? ins.operands[spec->dst_slot].reg : 0;
-		dec.s1 = spec->src_slot >= 0 ? ins.operands[spec->src_slot].reg : 0;
-		dec.s2 = spec->src2_slot >= 0 ? ins.operands[spec->src2_slot].reg : 0;
+		dec.d = info->dst_slot >= 0 ? ins.operands[info->dst_slot].reg : 0;
+		dec.s1 = info->src_slot >= 0 ? ins.operands[info->src_slot].reg : 0;
+		dec.s2 = info->src2_slot >= 0 ? ins.operands[info->src2_slot].reg : 0;
 
 		// build solver
 		b32 handled = false;
@@ -157,7 +157,7 @@ state run(z3::context& ctx, const state& in, const program& p) {
 		if(!handled) handled = ext_rv32m_smt(ctx, regs, dec);
 		if(!handled) handled = ext_rv64m_smt(ctx, regs, dec);
 
-		ASSERT(handled, "smt: unknown opcode\n");
+		ASSERT(handled, "smt: unknown InstructionOpcode\n");
 		pin_x0(ctx, regs);
 	}
 

@@ -24,28 +24,28 @@ typedef struct Filter {
 typedef struct FilterOptions {
 	u64 live_mask;
 	u32 prog_len;
-	const inst* candidates;
+	const Instruction* candidates;
 	u64 n_candidates;
-	const cpu_state* test_in;		 // reference inputs
-	const cpu_state* target_out; // reference outputs
+	const CpuState* test_in;		 // reference inputs
+	const CpuState* target_out; // reference outputs
 } FilterOptions;
 
 typedef struct FilterSharedBlock {
-	inst progs[FilterWarpsPerBlock][MaxProgramLen];
+	Instruction progs[FilterWarpsPerBlock][MaxProgramLen];
 } FilterSharedBlock;
 
 i32  filter_make(Filter* filter, u64 max_chunk_cands);
 void filter_free(Filter* filter);
 void filter_run(Filter* filter, FilterOptions* opt, u8* pass_counts);
 
-SO_HD void filter_run_lane(u64 regs[32], const inst* prog, u32 prog_len) {
+SO_HD void filter_run_lane(u64 regs[32], const Instruction* prog, u32 prog_len) {
 	regs[0] = 0;
 
 	for(u32 i = 0; i < prog_len; ++i) {
-		const inst* in = &prog[i];
+		const Instruction* in = &prog[i];
 		const u32 op = (u32)in->op;
 
-		if(op == OP_NOP) { continue; }
+		if(op == InstructionOpcode_Nop) { continue; }
 
 		if(ext_rv32i_run(op, regs, in)) { continue; };
 		if(ext_rv64i_run(op, regs, in)) { continue; };
@@ -54,8 +54,8 @@ SO_HD void filter_run_lane(u64 regs[32], const inst* prog, u32 prog_len) {
 	}
 }
 
-inline cpu_state filter_run_host(const program* prog, const cpu_state* in) {
-	cpu_state out = *in;
+inline CpuState filter_run_host(const program* prog, const CpuState* in) {
+	CpuState out = *in;
 	out.regs[0] = 0;
 	filter_run_lane(out.regs, prog->ptr, prog->size);
 	return out;

@@ -5,32 +5,32 @@
 #include "cpu/instruction.cuh"
 
 namespace sup {
-SO_HD b32 ext_rv32m_run(u32 op, u64 regs[32], const inst* in) {
+SO_HD b32 ext_rv32m_run(u32 op, u64 regs[32], const Instruction* in) {
 	const u32 d = (u32)in->operands[0].reg;
 	const u64 a = regs[in->operands[1].reg];
 	const u64 b = regs[in->operands[2].reg];
 
 	switch(op) {
-		case OP_MUL: ext_rv_wr(regs, d, a * b); return true;
-		case OP_MULH: {
+		case InstructionOpcode_Mul: ext_rv_wr(regs, d, a * b); return true;
+		case InstructionOpcode_Mulh: {
 			const __int128 sa = (__int128)(i64)a;
 			const __int128 sb = (__int128)(i64)b;
 			ext_rv_wr(regs, d, (u64)(i64)((sa * sb) >> 64));
 			return true;
 		}
-		case OP_MULHSU: {
+		case InstructionOpcode_Mulhsu: {
 			const __int128 sa = (__int128)(i64)a;
 			const __int128 ub = (__int128)(unsigned __int128)b;
 			ext_rv_wr(regs, d, (u64)(i64)((sa * ub) >> 64));
 			return true;
 		}
-		case OP_MULHU: {
+		case InstructionOpcode_Mulhu: {
 			const unsigned __int128 ua = (unsigned __int128)a;
 			const unsigned __int128 ub = (unsigned __int128)b;
 			ext_rv_wr(regs, d, (u64)((ua * ub) >> 64));
 			return true;
 		}
-		case OP_DIV: {
+		case InstructionOpcode_Div: {
 			const i64 sa = (i64)a;
 			const i64 sb = (i64)b;
 			i64 q;
@@ -46,11 +46,11 @@ SO_HD b32 ext_rv32m_run(u32 op, u64 regs[32], const inst* in) {
 			ext_rv_wr(regs, d, (u64)q);
 			return true;
 		}
-		case OP_DIVU: {
+		case InstructionOpcode_Divu: {
 			ext_rv_wr(regs, d, b == 0 ? (u64)-1 : a / b);
 			return true;
 		}
-		case OP_REM: {
+		case InstructionOpcode_Rem: {
 			const i64 sa = (i64)a;
 			const i64 sb = (i64)b;
 			i64 r;
@@ -66,7 +66,7 @@ SO_HD b32 ext_rv32m_run(u32 op, u64 regs[32], const inst* in) {
 			ext_rv_wr(regs, d, (u64)r);
 			return true;
 		}
-		case OP_REMU: {
+		case InstructionOpcode_Remu: {
 			ext_rv_wr(regs, d, b == 0 ? a : a % b);
 			return true;
 		}

@@ -27,7 +27,7 @@ i32 help() {
 }
 
 i32 list_e() {
-	for(u64 i = 0; i < sup::EXT_COUNT; ++i) printf("%s\n", sup::EXT_NAMES[i]);
+	for(u64 i = 0; i < DatabaseExtensionCount; ++i) printf("%s\n", DatabaseExtensionNames[i].ptr);
 	return 0;
 }
 
@@ -41,8 +41,8 @@ i32 parse_e(sup::OptimizerOptions& opt, const c8* p) {
 		while(*p && *p != ' ' && *p != ',' && *p != '+') p++;
 
 		b32 found = false;
-		for(u32 i = 0; i < sup::EXT_COUNT; ++i) {
-			const c8* ext = sup::EXT_NAMES[i];
+		for(u32 i = 0; i < DatabaseExtensionCount; ++i) {
+			const c8* ext = DatabaseExtensionNames[i].ptr;
 			const c8* s = start;
 
 			while(s < p && *ext == *s) {
@@ -166,7 +166,7 @@ i32 main(i32 argc, c8** argv) {
 
 	// run
 	if(device_init()) { return 1; }
-	sup::inst_db_load();
+	instruction_db_load();
 
 	for(u32 run = 0; run < run_count; ++run) {
 		arena a;

@@ -3,8 +3,8 @@
 - In the extension directory, create `opcodes.def`, `run.cuh`, `smt.h`, defining the X-macro, SMT solver, and emulator for your extensions (use other extensions for inspiration)
 - In `src.cpu/instruction.cuh`:
   - `#include` the new `opcodes.def` file
-  - Append the extension to `EXTENSION_LIST`, `EXT_OPCODE_LIST`
-  - Add the extension to `cpu_inst_db_build_host`
+  - Append the extension to `DatabaseExtensionList`, `DatabaseExtensionOpcodeList`
+  - Add the extension to `cpu_InstructionDatabase_build_host`
 - In `src/optimize/filter.cuh`
   - `#include` the new `run.cuh` file
   - add a call to your emulator function

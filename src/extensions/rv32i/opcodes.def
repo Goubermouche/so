@@ -1,21 +1,21 @@
-#define EXT_RV32I_OPCODES(X)      \
-	X(ADD,   "add",   SHAPE_RRR, 1) \
-	X(SUB,   "sub",   SHAPE_RRR, 0) \
-	X(SLL,   "sll",   SHAPE_RRR, 0) \
-	X(SLT,   "slt",   SHAPE_RRR, 0) \
-	X(SLTU,  "sltu",  SHAPE_RRR, 0) \
-	X(XOR,   "xor",   SHAPE_RRR, 1) \
-	X(SRL,   "srl",   SHAPE_RRR, 0) \
-	X(SRA,   "sra",   SHAPE_RRR, 0) \
-	X(OR,    "or",    SHAPE_RRR, 1) \
-	X(AND,   "and",   SHAPE_RRR, 1) \
-	X(ADDI,  "addi",  SHAPE_RRI, 0) \
-	X(SLTI,  "slti",  SHAPE_RRI, 0) \
-	X(SLTIU, "sltiu", SHAPE_RRI, 0) \
-	X(XORI,  "xori",  SHAPE_RRI, 0) \
-	X(ORI,   "ori",   SHAPE_RRI, 0) \
-	X(ANDI,  "andi",  SHAPE_RRI, 0) \
-	X(SLLI,  "slli",  SHAPE_RRI, 0) \
-	X(SRLI,  "srli",  SHAPE_RRI, 0) \
-	X(SRAI,  "srai",  SHAPE_RRI, 0) \
-	X(LUI,   "lui",   SHAPE_RI,  0)
+#define ExtensionsRV32IOpcodes(X)            \
+	X(Add,   "add",   InstructionShape_RRR, 1) \
+	X(Sub,   "sub",   InstructionShape_RRR, 0) \
+	X(Sll,   "sll",   InstructionShape_RRR, 0) \
+	X(Slt,   "slt",   InstructionShape_RRR, 0) \
+	X(Sltu,  "sltu",  InstructionShape_RRR, 0) \
+	X(Xor,   "xor",   InstructionShape_RRR, 1) \
+	X(Srl,   "srl",   InstructionShape_RRR, 0) \
+	X(Sra,   "sra",   InstructionShape_RRR, 0) \
+	X(Or,    "or",    InstructionShape_RRR, 1) \
+	X(And,   "and",   InstructionShape_RRR, 1) \
+	X(Addi,  "addi",  InstructionShape_RRI, 0) \
+	X(Slti,  "slti",  InstructionShape_RRI, 0) \
+	X(Sltiu, "sltiu", InstructionShape_RRI, 0) \
+	X(Xori,  "xori",  InstructionShape_RRI, 0) \
+	X(Ori,   "ori",   InstructionShape_RRI, 0) \
+	X(Andi,  "andi",  InstructionShape_RRI, 0) \
+	X(Slli,  "slli",  InstructionShape_RRI, 0) \
+	X(Srli,  "srli",  InstructionShape_RRI, 0) \
+	X(Srai,  "srai",  InstructionShape_RRI, 0) \
+	X(Lui,   "lui",   InstructionShape_RI,  0)

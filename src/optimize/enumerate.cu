@@ -6,11 +6,11 @@ namespace sup {
 void enum_make_opcode_pool(EnumOpcodePool* pool, u32 ext_mask) {
 	*pool = {};
 
-	for(u32 i = 0; i < (u32)OpCount; ++i) {
-		const inst_spec& s = INST_DB_HOST.row[i];
-		if(s.op == OP_NOP) { continue; }
+	for(u32 i = 0; i < (u32)InstructionOpcode_Count; ++i) {
+		const InstructionInfo& s = instruction_db_host.row[i];
+		if(s.op == InstructionOpcode_Nop) { continue; }
 		if(!(s.ext & ext_mask)) { continue; }
-		pool->ops[pool->n++] = (opcode)i;
+		pool->ops[pool->n++] = (InstructionOpcode)i;
 	}
 }
 
@@ -26,36 +26,36 @@ void enum_make_imm_pool(EnumImmPool* pool) {
 void enum_make_meta_host(const EnumOpcodePool* pool, EnumMeta* out, u32* out_n) {
 	u32 n = 0;
 	for(u32 i = 0; i < pool->n; ++i) {
-		const opcode op = pool->ops[i];
-		const inst_spec& spec = INST_DB_HOST.row[op];
+		const InstructionOpcode op = pool->ops[i];
+		const InstructionInfo& info = instruction_db_host.row[op];
 
 		EnumMeta m;
 		m.op = (u16)op;
-		m.commutative = (u8)spec.commutative;
-		m.dst_slot = spec.dst_slot;
-		m.src_slot = spec.src_slot;
-		m.src2_slot = spec.src2_slot;
+		m.commutative = (u8)info.commutative;
+		m.dst_slot = info.dst_slot;
+		m.src_slot = info.src_slot;
+		m.src2_slot = info.src2_slot;
 		m.imm_slot = -1;
 
 		for(u32 k = 0; k < 4; ++k) {
-			if(spec.operands[k] == OPERAND_IMM) {
+			if(info.operands[k] == InstructionOperandType_Imm) {
 				m.imm_slot = (i8)k;
 				break;
 			}
 		}
 
-		const b32 has_rs1 = spec.src_slot >= 0;
-		const b32 has_rs2 = spec.src2_slot >= 0;
+		const b32 has_rs1 = info.src_slot >= 0;
+		const b32 has_rs2 = info.src2_slot >= 0;
 		const b32 has_imm = m.imm_slot >= 0;
 
 		if(has_rs1 && has_rs2) {
-			m.shape = SHAPE_RRR;
+			m.shape = InstructionShape_RRR;
 		} else if(has_rs1 && has_imm) {
-			m.shape = SHAPE_RRI;
+			m.shape = InstructionShape_RRI;
 		} else if(has_imm) {
-			m.shape = SHAPE_RI;
+			m.shape = InstructionShape_RI;
 		} else if(has_rs1) {
-			m.shape = SHAPE_RR;
+			m.shape = InstructionShape_RR;
 		} else {
 			continue;
 		}
@@ -68,19 +68,19 @@ void enum_make_meta_host(const EnumOpcodePool* pool, EnumMeta* out, u32* out_n) 
 __device__ __forceinline__ void opt_build_inst(const EnumMeta& m, u32 rd,
 																							 u32 rs1, u32 rs2_or_imm_idx,
 																							 b32 is_imm, const i64* imms,
-																							 inst* out) {
-	inst in;
-	in.op = (opcode)m.op;
+																							 Instruction* out) {
+	Instruction in;
+	in.op = (InstructionOpcode)m.op;
 #pragma unroll
-	for(u32 k = 0; k < 4; ++k) { in.operands[k].i = 0; }
+	for(u32 k = 0; k < 4; ++k) { in.operands[k].imm = 0; }
 
-	in.operands[m.dst_slot].reg = (reg_index)rd;
-	if(m.src_slot >= 0) { in.operands[m.src_slot].reg = (reg_index)rs1; }
+	in.operands[m.dst_slot].reg = (Reg)rd;
+	if(m.src_slot >= 0) { in.operands[m.src_slot].reg = (Reg)rs1; }
 	if(!is_imm && m.src2_slot >= 0) {
-		in.operands[m.src2_slot].reg = (reg_index)rs2_or_imm_idx;
+		in.operands[m.src2_slot].reg = (Reg)rs2_or_imm_idx;
 	}
 	if(is_imm && m.imm_slot >= 0) {
-		in.operands[m.imm_slot].i = (u64)imms[rs2_or_imm_idx];
+		in.operands[m.imm_slot].imm = (u64)imms[rs2_or_imm_idx];
 	}
 
 	*out = in;
@@ -178,7 +178,7 @@ __device__ u32 opt_expand_one(const EnumLayer& L, const EnumState& src,
 				(rd_bit == next_scratch_bit) && (next_scratch_bit != 0);
 
 			switch(m.shape) {
-				case SHAPE_RRR: {
+				case InstructionShape_RRR: {
 					u64 a = src_avail;
 					while(a) {
 						const u32 rs1 = (u32)__ffsll((long long)a) - 1;
@@ -195,7 +195,7 @@ __device__ u32 opt_expand_one(const EnumLayer& L, const EnumState& src,
 					}
 					break;
 				}
-				case SHAPE_RRI: {
+				case InstructionShape_RRI: {
 					u64 a = src_avail;
 					while(a) {
 						const u32 rs1 = (u32)__ffsll((long long)a) - 1;
@@ -208,7 +208,7 @@ __device__ u32 opt_expand_one(const EnumLayer& L, const EnumState& src,
 					}
 					break;
 				}
-				case SHAPE_RI: {
+				case InstructionShape_RI: {
 					for(u32 ii = 0; ii < L.n_imms; ++ii) {
 						local_count += opt_try_one<EMIT>(
 							L, src, m, rd, 0u, ii, true, rd_is_new_scratch, dst_states,
@@ -216,7 +216,7 @@ __device__ u32 opt_expand_one(const EnumLayer& L, const EnumState& src,
 					}
 					break;
 				}
-				case SHAPE_RR: {
+				case InstructionShape_RR: {
 					u64 a = src_avail;
 					while(a) {
 						const u32 rs1 = (u32)__ffsll((long long)a) - 1;
@@ -262,7 +262,7 @@ __global__ void opt_emit_kernel(const EnumState* __restrict__ src_front,
 
 i32 enum_make(Enum* e, u64 batch_size) {
 	*e = {};
-	dmalloc(&e->d_meta, (u64)OpCount * sizeof(EnumMeta));
+	dmalloc(&e->d_meta, (u64)InstructionOpcode_Count * sizeof(EnumMeta));
 	dmalloc(&e->d_imms, (u64)64 * sizeof(i64));
 	e->n_meta = 0;
 	e->n_imms_cap = 64;
@@ -317,7 +317,7 @@ void enum_run(Enum* e, EnumOptions* opt) {
 	if(opt->cap == 0 || opt->prog_len == 0) { return; }
 
 	// meta host
-	EnumMeta h_meta[OpCount];
+	EnumMeta h_meta[InstructionOpcode_Count];
 	u32 n_meta = 0;
 	enum_make_meta_host(opt->pool, h_meta, &n_meta);
 	if(n_meta == 0) { return; }
@@ -343,7 +343,7 @@ void enum_run(Enum* e, EnumOptions* opt) {
 	EnumState h_root;
 	for(u32 k = 0; k < MaxProgramLen; ++k) {
 		h_root.code[k] = {};
-		h_root.code[k].op = OP_NOP;
+		h_root.code[k].op = InstructionOpcode_Nop;
 	}
 	h_root.demanded = opt->live_out_mask;
 	h_root.used_scratch = 0;

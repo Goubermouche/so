@@ -56,7 +56,7 @@ struct result {
 	};
 
 	kind kind;
-	cpu_state counterexample;
+	CpuState counterexample;
 };
 
 result equiv(const program& a, const program& b, u64 live_outs);

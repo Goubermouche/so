@@ -1,19 +1,18 @@
 #ifndef OPT_ENUMERATE_CUH
 #define OPT_ENUMERATE_CUH
 
-#include "cpu/instruction.cuh"
-#include "optimize/filter.cuh"
+#include "extensions/database.cuh"
 
 #define EnumImmPoolSize 64
 
 namespace sup {
 
 typedef struct EnumProgram {
-	inst code[MaxProgramLen];
+	Instruction code[MaxProgramLen];
 } EnumProgram;
 
 typedef struct EnumOpcodePool {
-	opcode ops[OpCount];
+	InstructionOpcode ops[InstructionOpcode_Count];
 	u32 n;
 } EnumOpcodePool;
 
@@ -35,7 +34,7 @@ typedef struct EnumMeta {
 
 // node in the backward-search frontier
 typedef struct EnumState {
-	inst code[MaxProgramLen];
+	Instruction code[MaxProgramLen];
 	u64 demanded;			// registers that must be produced by earlier layers
 	u64 used_scratch; // scratch regs already allocated by this branch
 	i32 idx;

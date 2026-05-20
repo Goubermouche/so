@@ -6,8 +6,8 @@
 namespace sup::smt {
 inline b32 ext_rv64m_smt(z3::context& ctx, state& s, const decode& d) {
 	switch(d.op) {
-		case OP_MULW: WR(SEXT(32, LO32(A) * LO32(B)));
-		case OP_DIVW: {
+		case InstructionOpcode_Mulw: WR(SEXT(32, LO32(A) * LO32(B)));
+		case InstructionOpcode_Divw: {
 			z3::expr a = LO32(A);
 			z3::expr b = LO32(B);
 			z3::expr zero = bv32(ctx, 0);
@@ -18,13 +18,13 @@ inline b32 ext_rv64m_smt(z3::context& ctx, state& s, const decode& d) {
 			z3::expr inner = ITE(is_ovf, a, a / b);
 			WR(SEXT(32, ITE(is_zero, all_ones, inner)));
 		}
-		case OP_DIVUW: {
+		case InstructionOpcode_Divuw: {
 			z3::expr a = LO32(A);
 			z3::expr b = LO32(B);
 			z3::expr is_zero = EQUIVALENT(b, bv32(ctx, 0));
 			WR(SEXT(32, ITE(is_zero, bv32(ctx, 0xFFFFFFFF), z3::udiv(a, b))));
 		}
-		case OP_REMW: {
+		case InstructionOpcode_Remw: {
 			z3::expr a = LO32(A);
 			z3::expr b = LO32(B);
 			z3::expr zero = bv32(ctx, 0);
@@ -35,7 +35,7 @@ inline b32 ext_rv64m_smt(z3::context& ctx, state& s, const decode& d) {
 			z3::expr inner = ITE(is_ovf, zero, z3::srem(a, b));
 			WR(SEXT(32, ITE(is_zero, a, inner)));
 		}
-		case OP_REMUW: {
+		case InstructionOpcode_Remuw: {
 			z3::expr a = LO32(A);
 			z3::expr b = LO32(B);
 			z3::expr is_zero = EQUIVALENT(b, bv32(ctx, 0));

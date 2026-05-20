@@ -6,11 +6,11 @@
 namespace sup::smt {
 inline b32 ext_rv32m_smt(z3::context& ctx, state& s, const decode& d) {
 	switch(d.op) {
-		case OP_MUL:    WR(A * B);
-		case OP_MULH:   WR(EXTRACT(127, 64, SEXT(64, A) * SEXT(64, B)));
-		case OP_MULHSU: WR(EXTRACT(127, 64, SEXT(64, A) * ZEXT(64, B)));
-		case OP_MULHU:  WR(EXTRACT(127, 64, ZEXT(64, A) * ZEXT(64, B)));
-		case OP_DIV: {
+		case InstructionOpcode_Mul:    WR(A * B);
+		case InstructionOpcode_Mulh:   WR(EXTRACT(127, 64, SEXT(64, A) * SEXT(64, B)));
+		case InstructionOpcode_Mulhsu: WR(EXTRACT(127, 64, SEXT(64, A) * ZEXT(64, B)));
+		case InstructionOpcode_Mulhu:  WR(EXTRACT(127, 64, ZEXT(64, A) * ZEXT(64, B)));
+		case InstructionOpcode_Div: {
 			z3::expr minus_one = bv64(ctx, (u64)-1);
 			z3::expr int_min = bv64(ctx, 0x8000000000000000ULL);
 			z3::expr is_zero = EQUIVALENT(B, bv64(ctx, 0));
@@ -18,11 +18,11 @@ inline b32 ext_rv32m_smt(z3::context& ctx, state& s, const decode& d) {
 			z3::expr inner = ITE(is_ovf, A, A / B);
 			WR(ITE(is_zero, minus_one, inner));
 		}
-		case OP_DIVU: {
+		case InstructionOpcode_Divu: {
 			z3::expr is_zero = EQUIVALENT(B, bv64(ctx, 0));
 			WR(ITE(is_zero, bv64(ctx, (u64)-1), z3::udiv(A, B)));
 		}
-		case OP_REM: {
+		case InstructionOpcode_Rem: {
 			z3::expr zero = bv64(ctx, 0);
 			z3::expr minus_one = bv64(ctx, (u64)-1);
 			z3::expr int_min = bv64(ctx, 0x8000000000000000ULL);
@@ -31,7 +31,7 @@ inline b32 ext_rv32m_smt(z3::context& ctx, state& s, const decode& d) {
 			z3::expr inner = ITE(is_ovf, zero, z3::srem(A, B));
 			WR(ITE(is_zero, A, inner));
 		}
-		case OP_REMU: {
+		case InstructionOpcode_Remu: {
 			z3::expr is_zero = EQUIVALENT(B, bv64(ctx, 0));
 			WR(ITE(is_zero, A, z3::urem(A, B)));
 		}

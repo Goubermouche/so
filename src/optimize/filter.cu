@@ -1,9 +1,9 @@
 #include "optimize/filter.cuh"
 
 namespace sup {
-__global__ void opt_filter_kernel(const inst* __restrict__ cands,
-																	const cpu_state* __restrict__ test_in,
-																	const cpu_state* __restrict__ target_out,
+__global__ void opt_filter_kernel(const Instruction* __restrict__ cands,
+																	const CpuState* __restrict__ test_in,
+																	const CpuState* __restrict__ target_out,
 																	u8* __restrict__ pass_count, u64 n_candidates,
 																	u64 live_mask, u32 prog_len) {
 	// go through candidate programs and run 32 quick tests to determine if a
@@ -22,7 +22,7 @@ __global__ void opt_filter_kernel(const inst* __restrict__ cands,
 
 	__syncwarp();
 
-	const inst* prog = shared.progs[warp_local];
+	const Instruction* prog = shared.progs[warp_local];
 	u32 pass_local = 0;
 
 	// phase 0: lanes 0-15 evaluate tests 0-15
@@ -95,14 +95,14 @@ i32 filter_make(Filter* filter, u64 max_chunk_cands) {
 	if(cudaMemGetInfo(&free_mem, &total_mem) != cudaSuccess) { return 3; }
 	u64 usable_mem = (u64)((f64)free_mem * 0.30);
 
-	const u64 fixed_mem_bytes = 2ull * FilterTestCount * sizeof(cpu_state);
+	const u64 fixed_mem_bytes = 2ull * FilterTestCount * sizeof(CpuState);
 	if(usable_mem <= fixed_mem_bytes) {
 		fprintf(stderr, "error: insufficient VRAM for fixed buffers\n");
 		return 4;
 	}
 
 	usable_mem -= fixed_mem_bytes;
-	const u64 per_cand_bytes = (u64)MaxProgramLen * sizeof(inst);
+	const u64 per_cand_bytes = (u64)MaxProgramLen * sizeof(Instruction);
 	const u64 cand_footprint_bytes = per_cand_bytes + sizeof(u32) + sizeof(u32);
 	u64 chunk = usable_mem / cand_footprint_bytes;
 	const u64 processor_count = p.multiProcessorCount;
@@ -127,8 +127,8 @@ i32 filter_make(Filter* filter, u64 max_chunk_cands) {
 	// allocate persistent buffers
 	const u64 cands_bytes = filter->max_chunk_cands * per_cand_bytes;
 	dmalloc(&filter->d_cands, cands_bytes);
-	dmalloc(&filter->d_test_in, FilterTestCount * sizeof(cpu_state));
-	dmalloc(&filter->d_target_out, FilterTestCount * sizeof(cpu_state));
+	dmalloc(&filter->d_test_in, FilterTestCount * sizeof(CpuState));
+	dmalloc(&filter->d_target_out, FilterTestCount * sizeof(CpuState));
 	dmalloc(&filter->d_pass_count, filter->max_chunk_cands * sizeof(u8));
 
 	const u64 mask_bytes = filter->max_chunk_cands * sizeof(u32) * 2;
@@ -150,7 +150,7 @@ void filter_free(Filter* filter) {
 
 void filter_run(Filter* filter, FilterOptions* opt, u8* pass_counts) {
 	if(opt->candidates == 0) { return; }
-	const u64 test_size = FilterTestCount * sizeof(cpu_state);
+	const u64 test_size = FilterTestCount * sizeof(CpuState);
 
 	// upload test vectors once
 	htod_memcpy(filter->d_test_in, opt->test_in, test_size);
@@ -168,7 +168,7 @@ void filter_run(Filter* filter, FilterOptions* opt, u8* pass_counts) {
 			this_chunk = filter->max_chunk_cands;
 		}
 
-		const inst* d_chunk_cands = opt->candidates + done * MaxProgramLen;
+		const Instruction* d_chunk_cands = opt->candidates + done * MaxProgramLen;
 		const u32 total_warps = this_chunk + FilterWarpsPerBlock - 1;
 		const u32 n_blocks = (u32)(total_warps / FilterWarpsPerBlock);
 		dim3 grid(n_blocks);
@@ -176,8 +176,8 @@ void filter_run(Filter* filter, FilterOptions* opt, u8* pass_counts) {
 
 		// run chunk
 		opt_filter_kernel<<<grid, block>>>(
-			d_chunk_cands, (const cpu_state*)filter->d_test_in,
-			(const cpu_state*)filter->d_target_out, (u8*)filter->d_pass_count,
+			d_chunk_cands, (const CpuState*)filter->d_test_in,
+			(const CpuState*)filter->d_target_out, (u8*)filter->d_pass_count,
 			this_chunk, opt->live_mask, opt->prog_len);
 		check_cuda(cudaGetLastError(), "kernel launch");
 		check_cuda(cudaDeviceSynchronize(), "kernel sync");

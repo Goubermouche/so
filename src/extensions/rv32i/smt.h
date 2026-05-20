@@ -6,26 +6,26 @@
 namespace sup::smt {
 inline b32 ext_rv32i_smt(z3::context& ctx, state& s, const decode& d) {
 	switch(d.op) {
-		case OP_ADD:   WR(A + B);
-		case OP_SUB:   WR(A - B);
-		case OP_XOR:   WR(A ^ B);
-		case OP_OR:    WR(A | B);
-		case OP_AND:   WR(A & B);
-		case OP_SLL:   WR(z3::shl(A, low6(ctx, B)));
-		case OP_SRL:   WR(z3::lshr(A, low6(ctx, B)));
-		case OP_SRA:   WR(z3::ashr(A, low6(ctx, B)));
-		case OP_SLT:   WR(ite_bool_to_bv64(ctx, z3::slt(A, B)));
-		case OP_SLTU:  WR(ite_bool_to_bv64(ctx, z3::ult(A, B)));
-		case OP_ADDI:  WR(A + d.imm);
-		case OP_XORI:  WR(A ^ d.imm);
-		case OP_ORI:   WR(A | d.imm);
-		case OP_ANDI:  WR(A & d.imm);
-		case OP_SLLI:  WR(z3::shl(A, low6(ctx, d.imm)));
-		case OP_SRLI:  WR(z3::lshr(A, low6(ctx, d.imm)));
-		case OP_SRAI:  WR(z3::ashr(A, low6(ctx, d.imm)));
-		case OP_SLTI:  WR(ite_bool_to_bv64(ctx, z3::slt(A, d.imm)));
-		case OP_SLTIU: WR(ite_bool_to_bv64(ctx, z3::ult(A, d.imm)));
-		case OP_LUI:   WR(sext_w(ctx, z3::shl(d.imm, bv64(ctx, 12))));
+		case InstructionOpcode_Add:   WR(A + B);
+		case InstructionOpcode_Sub:   WR(A - B);
+		case InstructionOpcode_Xor:   WR(A ^ B);
+		case InstructionOpcode_Or:    WR(A | B);
+		case InstructionOpcode_And:   WR(A & B);
+		case InstructionOpcode_Sll:   WR(z3::shl(A, low6(ctx, B)));
+		case InstructionOpcode_Srl:   WR(z3::lshr(A, low6(ctx, B)));
+		case InstructionOpcode_Sra:   WR(z3::ashr(A, low6(ctx, B)));
+		case InstructionOpcode_Slt:   WR(ite_bool_to_bv64(ctx, z3::slt(A, B)));
+		case InstructionOpcode_Sltu:  WR(ite_bool_to_bv64(ctx, z3::ult(A, B)));
+		case InstructionOpcode_Addi:  WR(A + d.imm);
+		case InstructionOpcode_Xori:  WR(A ^ d.imm);
+		case InstructionOpcode_Ori:   WR(A | d.imm);
+		case InstructionOpcode_Andi:  WR(A & d.imm);
+		case InstructionOpcode_Slli:  WR(z3::shl(A, low6(ctx, d.imm)));
+		case InstructionOpcode_Srli:  WR(z3::lshr(A, low6(ctx, d.imm)));
+		case InstructionOpcode_Srai:  WR(z3::ashr(A, low6(ctx, d.imm)));
+		case InstructionOpcode_Slti:  WR(ite_bool_to_bv64(ctx, z3::slt(A, d.imm)));
+		case InstructionOpcode_Sltiu: WR(ite_bool_to_bv64(ctx, z3::ult(A, d.imm)));
+		case InstructionOpcode_Lui:   WR(sext_w(ctx, z3::shl(d.imm, bv64(ctx, 12))));
 	}
 	return false;
 }

@@ -5,47 +5,47 @@
 #include "cpu/instruction.cuh"
 
 namespace sup {
-SO_HD b32 ext_rv64i_run(u32 op, u64 regs[32], const inst* in) {
+SO_HD b32 ext_rv64i_run(u32 op, u64 regs[32], const Instruction* in) {
 	const u32 d = (u32)in->operands[0].reg;
 
 	switch(op) {
-		case OP_ADDIW:
+		case InstructionOpcode_Addiw:
 			ext_rv_wr(regs, d,
-								(u64)ext_rv_sext32((u32)regs[in->operands[1].reg] + (u32)in->operands[2].i));
+								(u64)ext_rv_sext32((u32)regs[in->operands[1].reg] + (u32)in->operands[2].imm));
 			return true;
-		case OP_SLLIW:
+		case InstructionOpcode_Slliw:
 			ext_rv_wr(regs, d,
-								(u64)ext_rv_sext32(((u32)regs[in->operands[1].reg]) << (in->operands[2].i & 0x1F)));
+								(u64)ext_rv_sext32(((u32)regs[in->operands[1].reg]) << (in->operands[2].imm & 0x1F)));
 			return true;
-		case OP_SRLIW:
+		case InstructionOpcode_Srliw:
 			ext_rv_wr(regs, d,
-								(u64)ext_rv_sext32(((u32)regs[in->operands[1].reg]) >> (in->operands[2].i & 0x1F)));
+								(u64)ext_rv_sext32(((u32)regs[in->operands[1].reg]) >> (in->operands[2].imm & 0x1F)));
 			return true;
-		case OP_SRAIW:
+		case InstructionOpcode_Sraiw:
 			ext_rv_wr(regs, d,
-								(u64)((i64)((i32)regs[in->operands[1].reg] >> (in->operands[2].i & 0x1F))));
+								(u64)((i64)((i32)regs[in->operands[1].reg] >> (in->operands[2].imm & 0x1F))));
 			return true;
-		case OP_ADDW:
+		case InstructionOpcode_Addw:
 			ext_rv_wr(
 				regs, d,
 				(u64)ext_rv_sext32((u32)regs[in->operands[1].reg] + (u32)regs[in->operands[2].reg]));
 			return true;
-		case OP_SUBW:
+		case InstructionOpcode_Subw:
 			ext_rv_wr(
 				regs, d,
 				(u64)ext_rv_sext32((u32)regs[in->operands[1].reg] - (u32)regs[in->operands[2].reg]));
 			return true;
-		case OP_SLLW:
+		case InstructionOpcode_Sllw:
 			ext_rv_wr(
 				regs, d,
 				(u64)ext_rv_sext32(((u32)regs[in->operands[1].reg]) << (regs[in->operands[2].reg] & 0x1F)));
 			return true;
-		case OP_SRLW:
+		case InstructionOpcode_Srlw:
 			ext_rv_wr(
 				regs, d,
 				(u64)ext_rv_sext32(((u32)regs[in->operands[1].reg]) >> (regs[in->operands[2].reg] & 0x1F)));
 			return true;
-		case OP_SRAW:
+		case InstructionOpcode_Sraw:
 			ext_rv_wr(regs, d,
 								(u64)((i64)((i32)regs[in->operands[1].reg] >> (regs[in->operands[2].reg] & 0x1F))));
 			return true;

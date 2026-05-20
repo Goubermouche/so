@@ -1,9 +1,9 @@
-#define EXT_RV32M_OPCODES(X)        \
-	X(MUL,    "mul",    SHAPE_RRR, 1) \
-	X(MULH,   "mulh",   SHAPE_RRR, 1) \
-	X(MULHSU, "mulhsu", SHAPE_RRR, 0) \
-	X(MULHU,  "mulhu",  SHAPE_RRR, 1) \
-	X(DIV,    "div",    SHAPE_RRR, 0) \
-	X(DIVU,   "divu",   SHAPE_RRR, 0) \
-	X(REM,    "rem",    SHAPE_RRR, 0) \
-	X(REMU,   "remu",   SHAPE_RRR, 0)
+#define ExtensionsRV32MOpcodes(X)              \
+	X(Mul,    "mul",    InstructionShape_RRR, 1) \
+	X(Mulh,   "mulh",   InstructionShape_RRR, 1) \
+	X(Mulhsu, "mulhsu", InstructionShape_RRR, 0) \
+	X(Mulhu,  "mulhu",  InstructionShape_RRR, 1) \
+	X(Div,    "div",    InstructionShape_RRR, 0) \
+	X(Divu,   "divu",   InstructionShape_RRR, 0) \
+	X(Rem,    "rem",    InstructionShape_RRR, 0) \
+	X(Remu,   "remu",   InstructionShape_RRR, 0)

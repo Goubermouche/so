@@ -3,55 +3,54 @@
 #include <cstdlib>
 
 namespace sup {
-const c8* lex_token_to_str(token tok) {
+string lexer_token_to_str(LexerToken tok) {
 	switch(tok) {
-		case token::UNKNOWN: return "unknown";
-		case token::IDENTIFIER: return "identifier";
-		case token::NUMBER: return "number";
-		case token::COMMA: return ",";
-		case token::LBRACKET: return "[";
-		case token::RBRACKET: return "]";
-		case token::LBRACE: return "(";
-		case token::RBRACE: return ")";
-		case token::PLUS: return "+";
-		case token::MINUS: return "-";
-		case token::ASTERISK: return "*";
-		case token::DOLLARSIGN: return "$";
-		case token::COLON: return ":";
-		case token::NEWLINE: return "newline";
-		case token::END_OF_FILE: return "eof";
+		case TOK_UNKNOWN: return "unknown";
+		case TOK_IDENTIFIER: return "identifier";
+		case TOK_NUMBER: return "number";
+		case TOK_COMMA: return ",";
+		case TOK_LBRACKET: return "[";
+		case TOK_RBRACKET: return "]";
+		case TOK_LBRACE: return "(";
+		case TOK_RBRACE: return ")";
+		case TOK_PLUS: return "+";
+		case TOK_MINUS: return "-";
+		case TOK_ASTERISK: return "*";
+		case TOK_DOLLARSIGN: return "$";
+		case TOK_COLON: return ":";
+		case TOK_NEWLINE: return "newline";
+		case TOK_END_OF_FILE: return "eof";
 		default:
-			if(lex_token_is_reg(tok)) {
-				return reg_name(lex_token_to_reg_index(tok));
+			if(lexer_token_is_reg(tok)) {
+				return reg_name(lexer_token_to_reg_index(tok));
 			}
 			return "?";
 	}
 }
 
-b32 lex_token_is_reg(token tok) {
-	return tok >= token::REG_X0 && tok <= token::REG_X31;
+b32 lexer_token_is_reg(LexerToken tok) {
+	return tok >= TOK_REG_X0 && tok <= TOK_REG_X31;
 }
 
-u64 lex_token_to_reg_index(token tok) {
-	ASSERT(lex_token_is_reg(tok), "token is not a register");
-	return (u64)tok - (u64)token::REG_X0;
+u64 lexer_token_to_reg_index(LexerToken tok) {
+	ASSERT(lexer_token_is_reg(tok), "LexerToken is not a register");
+	return (u64)tok - (u64)TOK_REG_X0;
 }
 
-lexer lex_make(string source) {
-	lexer lex;
-	lex.index = 0;
-	lex.source = source;
-	lex.current_char = 0;
-	lex.curr = token::UNKNOWN;
-	lex.curr_imm = 0;
-	return lex;
+i32 lexer_make(Lexer* lexer, string source) {
+	lexer->index = 0;
+	lexer->source = source;
+	lexer->current_char = 0;
+	lexer->curr = TOK_UNKNOWN;
+	lexer->curr_imm = 0;
+	return 0;
 }
 
-token lex_next_tok(lexer* lex) {
+LexerToken lexer_next_tok(Lexer* lex) {
 	lex->curr_string = {};
 
 	// get rid of leading space-like characters
-	lex_consume_spaces(lex);
+	lexer_consume_spaces(lex);
 
 	// special characters
 	switch(lex->current_char) {
@@ -59,90 +58,90 @@ token lex_next_tok(lexer* lex) {
 		case '.':
 		case '0' ... '9':
 		case 'a' ... 'z':
-		case 'A' ... 'Z': return lex_next_tok_identifier(lex);
+		case 'A' ... 'Z': return lexer_next_tok_identifier(lex);
 
 		case ';':
-		case '#': return lex_next_tok_comment(lex);
-		case '"': return lex_next_tok_string(lex);
-		case '\'': return lex_next_tok_char(lex);
+		case '#': return lexer_next_tok_comment(lex);
+		case '"': return lexer_next_tok_string(lex);
+		case '\'': return lexer_next_tok_char(lex);
 
-		case ',': lex_next_char(lex); return lex->curr = token::COMMA;
-		case '[': lex_next_char(lex); return lex->curr = token::LBRACKET;
-		case ']': lex_next_char(lex); return lex->curr = token::RBRACKET;
-		case '(': lex_next_char(lex); return lex->curr = token::LBRACE;
-		case ')': lex_next_char(lex); return lex->curr = token::RBRACE;
-		case '+': lex_next_char(lex); return lex->curr = token::PLUS;
-		case '-': lex_next_char(lex); return lex->curr = token::MINUS;
-		case '*': lex_next_char(lex); return lex->curr = token::ASTERISK;
-		case '$': lex_next_char(lex); return lex->curr = token::DOLLARSIGN;
-		case ':': lex_next_char(lex); return lex->curr = token::COLON;
-		case '\n': lex_next_char(lex); return lex->curr = token::NEWLINE;
-		case EOF: return lex->curr = token::END_OF_FILE;
+		case ',': lexer_next_char(lex); return lex->curr = TOK_COMMA;
+		case '[': lexer_next_char(lex); return lex->curr = TOK_LBRACKET;
+		case ']': lexer_next_char(lex); return lex->curr = TOK_RBRACKET;
+		case '(': lexer_next_char(lex); return lex->curr = TOK_LBRACE;
+		case ')': lexer_next_char(lex); return lex->curr = TOK_RBRACE;
+		case '+': lexer_next_char(lex); return lex->curr = TOK_PLUS;
+		case '-': lexer_next_char(lex); return lex->curr = TOK_MINUS;
+		case '*': lexer_next_char(lex); return lex->curr = TOK_ASTERISK;
+		case '$': lexer_next_char(lex); return lex->curr = TOK_DOLLARSIGN;
+		case ':': lexer_next_char(lex); return lex->curr = TOK_COLON;
+		case '\n': lexer_next_char(lex); return lex->curr = TOK_NEWLINE;
+		case EOF: return lex->curr = TOK_END_OF_FILE;
 	}
 
 	ASSERT(false, "unknown character '%c' received\n", lex->current_char);
-	return token::UNKNOWN;
+	return TOK_UNKNOWN;
 }
 
-c8 lex_next_char(lexer* lex) {
-	if(lex_is_at_end(lex)) { return lex->current_char = EOF; }
+c8 lexer_next_char(Lexer* lex) {
+	if(lexer_is_at_end(lex)) { return lex->current_char = EOF; }
 	return lex->current_char = (c8)lex->source[lex->index++];
 }
 
-b32 lex_is_at_end(lexer* lex) { return lex->index >= lex->source.size; }
+b32 lexer_is_at_end(Lexer* lex) { return lex->index >= lex->source.size; }
 
-void lex_consume_spaces(lexer* lex) {
+void lexer_consume_spaces(Lexer* lex) {
 	// consume spaces (excluding newlines)
-	while(lex_is_whitespace(lex->current_char)) { lex_next_char(lex); }
+	while(lexer_is_whitespace(lex->current_char)) { lexer_next_char(lex); }
 }
 
-b32 lex_is_whitespace(c8 c) {
+b32 lexer_is_whitespace(c8 c) {
 	return (c == '\t' || c == '\v' || c == '\f' || c == '\r' || c == ' ');
 }
 
-token lex_next_tok_identifier(lexer* lex) {
+LexerToken lexer_next_tok_identifier(Lexer* lex) {
 	const u64 start = lex->index - 1;
 
 	while(isalnum(lex->current_char) || lex->current_char == '_' ||
 				lex->current_char == '.') {
-		lex_next_char(lex);
+		lexer_next_char(lex);
 	}
 
 	const u64 end = lex->index - 1;
 	lex->curr_string = string(lex->source.ptr + start, end - start);
 
-	const auto token = lex_str_to_tok(lex->curr_string);
+	const auto LexerToken = lexer_str_to_tok(lex->curr_string);
 
-	if(token != token::UNKNOWN) { return lex->curr = token; }
+	if(LexerToken != TOK_UNKNOWN) { return lex->curr = LexerToken; }
 
 	// numerical literal
 	if(lex->curr_string.size > 0 && isdigit(lex->curr_string[0])) {
-		return lex_str_to_num(lex, lex->curr_string);
+		return lexer_str_to_num_tok(lex, lex->curr_string);
 	}
 
-	return lex->curr = token::IDENTIFIER;
+	return lex->curr = TOK_IDENTIFIER;
 }
 
-token lex_next_tok_comment(lexer* lex) {
+LexerToken lexer_next_tok_comment(Lexer* lex) {
 	do {
-		lex_next_char(lex);
-	} while(!lex_is_at_end(lex) && lex->current_char != '\n');
+		lexer_next_char(lex);
+	} while(!lexer_is_at_end(lex) && lex->current_char != '\n');
 
-	// return the next token
-	return lex_next_tok(lex);
+	// return the next LexerToken
+	return lexer_next_tok(lex);
 }
 
-token lex_next_tok_string(lexer* lex) {
+LexerToken lexer_next_tok_string(Lexer* lex) {
 	ASSERT(false, "TODO: next_tok_string");
-	return token::UNKNOWN;
+	return TOK_UNKNOWN;
 }
 
-token lex_next_tok_char(lexer* lex) {
+LexerToken lexer_next_tok_char(Lexer* lex) {
 	ASSERT(false, "TODO: next_tok_char");
-	return token::UNKNOWN;
+	return TOK_UNKNOWN;
 }
 
-token lex_str_to_tok(string string) {
+LexerToken lexer_str_to_tok(string string) {
 	// numeric register (x1, x2,...)
 	if(string.size > 1 && string[0] == 'x') {
 		c8 buf[16] = {0};
@@ -153,38 +152,38 @@ token lex_str_to_tok(string string) {
 		c8* end;
 		i64 reg_num = strtol(buf + 1, &end, 10);
 		if(*end == '\0' && reg_num >= 0 && reg_num <= 31) {
-			return (token)((u32)token::REG_X0 + reg_num);
+			return (LexerToken)((u32)TOK_REG_X0 + reg_num);
 		}
 	}
 
 	struct reg_mapping {
 		const c8* name;
-		token tok;
+		LexerToken tok;
 	};
 
 	// ABI names
 	static const reg_mapping abi_map[] = {
-		{"zero", token::REG_X0}, {"ra", token::REG_X1},		{"sp", token::REG_X2},
-		{"gp", token::REG_X3},		{"tp", token::REG_X4},		{"t0", token::REG_X5},
-		{"t1", token::REG_X6},		{"t2", token::REG_X7},		{"s0", token::REG_X8},
-		{"fp", token::REG_X8},		{"s1", token::REG_X9},		{"a0", token::REG_X10},
-		{"a1", token::REG_X11},	{"a2", token::REG_X12},	{"a3", token::REG_X13},
-		{"a4", token::REG_X14},	{"a5", token::REG_X15},	{"a6", token::REG_X16},
-		{"a7", token::REG_X17},	{"s2", token::REG_X18},	{"s3", token::REG_X19},
-		{"s4", token::REG_X20},	{"s5", token::REG_X21},	{"s6", token::REG_X22},
-		{"s7", token::REG_X23},	{"s8", token::REG_X24},	{"s9", token::REG_X25},
-		{"s10", token::REG_X26}, {"s11", token::REG_X27}, {"t3", token::REG_X28},
-		{"t4", token::REG_X29},	{"t5", token::REG_X30},	{"t6", token::REG_X31}};
+		{"zero", TOK_REG_X0}, {"ra", TOK_REG_X1},		{"sp", TOK_REG_X2},
+		{"gp", TOK_REG_X3},		{"tp", TOK_REG_X4},		{"t0", TOK_REG_X5},
+		{"t1", TOK_REG_X6},		{"t2", TOK_REG_X7},		{"s0", TOK_REG_X8},
+		{"fp", TOK_REG_X8},		{"s1", TOK_REG_X9},		{"a0", TOK_REG_X10},
+		{"a1", TOK_REG_X11},	{"a2", TOK_REG_X12},	{"a3", TOK_REG_X13},
+		{"a4", TOK_REG_X14},	{"a5", TOK_REG_X15},	{"a6", TOK_REG_X16},
+		{"a7", TOK_REG_X17},	{"s2", TOK_REG_X18},	{"s3", TOK_REG_X19},
+		{"s4", TOK_REG_X20},	{"s5", TOK_REG_X21},	{"s6", TOK_REG_X22},
+		{"s7", TOK_REG_X23},	{"s8", TOK_REG_X24},	{"s9", TOK_REG_X25},
+		{"s10", TOK_REG_X26}, {"s11", TOK_REG_X27}, {"t3", TOK_REG_X28},
+		{"t4", TOK_REG_X29},	{"t5", TOK_REG_X30},	{"t6", TOK_REG_X31}};
 
 	static const u64 abi_size = sizeof(abi_map) / sizeof(abi_map[0]);
 	for(size_t i = 0; i < abi_size; ++i) {
 		if(string == abi_map[i].name) return abi_map[i].tok;
 	}
 
-	return token::UNKNOWN;
+	return TOK_UNKNOWN;
 }
 
-token lex_str_to_num(lexer* lex, string string) {
+LexerToken lexer_str_to_num_tok(Lexer* lex, string string) {
 	i32 base = 10;
 	c8 buf[64];
 	ASSERT(string.size < sizeof(buf), "numeric literal too long ('%.*s')\n",
@@ -216,6 +215,6 @@ token lex_str_to_num(lexer* lex, string string) {
 	const u64 number = strtoull(data, nullptr, base);
 	ASSERT(errno == 0, "strtoull failed for '%s'\n", buf);
 	lex->curr_imm = (i64)number;
-	return lex->curr = token::NUMBER;
+	return lex->curr = TOK_NUMBER;
 }
 } // namespace sup
