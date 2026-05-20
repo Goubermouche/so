@@ -107,7 +107,7 @@ string operand_to_string(arena& a, inst_operand op, operand_type ty) {
 }
 
 void print_enabled_extensions(u32 mask) {
-	bool first = true;
+	b32 first = true;
 	for(u32 i = 0; i < EXT_COUNT; ++i) {
 		if(mask & EXT_BITS[i]) {
 			printf("%s%s", first ? "" : ", ", EXT_NAMES[i]);

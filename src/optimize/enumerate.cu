@@ -90,7 +90,7 @@ __device__ __forceinline__ void opt_build_inst(const opt_meta& m, u32 rd,
 	*out = in;
 }
 
-template<bool EMIT>
+template<b32 EMIT>
 __device__ __forceinline__ u32 opt_try_one(
 	const opt_layer_ctx& L, const opt_state& src, const opt_meta& m, u32 rd,
 	u32 rs1, u32 rs2_or_imm_idx, b32 is_imm, b32 rd_is_new_scratch,
@@ -147,7 +147,7 @@ __device__ __forceinline__ u32 opt_try_one(
 }
 
 // expand one frontier node
-template<bool EMIT>
+template<b32 EMIT>
 __device__ u32 opt_expand_one(const opt_layer_ctx& L, const opt_state& src,
 															opt_state* dst_states, opt_program* dst_cands,
 															u64 write_base, u64 cap_states, u64 cap_cands) {

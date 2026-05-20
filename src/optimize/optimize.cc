@@ -28,14 +28,12 @@ b32 optimizer::run() {
 	log_startup();
 	init_tests();
 
-	const u64 chunk_cap = opt.batch_size;
-
-	if(opt_filter_make(&filter, chunk_cap)) {
+	if(opt_filter_make(&filter, opt.batch_size)) {
 		fprintf(stderr, "error: filter::init failed\n");
 		return true;
 	}
 
-	if(opt_enum_make(&enumerate, chunk_cap)) {
+	if(opt_enum_make(&enumerate, opt.batch_size)) {
 		fprintf(stderr, "error: enum_ctx::init failed\n");
 		return true;
 	}
@@ -133,17 +131,17 @@ b32 optimizer::filter_batch(const opt_program* p, u64 p_cnt, u32 len) {
 			const f64 t0_smt = get_time_ms();
 			program survivor = {survivor_inst, len};
 			// verify via an SMT solver
-			smt_result res = smt_eq(prog, survivor, live_out);
+			smt::result res = smt::equiv(prog, survivor, live_out);
 			ms_smt += get_time_ms() - t0_smt;
 			++smt_calls;
 
-			if(res.kind == SMT_EQUIVALENT) {
+			if(res.kind == smt::result::EQUIVALENT) {
 				// equivalent program
 				inst* dst = mem.push<inst>(len);
 				memcpy(dst, survivor_inst, sizeof(inst) * len);
 				best = {dst, len};
 				return true;
-			} else if(res.kind == SMT_COUNTEREXAMPLE) {
+			} else if(res.kind == smt::result::COUNTEREXAMPLE) {
 				// add the counterexample (round robin), then abort this batch
 				const u32 slot = 16 + (counterexample_count % 16);
 				counterexample_count++;

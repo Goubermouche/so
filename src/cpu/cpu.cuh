@@ -4,7 +4,7 @@
 #include "util/device.h"
 
 namespace sup {
-enum reg_index {
+enum reg_index : u32 {
 	REG_X0 = 0,
 	REG_X1,
 	REG_X2,

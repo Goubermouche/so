@@ -40,7 +40,7 @@ i32 parse_e(sup::optimizer::options& opt, const c8* p) {
 		const c8* start = p;
 		while(*p && *p != ' ' && *p != ',' && *p != '+') p++;
 
-		bool found = false;
+		b32 found = false;
 		for(u32 i = 0; i < sup::EXT_COUNT; ++i) {
 			const c8* ext = sup::EXT_NAMES[i];
 			const c8* s = start;

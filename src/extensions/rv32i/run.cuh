@@ -14,7 +14,7 @@ SO_HD void ext_rv_wr(u64 regs[32], u32 d, u64 v) {
 	regs[0] = 0;
 }
 
-SO_HD bool ext_rv32i_run(u32 op, u64 regs[32], const inst* in) {
+SO_HD b32 ext_rv32i_run(u32 op, u64 regs[32], const inst* in) {
 	const u32 d = (u32)in->operands[0].reg;
 
 	switch(op) {

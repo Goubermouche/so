@@ -5,7 +5,7 @@
 #include "cpu/instruction.cuh"
 
 namespace sup {
-SO_HD bool ext_rv64i_run(u32 op, u64 regs[32], const inst* in) {
+SO_HD b32 ext_rv64i_run(u32 op, u64 regs[32], const inst* in) {
 	const u32 d = (u32)in->operands[0].reg;
 
 	switch(op) {
