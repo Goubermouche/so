@@ -4,107 +4,208 @@
 #include "extensions/rv64i/smt.h"
 #include "extensions/rv64m/smt.h"
 #include "util/type.h"
-#include <z3++.h>
+
+// thread-local Z3 error capture
+static thread_local c8 g_err_buf[512];
+static thread_local bool g_err_set = false;
+
+static void z3_error_cb(Z3_context c, Z3_error_code ec) {
+	Z3_string msg = Z3_get_error_msg(c, ec);
+	snprintf(g_err_buf, sizeof(g_err_buf), "%s", msg ? msg : "z3 error");
+	g_err_set = true;
+}
 
 SMT_Result smt_equiv(const Program& a, const Program& b, u64 live_outs) {
 	const f64 t0 = get_time_ms();
 	SMT_Result r = {};
 
-	try {
-		// init Z3
-		z3::context ctx;
-		z3::params params(ctx);
-		params.set("timeout", TIMEOUT_MS);
+	// init Z3
+	Z3_config cfg = Z3_mk_config();
+	Z3_context ctx = Z3_mk_context_rc(cfg);
+	Z3_del_config(cfg);
+	Z3_set_error_handler(ctx, z3_error_cb);
+	g_err_set = false;
 
-		// make input state
-		SMT_State in = smt_make_input_state(ctx);
-		smt_pin_x0(ctx, in);
+	Z3_params params = Z3_mk_params(ctx);
+	Z3_params_inc_ref(ctx, params);
+	Z3_symbol timeout_sym = Z3_mk_string_symbol(ctx, "timeout");
+	Z3_params_set_uint(ctx, params, timeout_sym, (u32)SMT_TimeoutMS);
 
-		// run programs
-		SMT_State out_target = smt_run(ctx, &in, &a);
-		SMT_State out_rewrite = smt_run(ctx, &in, &b);
+	// make input state
+	SMT_State in = smt_make_input_state(ctx);
+	smt_pin_x0(ctx, &in);
 
-		// OR over live regs of (out_target[reg] != out_rewrite[reg])
-		z3::expr_vector disjuncts(ctx);
-		for(u32 reg = 0; reg < 32; ++reg) {
-			if(reg == 0) continue;
-			if(live_outs & (1ULL << reg)) {
-				disjuncts.push_back(out_target.r[reg] != out_rewrite.r[reg]);
-			}
-		}
-
-		if(disjuncts.empty()) {
-			// trivially equivalent
-			r.type = SMT_ResultType_EQUIVALENT;
-			return r;
-		}
-
-		z3::expr formula = z3::mk_or(disjuncts);
-
-		// solve
-		z3::solver solver(ctx);
-		solver.set(params);
-		solver.add(formula);
-
-		z3::check_result chk = solver.check();
-
-		switch(chk) {
-			case z3::unsat: r.type = SMT_ResultType_EQUIVALENT; break;
-			case z3::sat: {
-				// programs are not equivalent => build counterexample
-				z3::model m = solver.get_model();
-				for(u32 i = 0; i < 32; ++i) {
-					if(i == 0) {
-						r.counterexample.regs[i] = 0;
-						continue;
-					}
-					z3::expr v = m.eval(in.r[i], true);
-					uint64_t raw = 0;
-					// Fall back slightly to C API for extraction safety across Z3
-					// versions
-					if(Z3_get_numeral_uint64(ctx, v, &raw)) {
-						r.counterexample.regs[i] = raw;
-					} else {
-						r.counterexample.regs[i] = 0;
-					}
-				}
-				r.type = SMT_ResultType_COUNTEREXAMPLE;
-				break;
-			}
-			case z3::unknown:
-			default: r.type = SMT_ResultType_TIMEOUT; break;
-		}
-	} catch(z3::exception& e) {
-		fprintf(stderr, "error: smt_z3: %s\n", e.msg());
+	// run first program
+	SMT_State out_target = smt_run(ctx, &in, &a);
+	if(g_err_set) {
 		r.type = SMT_ResultType_ERROR;
+		r.error = g_err_buf;
+		smt_free_state(ctx, &in);
+		smt_free_state(ctx, &out_target);
+		Z3_params_dec_ref(ctx, params);
+		Z3_del_context(ctx);
+		return r;
 	}
 
+	// run second program
+	SMT_State out_rewrite = smt_run(ctx, &in, &b);
+	if(g_err_set) {
+		r.type = SMT_ResultType_ERROR;
+		r.error = g_err_buf;
+		smt_free_state(ctx, &in);
+		smt_free_state(ctx, &out_target);
+		smt_free_state(ctx, &out_rewrite);
+		Z3_params_dec_ref(ctx, params);
+		Z3_del_context(ctx);
+		return r;
+	}
+
+	// OR over live regs of (out_target[reg] != out_rewrite[reg])
+	Z3_ast disjuncts[32];
+	u32 n_disj = 0;
+	for(u32 reg = 0; reg < 32; ++reg) {
+		if(reg == 0) continue;
+		if(live_outs & (1ULL << reg)) {
+			Z3_ast eq = Z3_mk_eq(ctx, out_target.r[reg], out_rewrite.r[reg]);
+			Z3_ast neq = Z3_mk_not(ctx, eq);
+			Z3_inc_ref(ctx, neq);
+			disjuncts[n_disj++] = neq;
+		}
+	}
+
+	if(n_disj == 0) {
+		// trivially equivalent
+		r.type = SMT_ResultType_EQUIVALENT;
+		smt_free_state(ctx, &in);
+		smt_free_state(ctx, &out_target);
+		smt_free_state(ctx, &out_rewrite);
+		Z3_params_dec_ref(ctx, params);
+		Z3_del_context(ctx);
+		return r;
+	}
+
+	Z3_ast formula = Z3_mk_or(ctx, n_disj, disjuncts);
+	Z3_inc_ref(ctx, formula);
+	for(u32 i = 0; i < n_disj; ++i) Z3_dec_ref(ctx, disjuncts[i]);
+
+	// solve
+	Z3_solver solver = Z3_mk_solver(ctx);
+	Z3_solver_inc_ref(ctx, solver);
+	Z3_solver_set_params(ctx, solver, params);
+	Z3_solver_assert(ctx, solver, formula);
+	Z3_lbool chk = Z3_solver_check(ctx, solver);
+
+	switch(chk) {
+		case Z3_L_FALSE: r.type = SMT_ResultType_EQUIVALENT; break;
+		case Z3_L_TRUE: {
+			// programs are not equivalent => build counterexample
+			Z3_model m = Z3_solver_get_model(ctx, solver);
+			Z3_model_inc_ref(ctx, m);
+			for(u32 i = 0; i < 32; ++i) {
+				if(i == 0) {
+					r.counterexample.regs[i] = 0;
+					continue;
+				}
+				Z3_ast v = nullptr;
+				if(Z3_model_eval(ctx, m, in.r[i], true, &v) && v) {
+					Z3_inc_ref(ctx, v);
+					uint64_t raw = 0;
+					r.counterexample.regs[i] = Z3_get_numeral_uint64(ctx, v, &raw) ? raw : 0;
+					Z3_dec_ref(ctx, v);
+				} else {
+					r.counterexample.regs[i] = 0;
+				}
+			}
+			r.type = SMT_ResultType_COUNTEREXAMPLE;
+			Z3_model_dec_ref(ctx, m);
+			break;
+		}
+		case Z3_L_UNDEF:
+		default: r.type = SMT_ResultType_TIMEOUT; break;
+	}
+
+	if(g_err_set && r.type != SMT_ResultType_COUNTEREXAMPLE) {
+		r.type = SMT_ResultType_ERROR;
+		r.error = g_err_buf;
+	}
+
+	Z3_dec_ref(ctx, formula);
+	Z3_solver_dec_ref(ctx, solver);
+	smt_free_state(ctx, &in);
+	smt_free_state(ctx, &out_target);
+	smt_free_state(ctx, &out_rewrite);
+	Z3_params_dec_ref(ctx, params);
+	Z3_del_context(ctx);
 	return r;
 }
 
-z3::expr smt_low6(z3::context& ctx, const z3::expr& v) { return v & ctx.bv_val(0x3F, 64); }
-
-z3::expr smt_sext_w(z3::context& ctx, const z3::expr& v64) {
-	z3::expr lo32 = v64.extract(31, 0);
-	return z3::sext(lo32, 32);
+Z3_ast smt_low6(Z3_context ctx, Z3_ast v) {
+	Z3_sort s64 = Z3_mk_bv_sort(ctx, 64);
+	Z3_ast mask = Z3_mk_unsigned_int64(ctx, 0x3F, s64);
+	return Z3_mk_bvand(ctx, v, mask);
 }
 
-z3::expr smt_bv32(z3::context& ctx, u64 v) { return ctx.bv_val((uint64_t)v, 32); }
-
-z3::expr smt_bv64(z3::context& ctx, u64 v) { return ctx.bv_val((uint64_t)v, 64); }
-
-z3::expr smt_ite_bool_to_bv64(z3::context& ctx, const z3::expr& cond) {
-	return z3::ite(cond, ctx.bv_val(1, 64), ctx.bv_val(0, 64));
+Z3_ast smt_sext_w(Z3_context ctx, Z3_ast v64) {
+	Z3_ast lo32 = Z3_mk_extract(ctx, 31, 0, v64);
+	return Z3_mk_sign_ext(ctx, 32, lo32);
 }
 
-void smt_wr(z3::context& ctx, SMT_State& state, u32 d, const z3::expr& v) {
+Z3_ast smt_bv32(Z3_context ctx, u64 v) {
+	Z3_sort s32 = Z3_mk_bv_sort(ctx, 32);
+	return Z3_mk_unsigned_int64(ctx, v, s32);
+}
+
+Z3_ast smt_bv64(Z3_context ctx, u64 v) {
+	Z3_sort s64 = Z3_mk_bv_sort(ctx, 64);
+	return Z3_mk_unsigned_int64(ctx, v, s64);
+}
+
+Z3_ast smt_ite_bool_to_bv64(Z3_context ctx, Z3_ast cond) {
+	return Z3_mk_ite(ctx, cond, smt_bv64(ctx, 1), smt_bv64(ctx, 0));
+}
+
+Z3_ast smt_mk_bv64_const(Z3_context ctx, const c8* name) {
+	Z3_sort s64 = Z3_mk_bv_sort(ctx, 64);
+	Z3_symbol sym = Z3_mk_string_symbol(ctx, name);
+	Z3_ast c = Z3_mk_const(ctx, sym, s64);
+	Z3_inc_ref(ctx, c);
+	return c;
+}
+
+void smt_wr(Z3_context ctx, SMT_State* state, u32 d, Z3_ast v) {
 	if(d == 0) { return; }
-	state.r[d] = v;
+	Z3_inc_ref(ctx, v);
+	if(state->r[d]) { Z3_dec_ref(ctx, state->r[d]); }
+	state->r[d] = v;
 }
 
-void smt_pin_x0(z3::context& ctx, SMT_State& state) { state.r[0] = ctx.bv_val(0, 64); }
+void smt_pin_x0(Z3_context ctx, SMT_State* state) {
+	Z3_sort s64 = Z3_mk_bv_sort(ctx, 64);
+	Z3_ast zero = Z3_mk_unsigned_int64(ctx, 0, s64);
+	Z3_inc_ref(ctx, zero);
+	if(state->r[0]) Z3_dec_ref(ctx, state->r[0]);
+	state->r[0] = zero;
+}
 
-SMT_State smt_make_input_state(z3::context& ctx) {
+void smt_free_state(Z3_context ctx, SMT_State* state) {
+	for(u32 i = 0; i < 32; ++i) {
+		if(state->r[i]) {
+			Z3_dec_ref(ctx, state->r[i]);
+			state->r[i] = nullptr;
+		}
+	}
+}
+
+SMT_State smt_clone_state(Z3_context ctx, const SMT_State* src) {
+	SMT_State out = {};
+	for(u32 i = 0; i < 32; ++i) {
+		out.r[i] = src->r[i];
+		if(out.r[i]) Z3_inc_ref(ctx, out.r[i]);
+	}
+	return out;
+}
+
+SMT_State smt_make_input_state(Z3_context ctx) {
 	static const c8* names[32] = {
 		"s_x0",	 "s_x1",	"s_x2",	 "s_x3",	"s_x4",	 "s_x5",	"s_x6",	 "s_x7",
 		"s_x8",	 "s_x9",	"s_x10", "s_x11", "s_x12", "s_x13", "s_x14", "s_x15",
@@ -112,16 +213,15 @@ SMT_State smt_make_input_state(z3::context& ctx) {
 		"s_x24", "s_x25", "s_x26", "s_x27", "s_x28", "s_x29", "s_x30", "s_x31",
 	};
 
-	// Call the new constructor with the z3::context
-	SMT_State a(ctx);
-
-	for(u32 i = 0; i < 32; ++i) { a.r[i] = ctx.bv_const(names[i], 64); }
+	SMT_State a = {};
+	for(u32 i = 0; i < 32; ++i) { a.r[i] = smt_mk_bv64_const(ctx, names[i]); }
 	return a;
 }
 
-SMT_State smt_run(z3::context& ctx, const SMT_State* in, const Program* p) {
-	SMT_State regs = *in;
-	smt_pin_x0(ctx, regs);
+SMT_State smt_run(Z3_context ctx, const SMT_State* in, const Program* p) {
+	SMT_State regs = smt_clone_state(ctx, in);
+	smt_pin_x0(ctx, &regs);
+	Z3_sort s64 = Z3_mk_bv_sort(ctx, 64);
 
 	for(u32 i = 0; i < p->size; ++i) {
 		const Instruction& ins = p->instructions[i];
@@ -131,31 +231,38 @@ SMT_State smt_run(z3::context& ctx, const SMT_State* in, const Program* p) {
 
 		// get operands
 		const InstructionInfo* info = &instruction_db_host.row[op];
-		z3::expr imm = ctx.bv_val(0, 64);
+
+		Z3_ast imm = Z3_mk_unsigned_int64(ctx, 0, s64);
+		Z3_inc_ref(ctx, imm);
 
 		// init operands
 		for(u32 k = 0; k < 4; ++k) {
 			if(info->operands[k] == InstructionOperandType_Imm) {
-				imm = ctx.bv_val((uint64_t)ins.operands[k].imm, 64);
+				Z3_ast new_imm = Z3_mk_unsigned_int64(ctx, (u64)ins.operands[k].imm, s64);
+				Z3_inc_ref(ctx, new_imm);
+				Z3_dec_ref(ctx, imm);
+				imm = new_imm;
 				break;
 			}
 		}
 
-		SMT_Decode dec = {.imm = imm};
+		SMT_Decode dec = {};
 		dec.op = op;
 		dec.d = info->dst_slot >= 0 ? ins.operands[info->dst_slot].reg : 0;
 		dec.s1 = info->src_slot >= 0 ? ins.operands[info->src_slot].reg : 0;
 		dec.s2 = info->src2_slot >= 0 ? ins.operands[info->src2_slot].reg : 0;
+		dec.imm = imm;
 
 		// build solver
 		b32 handled = false;
-		if(!handled) handled = ext_rv32i_smt(ctx, regs, dec);
-		if(!handled) handled = ext_rv64i_smt(ctx, regs, dec);
-		if(!handled) handled = ext_rv32m_smt(ctx, regs, dec);
-		if(!handled) handled = ext_rv64m_smt(ctx, regs, dec);
+		if(!handled) handled = ext_rv32i_smt(ctx, &regs, &dec);
+		if(!handled) handled = ext_rv64i_smt(ctx, &regs, &dec);
+		if(!handled) handled = ext_rv32m_smt(ctx, &regs, &dec);
+		if(!handled) handled = ext_rv64m_smt(ctx, &regs, &dec);
 
+		Z3_dec_ref(ctx, imm);
 		ASSERT(handled, "smt: unknown InstructionOpcode\n");
-		smt_pin_x0(ctx, regs);
+		smt_pin_x0(ctx, &regs);
 	}
 
 	return regs;

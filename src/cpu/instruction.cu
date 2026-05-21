@@ -40,10 +40,10 @@ i8 instruction_shape_src2_slot(InstructionShape s) {
 	return s == InstructionShape_RRR ? (i8)2 : (i8)-1;
 }
 
-string operand_to_string(arena& a, InstructionOperand op, InstructionOperandType ty) {
+string operand_to_string(arena* a, InstructionOperand op, InstructionOperandType ty) {
 	switch(ty) {
 		case InstructionOperandType_Reg: return reg_name((u32)op.reg);
-		case InstructionOperandType_Imm: return string::format(a, "%lld", (i64)op.imm);
+		case InstructionOperandType_Imm: return string::format(*a, "%lld", (i64)op.imm);
 		default: return "?";
 	}
 }

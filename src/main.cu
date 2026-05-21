@@ -1,6 +1,6 @@
 #include "optimize/optimize.h"
 
-#define VERIFY_ARG(opt, arg)                                                                       \
+#define VerifyArg(opt, arg)                                                                        \
 	if(argi + 1 >= argc) {                                                                           \
 		fprintf(stderr, "error: missing argument '%s' for option '%s'\n", arg, opt);                   \
 		return 1;                                                                                      \
@@ -144,11 +144,11 @@ i32 main(i32 argc, c8** argv) {
 		} else if(!strcmp(argv[argi], "--help")) {
 			return help();
 		} else if(!strcmp(argv[argi], "-e")) {
-			VERIFY_ARG("-e", "<list>");
+			VerifyArg("-e", "<list>");
 			i32 res = parse_e(opt, argv[++argi]);
 			if(res) { return res; }
 		} else if(!strcmp(argv[argi], "-r")) {
-			VERIFY_ARG("-r", "<num>");
+			VerifyArg("-r", "<num>");
 			i32 res = parse_u32(argv[++argi], run_count);
 			if(res) { return res; }
 		} else if(!strcmp(argv[argi], "-l")) {
@@ -173,7 +173,7 @@ i32 main(i32 argc, c8** argv) {
 		Optimizer optimizer;
 		optimizer_make(&optimizer, &opt);
 		Program program;
-		program_parse(&program, &a,  string(source, source_len));
+		program_parse(&program, &a, string(source, source_len));
 		optimizer_run(&optimizer, &program);
 	}
 

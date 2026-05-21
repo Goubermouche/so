@@ -51,9 +51,9 @@ typedef enum InstructionOpcodeEnum : u32 {
 	InstructionOpcode_Count,
 } InstructionOpcodeEnum;
 
-struct InstructionDB {
+typedef struct InstructionDB {
 	InstructionInfo row[InstructionOpcode_Count];
-};
+} InstructionDB;
 
 extern InstructionDB instruction_db_host;
 
@@ -63,7 +63,7 @@ void instruction_db_load();
 __device__ const InstructionInfo* instruction_db_find_info_dev(InstructionOpcode op);
 #endif // #ifdef __CUDACC__
 
-SO_HD const InstructionInfo* instruction_db_find_info(InstructionOpcode op) {
+HostDevice const InstructionInfo* instruction_db_find_info(InstructionOpcode op) {
 #ifdef __CUDA_ARCH__
 	return instruction_db_find_info_dev(op);
 #else

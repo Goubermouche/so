@@ -4,15 +4,15 @@
 #include "cpu/instruction.cuh"
 
 // sign-extend the low 32 bits of v to 64 bits
-SO_HD i64 ext_rv_sext32(u64 v) { return (i64)(i32)(u32)v; }
+HostDevice i64 ext_rv_sext32(u64 v) { return (i64)(i32)(u32)v; }
 
 // write to register file
-SO_HD void ext_rv_wr(u64 regs[32], u32 d, u64 v) {
+HostDevice void ext_rv_wr(u64 regs[32], u32 d, u64 v) {
 	regs[d] = v;
 	regs[0] = 0;
 }
 
-SO_HD b32 ext_rv32i_run(u32 op, u64 regs[32], const Instruction* in) {
+HostDevice b32 ext_rv32i_run(u32 op, u64 regs[32], const Instruction* in) {
 	const u32 d = (u32)in->operands[0].reg;
 
 	switch(op) {

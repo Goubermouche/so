@@ -19,9 +19,7 @@ string lexer_token_to_str(LexerToken tok) {
 		case LexerToken_Newline: return "newline";
 		case LexerToken_EndOfFile: return "eof";
 		default:
-			if(lexer_token_is_reg(tok)) {
-				return reg_name(lexer_token_to_reg_index(tok));
-			}
+			if(lexer_token_is_reg(tok)) { return reg_name(lexer_token_to_reg_index(tok)); }
 			return "?";
 	}
 }
@@ -64,22 +62,14 @@ LexerToken lexer_next_tok(Lexer* lexer) {
 		case '\'': return lexer_next_tok_char(lexer);
 
 		case ',': lexer_next_char(lexer); return lexer->curr = LexerToken_Comma;
-		case '[':
-			lexer_next_char(lexer);
-			return lexer->curr = LexerToken_LeftBracket;
-		case ']':
-			lexer_next_char(lexer);
-			return lexer->curr = LexerToken_RightBracket;
+		case '[': lexer_next_char(lexer); return lexer->curr = LexerToken_LeftBracket;
+		case ']': lexer_next_char(lexer); return lexer->curr = LexerToken_RightBracket;
 		case '(': lexer_next_char(lexer); return lexer->curr = LexerToken_LeftBrace;
-		case ')':
-			lexer_next_char(lexer);
-			return lexer->curr = LexerToken_RightBrace;
+		case ')': lexer_next_char(lexer); return lexer->curr = LexerToken_RightBrace;
 		case '+': lexer_next_char(lexer); return lexer->curr = LexerToken_Plus;
 		case '-': lexer_next_char(lexer); return lexer->curr = LexerToken_Minus;
 		case '*': lexer_next_char(lexer); return lexer->curr = LexerToken_Asterisk;
-		case '$':
-			lexer_next_char(lexer);
-			return lexer->curr = LexerToken_DollarSign;
+		case '$': lexer_next_char(lexer); return lexer->curr = LexerToken_DollarSign;
 		case ':': lexer_next_char(lexer); return lexer->curr = LexerToken_Colon;
 		case '\n': lexer_next_char(lexer); return lexer->curr = LexerToken_Newline;
 		case EOF: return lexer->curr = LexerToken_EndOfFile;
@@ -108,8 +98,7 @@ b32 lexer_is_whitespace(c8 c) {
 LexerToken lexer_next_tok_identifier(Lexer* lexer) {
 	const u64 start = lexer->index - 1;
 
-	while(isalnum(lexer->current_char) || lexer->current_char == '_' ||
-				lexer->current_char == '.') {
+	while(isalnum(lexer->current_char) || lexer->current_char == '_' || lexer->current_char == '.') {
 		lexer_next_char(lexer);
 	}
 
@@ -129,9 +118,7 @@ LexerToken lexer_next_tok_identifier(Lexer* lexer) {
 }
 
 LexerToken lexer_next_tok_comment(Lexer* lexer) {
-	do {
-		lexer_next_char(lexer);
-	} while(!lexer_is_at_end(lexer) && lexer->current_char != '\n');
+	do { lexer_next_char(lexer); } while(!lexer_is_at_end(lexer) && lexer->current_char != '\n');
 
 	// return the next LexerToken
 	return lexer_next_tok(lexer);
@@ -162,30 +149,24 @@ LexerToken lexer_str_to_tok(string string) {
 		}
 	}
 
-	struct reg_mapping {
+	typedef struct RegMapping {
 		const c8* name;
 		LexerToken tok;
-	};
+	} RegMapping;
 
 	// ABI names
-	static const reg_mapping abi_map[] = {
-		{"zero", LexerToken_RegX0}, {"ra", LexerToken_RegX1},
-		{"sp", LexerToken_RegX2},		{"gp", LexerToken_RegX3},
-		{"tp", LexerToken_RegX4},		{"t0", LexerToken_RegX5},
-		{"t1", LexerToken_RegX6},		{"t2", LexerToken_RegX7},
-		{"s0", LexerToken_RegX8},		{"fp", LexerToken_RegX8},
-		{"s1", LexerToken_RegX9},		{"a0", LexerToken_RegX10},
-		{"a1", LexerToken_RegX11},	{"a2", LexerToken_RegX12},
-		{"a3", LexerToken_RegX13},	{"a4", LexerToken_RegX14},
-		{"a5", LexerToken_RegX15},	{"a6", LexerToken_RegX16},
-		{"a7", LexerToken_RegX17},	{"s2", LexerToken_RegX18},
-		{"s3", LexerToken_RegX19},	{"s4", LexerToken_RegX20},
-		{"s5", LexerToken_RegX21},	{"s6", LexerToken_RegX22},
-		{"s7", LexerToken_RegX23},	{"s8", LexerToken_RegX24},
-		{"s9", LexerToken_RegX25},	{"s10", LexerToken_RegX26},
-		{"s11", LexerToken_RegX27}, {"t3", LexerToken_RegX28},
-		{"t4", LexerToken_RegX29},	{"t5", LexerToken_RegX30},
-		{"t6", LexerToken_RegX31}};
+	static const RegMapping abi_map[] = {
+		{"zero", LexerToken_RegX0}, {"ra", LexerToken_RegX1},		{"sp", LexerToken_RegX2},
+		{"gp", LexerToken_RegX3},		{"tp", LexerToken_RegX4},		{"t0", LexerToken_RegX5},
+		{"t1", LexerToken_RegX6},		{"t2", LexerToken_RegX7},		{"s0", LexerToken_RegX8},
+		{"fp", LexerToken_RegX8},		{"s1", LexerToken_RegX9},		{"a0", LexerToken_RegX10},
+		{"a1", LexerToken_RegX11},	{"a2", LexerToken_RegX12},	{"a3", LexerToken_RegX13},
+		{"a4", LexerToken_RegX14},	{"a5", LexerToken_RegX15},	{"a6", LexerToken_RegX16},
+		{"a7", LexerToken_RegX17},	{"s2", LexerToken_RegX18},	{"s3", LexerToken_RegX19},
+		{"s4", LexerToken_RegX20},	{"s5", LexerToken_RegX21},	{"s6", LexerToken_RegX22},
+		{"s7", LexerToken_RegX23},	{"s8", LexerToken_RegX24},	{"s9", LexerToken_RegX25},
+		{"s10", LexerToken_RegX26}, {"s11", LexerToken_RegX27}, {"t3", LexerToken_RegX28},
+		{"t4", LexerToken_RegX29},	{"t5", LexerToken_RegX30},	{"t6", LexerToken_RegX31}};
 
 	static const u64 abi_size = sizeof(abi_map) / sizeof(abi_map[0]);
 	for(size_t i = 0; i < abi_size; ++i) {
@@ -198,8 +179,8 @@ LexerToken lexer_str_to_tok(string string) {
 LexerToken lexer_str_to_num_tok(Lexer* lexer, string string) {
 	i32 base = 10;
 	c8 buf[64];
-	ASSERT(string.size < sizeof(buf), "numeric literal too long ('%.*s')\n",
-				 (int)string.size, (const c8*)string.ptr);
+	ASSERT(string.size < sizeof(buf), "numeric literal too long ('%.*s')\n", (int)string.size,
+				 (const c8*)string.ptr);
 	memcpy(buf, string.ptr, string.size);
 	if(string.size >= sizeof(buf)) __builtin_unreachable();
 	buf[string.size] = 0;

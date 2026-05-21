@@ -94,7 +94,7 @@ string program_to_string(Program* Program, arena* a) {
 
 		const u8 nop = info->operand_count;
 		for(u8 j = 0; j < nop; ++j) {
-			builder.push(operand_to_string(*a, Instruction.operands[j], info->operands[j]));
+			builder.push(operand_to_string(a, Instruction.operands[j], info->operands[j]));
 			if(j + 1 < nop) { builder.push(", "); }
 		}
 

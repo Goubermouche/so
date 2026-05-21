@@ -5,11 +5,11 @@
 #include <cuda_runtime.h>
 
 #ifdef __CUDACC__
-#define SO_HD __host__ __device__ __forceinline__
-#define SO_D __device__ __forceinline__
+#define HostDevice __host__ __device__ __forceinline__
+#define Device __device__ __forceinline__
 #else
-#define SO_HD inline
-#define SO_D inline
+#define HostDevice inline
+#define Device inline
 #endif // #ifdef __CUDACC__
 
 void dmalloc(void** ptr, u64 size);

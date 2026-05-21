@@ -3,45 +3,44 @@
 
 #include "smt/smt.h"
 
-inline b32 ext_rv64m_smt(z3::context& ctx, SMT_State& s, const SMT_Decode& d) {
-	switch(d.op) {
-		case InstructionOpcode_Mulw: WR(SEXT(32, LO32(A) * LO32(B)));
+inline b32 ext_rv64m_smt(Z3_context ctx, SMT_State* s, const SMT_Decode* d) {
+	switch(d->op) {
+		case InstructionOpcode_Mulw: SMT_WR(SMT_Sext(32, Z3_mk_bvmul(ctx, SMT_LO32(SMT_A), SMT_LO32(SMT_B))));
 		case InstructionOpcode_Divw: {
-			z3::expr a = LO32(A);
-			z3::expr b = LO32(B);
-			z3::expr zero = smt_bv32(ctx, 0);
-			z3::expr all_ones = smt_bv32(ctx, 0xFFFFFFFF);
-			z3::expr int_min = smt_bv32(ctx, 0x80000000);
-			z3::expr is_zero = EQUIVALENT(b, zero);
-			z3::expr is_ovf = OVF_SIGNED(a, b, int_min, all_ones);
-			z3::expr inner = ITE(is_ovf, a, a / b);
-			WR(SEXT(32, ITE(is_zero, all_ones, inner)));
+			Z3_ast a = SMT_LO32(SMT_A);
+			Z3_ast b = SMT_LO32(SMT_B);
+			Z3_ast zero = smt_bv32(ctx, 0);
+			Z3_ast all_ones = smt_bv32(ctx, 0xFFFFFFFF);
+			Z3_ast int_min = smt_bv32(ctx, 0x80000000);
+			Z3_ast is_zero = SMT_Eq(b, zero);
+			Z3_ast is_ovf = SMT_OvfSigned(a, b, int_min, all_ones);
+			Z3_ast inner = SMT_Ite(is_ovf, a, Z3_mk_bvsdiv(ctx, a, b));
+			SMT_WR(SMT_Sext(32, SMT_Ite(is_zero, all_ones, inner)));
 		}
 		case InstructionOpcode_Divuw: {
-			z3::expr a = LO32(A);
-			z3::expr b = LO32(B);
-			z3::expr is_zero = EQUIVALENT(b, smt_bv32(ctx, 0));
-			WR(SEXT(32, ITE(is_zero, smt_bv32(ctx, 0xFFFFFFFF), z3::udiv(a, b))));
+			Z3_ast a = SMT_LO32(SMT_A);
+			Z3_ast b = SMT_LO32(SMT_B);
+			Z3_ast is_zero = SMT_Eq(b, smt_bv32(ctx, 0));
+			SMT_WR(SMT_Sext(32, SMT_Ite(is_zero, smt_bv32(ctx, 0xFFFFFFFF), Z3_mk_bvudiv(ctx, a, b))));
 		}
 		case InstructionOpcode_Remw: {
-			z3::expr a = LO32(A);
-			z3::expr b = LO32(B);
-			z3::expr zero = smt_bv32(ctx, 0);
-			z3::expr all_ones = smt_bv32(ctx, 0xFFFFFFFF);
-			z3::expr int_min = smt_bv32(ctx, 0x80000000);
-			z3::expr is_zero = EQUIVALENT(b, zero);
-			z3::expr is_ovf = OVF_SIGNED(a, b, int_min, all_ones);
-			z3::expr inner = ITE(is_ovf, zero, z3::srem(a, b));
-			WR(SEXT(32, ITE(is_zero, a, inner)));
+			Z3_ast a = SMT_LO32(SMT_A);
+			Z3_ast b = SMT_LO32(SMT_B);
+			Z3_ast zero = smt_bv32(ctx, 0);
+			Z3_ast all_ones = smt_bv32(ctx, 0xFFFFFFFF);
+			Z3_ast int_min = smt_bv32(ctx, 0x80000000);
+			Z3_ast is_zero = SMT_Eq(b, zero);
+			Z3_ast is_ovf = SMT_OvfSigned(a, b, int_min, all_ones);
+			Z3_ast inner = SMT_Ite(is_ovf, zero, Z3_mk_bvsrem(ctx, a, b));
+			SMT_WR(SMT_Sext(32, SMT_Ite(is_zero, a, inner)));
 		}
 		case InstructionOpcode_Remuw: {
-			z3::expr a = LO32(A);
-			z3::expr b = LO32(B);
-			z3::expr is_zero = EQUIVALENT(b, smt_bv32(ctx, 0));
-			WR(SEXT(32, ITE(is_zero, a, z3::urem(a, b))));
+			Z3_ast a = SMT_LO32(SMT_A);
+			Z3_ast b = SMT_LO32(SMT_B);
+			Z3_ast is_zero = SMT_Eq(b, smt_bv32(ctx, 0));
+			SMT_WR(SMT_Sext(32, SMT_Ite(is_zero, a, Z3_mk_bvurem(ctx, a, b))));
 		}
 	}
 	return false;
 }
-
 #endif // EXT_RV64M_SMT_CUH

@@ -43,7 +43,7 @@ typedef struct CpuState {
 	u64 regs[32];
 } CpuState;
 
-SO_HD const c8* reg_name(u32 r) {
+HostDevice const c8* reg_name(u32 r) {
 	switch(r) {
 		case 0: return "x0";
 		case 1: return "x1";

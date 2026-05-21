@@ -37,7 +37,7 @@ i32  filter_make(Filter* filter, u64 max_chunk_cands);
 void filter_free(Filter* filter);
 void filter_run(Filter* filter, FilterOptions* opt, u8* pass_counts);
 
-SO_HD void filter_run_lane(u64 regs[32], const Instruction* prog, u32 prog_len) {
+HostDevice void filter_run_lane(u64 regs[32], const Instruction* prog, u32 prog_len) {
 	regs[0] = 0;
 
 	for(u32 i = 0; i < prog_len; ++i) {

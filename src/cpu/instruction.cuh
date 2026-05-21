@@ -50,6 +50,6 @@ i8 instruction_shape_dst_slot(InstructionShape s);
 i8 instruction_shape_src_slot(InstructionShape s);
 i8 instruction_shape_src2_slot(InstructionShape s);
 
-string operand_to_string(arena& a, InstructionOperand op, InstructionOperandType ty);
+string operand_to_string(arena* a, InstructionOperand op, InstructionOperandType ty);
 
 #endif // #ifndef INSTRUCTION_CUH
