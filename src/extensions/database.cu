@@ -7,14 +7,8 @@ __device__ const InstructionInfo* instruction_db_find_info_dev(InstructionOpcode
 	return &instruction_db_dev.row[op];
 }
 
-static void instruction_db_row(
-	InstructionDB* d,
-	InstructionOpcode op,
-	const c8* name,
-	InstructionShape shape,
-	u8 commutative,
-	u32 ext_bit)
-{
+static void instruction_db_row(InstructionDB* d, InstructionOpcode op, const c8* name,
+															 InstructionShape shape, u8 commutative, u32 ext_bit) {
 	InstructionInfo* r = &d->row[op];
 	r->name = name;
 	r->operands[0] = instruction_shape_op0(shape);
@@ -39,25 +33,25 @@ static void instruction_db_row(
 static void InstructionDatabase_build_host(InstructionDB* d) {
 	memset(d, 0, sizeof(*d));
 
-#define X(tag, mn, shape, comm)                                                \
+#define X(tag, mn, shape, comm)                                                                    \
 	instruction_db_row(d, InstructionOpcode_##tag, mn, shape, (u8)(comm), ExtRV32I);
 	ExtensionsRV32IOpcodes(X)
 #undef X
-#define X(tag, mn, shape, comm)                                                \
+#define X(tag, mn, shape, comm)                                                                    \
 	instruction_db_row(d, InstructionOpcode_##tag, mn, shape, (u8)(comm), ExtRV64I);
-	ExtensionsRV64IOpcodes(X)
+		ExtensionsRV64IOpcodes(X)
 #undef X
-#define X(tag, mn, shape, comm)                                                \
+#define X(tag, mn, shape, comm)                                                                    \
 	instruction_db_row(d, InstructionOpcode_##tag, mn, shape, (u8)(comm), ExtRV32M);
-	ExtensionsRV32MOpcodes(X)
+			ExtensionsRV32MOpcodes(X)
 #undef X
-#define X(tag, mn, shape, comm)                                                \
+#define X(tag, mn, shape, comm)                                                                    \
 	instruction_db_row(d, InstructionOpcode_##tag, mn, shape, (u8)(comm), ExtRV64M);
-	ExtensionsRV64MOpcodes(X)
+				ExtensionsRV64MOpcodes(X)
 #undef X
 
-	// NOP
-	InstructionInfo* nop = &d->row[InstructionOpcode_Nop];
+		// NOP
+		InstructionInfo* nop = &d->row[InstructionOpcode_Nop];
 	nop->name = "nop";
 	nop->operands[0] = InstructionOperandType_None;
 	nop->operands[1] = InstructionOperandType_None;
@@ -71,11 +65,7 @@ static void InstructionDatabase_build_host(InstructionDB* d) {
 	nop->commutative = 0;
 }
 
-InstructionOpcode instruction_db_find(
-	string name,
-	const InstructionOperandType* ops,
-	u8 op_cnt
-) {
+InstructionOpcode instruction_db_find(string name, const InstructionOperandType* ops, u8 op_cnt) {
 	for(u32 i = 0; i < (u32)InstructionOpcode_Count; ++i) {
 		const InstructionInfo* info = &instruction_db_host.row[i];
 		if(name != info->name) { continue; }
@@ -97,5 +87,6 @@ InstructionOpcode instruction_db_find(
 
 void instruction_db_load() {
 	InstructionDatabase_build_host(&instruction_db_host);
-	check_cuda(cudaMemcpyToSymbol(instruction_db_dev, &instruction_db_host, sizeof(InstructionDB)), "instruction_db_load");
+	check_cuda(cudaMemcpyToSymbol(instruction_db_dev, &instruction_db_host, sizeof(InstructionDB)),
+						 "instruction_db_load");
 }

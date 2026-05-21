@@ -31,7 +31,7 @@ i32 list_e() {
 	return 0;
 }
 
-i32 parse_e(sup::OptimizerOptions& opt, const c8* p) {
+i32 parse_e(OptimizerOptions& opt, const c8* p) {
 	opt.ext_mask = 0;
 	while(*p) {
 		while(*p == ' ' || *p == ',' || *p == '+') p++;
@@ -127,7 +127,7 @@ i32 read_file(const c8* filename, c8** out, u64* out_len) {
 }
 
 i32 main(i32 argc, c8** argv) {
-	sup::OptimizerOptions opt;
+	OptimizerOptions opt;
 	optimizer_make_default_options(&opt);
 	i32 argi = 1;
 	c8* source = 0;
@@ -170,10 +170,11 @@ i32 main(i32 argc, c8** argv) {
 
 	for(u32 run = 0; run < run_count; ++run) {
 		arena a;
-		sup::Optimizer optimizer;
-		sup::optimizer_make(&optimizer, &opt);
-		sup::program parsed = sup::program::parse(a, string(source, source_len));
-		sup::optimizer_run(&optimizer, &parsed);
+		Optimizer optimizer;
+		optimizer_make(&optimizer, &opt);
+		Program program;
+		program_parse(&program, &a,  string(source, source_len));
+		optimizer_run(&optimizer, &program);
 	}
 
 	return 0;

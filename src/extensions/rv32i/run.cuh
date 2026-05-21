@@ -3,8 +3,6 @@
 
 #include "cpu/instruction.cuh"
 
-namespace sup {
-
 // sign-extend the low 32 bits of v to 64 bits
 SO_HD i64 ext_rv_sext32(u64 v) { return (i64)(i32)(u32)v; }
 
@@ -49,16 +47,24 @@ SO_HD b32 ext_rv32i_run(u32 op, u64 regs[32], const Instruction* in) {
 		case InstructionOpcode_And:
 			ext_rv_wr(regs, d, regs[in->operands[1].reg] & regs[in->operands[2].reg]);
 			return true;
-		case InstructionOpcode_Addi: ext_rv_wr(regs, d, regs[in->operands[1].reg] + in->operands[2].imm); return true;
+		case InstructionOpcode_Addi:
+			ext_rv_wr(regs, d, regs[in->operands[1].reg] + in->operands[2].imm);
+			return true;
 		case InstructionOpcode_Slti:
 			ext_rv_wr(regs, d, ((i64)regs[in->operands[1].reg] < (i64)in->operands[2].imm) ? 1 : 0);
 			return true;
 		case InstructionOpcode_Sltiu:
 			ext_rv_wr(regs, d, (regs[in->operands[1].reg] < (u64)in->operands[2].imm) ? 1 : 0);
 			return true;
-		case InstructionOpcode_Xori: ext_rv_wr(regs, d, regs[in->operands[1].reg] ^ in->operands[2].imm); return true;
-		case InstructionOpcode_Ori: ext_rv_wr(regs, d, regs[in->operands[1].reg] | in->operands[2].imm); return true;
-		case InstructionOpcode_Andi: ext_rv_wr(regs, d, regs[in->operands[1].reg] & in->operands[2].imm); return true;
+		case InstructionOpcode_Xori:
+			ext_rv_wr(regs, d, regs[in->operands[1].reg] ^ in->operands[2].imm);
+			return true;
+		case InstructionOpcode_Ori:
+			ext_rv_wr(regs, d, regs[in->operands[1].reg] | in->operands[2].imm);
+			return true;
+		case InstructionOpcode_Andi:
+			ext_rv_wr(regs, d, regs[in->operands[1].reg] & in->operands[2].imm);
+			return true;
 		case InstructionOpcode_Slli:
 			ext_rv_wr(regs, d, regs[in->operands[1].reg] << (in->operands[2].imm & 0x3F));
 			return true;
@@ -68,11 +74,12 @@ SO_HD b32 ext_rv32i_run(u32 op, u64 regs[32], const Instruction* in) {
 		case InstructionOpcode_Srai:
 			ext_rv_wr(regs, d, (u64)((i64)regs[in->operands[1].reg] >> (in->operands[2].imm & 0x3F)));
 			return true;
-		case InstructionOpcode_Lui: ext_rv_wr(regs, d, (u64)(i64)(i32)((u32)in->operands[1].imm << 12)); return true;
+		case InstructionOpcode_Lui:
+			ext_rv_wr(regs, d, (u64)(i64)(i32)((u32)in->operands[1].imm << 12));
+			return true;
 	}
 
 	return false;
 }
-} // namespace sup
 
 #endif // #ifndef EXT_RV32I_RUN_CUH

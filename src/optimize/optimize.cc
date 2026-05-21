@@ -6,7 +6,6 @@
 #include "smt/smt.h"
 #include "util/type.h"
 
-namespace sup {
 void optimizer_make_default_options(OptimizerOptions* opt) {
 	opt->seed = 1;
 	opt->ext_mask = ExtRV32I;
@@ -42,10 +41,10 @@ void optimizer_free(Optimizer* optimizer) {
 	filter_free(&optimizer->filter);
 }
 
-i32 optimizer_run(Optimizer* optimizer, const program* program) {
+i32 optimizer_run(Optimizer* optimizer, Program* program) {
 	optimizer->prog = program;
-	optimizer->live_out = program->get_live_out();
-	optimizer->live_in = program->get_live_in();
+	optimizer->live_out = program_get_live_out(program);
+	optimizer->live_in = program_get_live_in(program);
 
 	optimizer_log_startup(optimizer);
 	optimizer_init_tests(optimizer);
@@ -82,7 +81,7 @@ b32 optimizer_run_length(Optimizer* optimizer, u32 len) {
 	u32 iter = 0;
 
 	// CEGIS main loop for instructions of length 'len', iterates until we either
-	// find a satisfactory program (SMT proven equivalence), or until we don't
+	// find a satisfactory program (SMT_State proven equivalence), or until we don't
 	// find any new counterexammples
 	while(iter < optimizer->opt->max_cegis_iters) {
 		const u32 prev_counterexample_count = optimizer->counterexample_count;
@@ -118,13 +117,13 @@ b32 optimizer_run_length(Optimizer* optimizer, u32 len) {
 	return false;
 }
 
-b32 optimizer_filter_batch(Optimizer* optimizer, const EnumProgram* p, u64 p_cnt, u32 len) {
+b32 optimizer_filter_batch(Optimizer* optimizer, EnumProgram* p, u64 p_cnt, u32 len) {
 	if(p_cnt == 0) { return false; }
 	arena scratch;
 	FilterOptions cfg;
 	cfg.live_mask = optimizer->live_out;
 	cfg.prog_len = len;
-	cfg.candidates = (const Instruction*)p;
+	cfg.candidates = (Instruction*)p;
 	cfg.n_candidates = p_cnt;
 	cfg.test_in = optimizer->test_in;
 	cfg.target_out = optimizer->target_out;
@@ -139,26 +138,26 @@ b32 optimizer_filter_batch(Optimizer* optimizer, const EnumProgram* p, u64 p_cnt
 	optimizer->filter_passes++;
 
 	// go through our candidates, if they passed the test set we verify them
-	// via an SMT solver
+	// via an SMT_State solver
 	for(u64 i = 0; i < p_cnt; ++i) {
 		if(pass_counts[i] == FilterTestCount) {
 			// pull the candidate instructions
 			Instruction survivor_inst[MaxProgramLen];
 			dtoh_memcpy(survivor_inst, p + i, sizeof(EnumProgram));
 			const f64 t0_smt = get_time_ms();
-			program survivor = {survivor_inst, len};
-			// verify via an SMT solver
-			smt::result res = smt::equiv(*optimizer->prog, survivor, optimizer->live_out);
+			Program survivor = {survivor_inst, len};
+			// verify via an SMT_State solver
+			SMT_Result res = smt_equiv(*optimizer->prog, survivor, optimizer->live_out);
 			optimizer->ms_smt += get_time_ms() - t0_smt;
 			++optimizer->smt_calls;
 
-			if(res.kind == smt::result::EQUIVALENT) {
-				// equivalent program
+			if(res.type == SMT_ResultType_EQUIVALENT) {
+				// equivalent Program
 				Instruction* dst = optimizer->mem.push<Instruction>(len);
 				memcpy(dst, survivor_inst, sizeof(Instruction) * len);
 				optimizer->best = {dst, len};
 				return true;
-			} else if(res.kind == smt::result::COUNTEREXAMPLE) {
+			} else if(res.type == SMT_ResultType_COUNTEREXAMPLE) {
 				// add the counterexample (round robin), then abort this batch
 				const u32 slot = 16 + (optimizer->counterexample_count % 16);
 				optimizer->counterexample_count++;
@@ -175,8 +174,8 @@ b32 optimizer_filter_batch(Optimizer* optimizer, const EnumProgram* p, u64 p_cnt
 void optimizer_log_startup(Optimizer* optimizer) {
 	arena scratch;
 
-	printf("source (len: %zu):\n", optimizer->prog->size);
-	string src = optimizer->prog->to_string(scratch);
+	printf("source (len: %u):\n", optimizer->prog->size);
+	string src = program_to_string(optimizer->prog, &scratch);
 	printf("%s", (const c8*)src.ptr);
 	printf("live-in:  { ");
 	opt_print_reg_mask(optimizer->live_in);
@@ -205,8 +204,8 @@ void optimizer_log_results(Optimizer* optimizer, b32 found) {
 		return;
 	}
 
-	printf("done: optimization found (len: %zu):\n", optimizer->best.size);
-	string s = optimizer->best.to_string(optimizer->mem);
+	printf("done: optimization found (len: %u):\n", optimizer->best.size);
+	string s = program_to_string(&optimizer->best, &optimizer->mem);
 	printf("%s", (const c8*)s.ptr);
 }
 
@@ -247,4 +246,3 @@ void optimizer_init_tests(Optimizer* optimizer) {
 		optimizer->target_out[t] = filter_run_host(optimizer->prog, &in);
 	}
 }
-} // namespace sup

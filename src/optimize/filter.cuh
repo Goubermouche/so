@@ -11,7 +11,6 @@
 #define FilterWarpsPerBlock 4
 #define FilterThreadsPerBlock FilterWarpsPerBlock * 32
 
-namespace sup {
 typedef struct Filter {
 	u64 max_chunk_cands;
 	// device
@@ -54,12 +53,11 @@ SO_HD void filter_run_lane(u64 regs[32], const Instruction* prog, u32 prog_len) 
 	}
 }
 
-inline CpuState filter_run_host(const program* prog, const CpuState* in) {
+inline CpuState filter_run_host(const Program* prog, const CpuState* in) {
 	CpuState out = *in;
 	out.regs[0] = 0;
-	filter_run_lane(out.regs, prog->ptr, prog->size);
+	filter_run_lane(out.regs, prog->instructions, prog->size);
 	return out;
 }
-} // namespace sup
 
 #endif // #ifndef OPT_DRIVER_CUH

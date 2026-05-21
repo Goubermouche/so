@@ -39,7 +39,7 @@ BinPackParameters: true
 PointerAlignment: Left
 DerivePointerAlignment: false
 
-ColumnLimit: 80
+ColumnLimit: 100
 AlignTrailingComments: true
 SortIncludes: true
 KeepEmptyLinesAtTheStartOfBlocks: false

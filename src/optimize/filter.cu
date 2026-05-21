@@ -1,13 +1,12 @@
 #include "optimize/filter.cuh"
 
-namespace sup {
 __global__ void opt_filter_kernel(const Instruction* __restrict__ cands,
 																	const CpuState* __restrict__ test_in,
 																	const CpuState* __restrict__ target_out,
 																	u8* __restrict__ pass_count, u64 n_candidates,
 																	u64 live_mask, u32 prog_len) {
 	// go through candidate programs and run 32 quick tests to determine if a
-	// given candidate COULD be equivalent to the reference program, one warp
+	// given candidate COULD be equivalent to the reference Program, one warp
 	// runs one candidate (16 lanes => two passes for 32 tests)
 	const u32 lane = threadIdx.x & 31;
 	const u32 warp_local = threadIdx.x >> 5;
@@ -187,4 +186,3 @@ void filter_run(Filter* filter, FilterOptions* opt, u8* pass_counts) {
 		done += this_chunk;
 	}
 }
-} // namespace sup

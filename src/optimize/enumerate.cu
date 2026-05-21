@@ -2,7 +2,6 @@
 #include "util/device.h"
 #include <cub/cub.cuh>
 
-namespace sup {
 void enum_make_opcode_pool(EnumOpcodePool* pool, u32 ext_mask) {
 	*pool = {};
 
@@ -437,4 +436,3 @@ void enum_run(Enum* e, EnumOptions* opt) {
 	e->out_d_cands = d_out;
 	e->out_n_cands = emitted_cands;
 }
-} // namespace sup

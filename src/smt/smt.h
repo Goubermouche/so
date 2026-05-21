@@ -1,9 +1,7 @@
 #ifndef SMT_SMT_H
 #define SMT_SMT_H
 
-#include "cpu/instruction.cuh"
 #include "cpu/program.h"
-#include <vector>
 #include <z3++.h>
 
 // register accesses
@@ -11,10 +9,10 @@
 #define B (s.r[d.s2])
 
 // write and return tail
-#define WR(expr)                                                               \
-	do {                                                                         \
-		smt::wr(ctx, s, d.d, (expr));                                              \
-		return true;                                                               \
+#define WR(expr)                                                                                   \
+	do {                                                                                             \
+		smt_wr(ctx, s, d.d, (expr));                                                                   \
+		return true;                                                                                   \
 	} while(0)
 
 // z3 wrappers
@@ -28,49 +26,46 @@
 #define SH5_32(x) ZEXT(27, EXTRACT(4, 0, (x)))
 
 // signed-overflow guard
-#define OVF_SIGNED(a, b, imin, ones)                                           \
-	AND2(EQUIVALENT((a), (imin)), EQUIVALENT((b), (ones)))
+#define OVF_SIGNED(a, b, imin, ones) AND2(EQUIVALENT((a), (imin)), EQUIVALENT((b), (ones)))
 
-namespace sup::smt {
 static constexpr u32 TIMEOUT_MS = 10000;
 
-struct decode {
+typedef struct SMT_Decode {
 	u32 op;
 	u32 d;
 	u32 s1;
 	u32 s2;
 	z3::expr imm;
-};
+} SMT_Decode;
 
-struct state {
+typedef struct SMT_State {
 	std::vector<z3::expr> r;
-	state(z3::context& ctx) : r(32, ctx.bv_val(0, 64)) {}
-};
+	SMT_State(z3::context& ctx) : r(32, ctx.bv_val(0, 64)) {}
+} SMT_State;
 
-struct result {
-	enum kind {
-		EQUIVALENT,
-		COUNTEREXAMPLE,
-		TIMEOUT,
-		ERROR,
-	};
+typedef enum SMT_ResultType {
+	SMT_ResultType_EQUIVALENT,
+	SMT_ResultType_COUNTEREXAMPLE,
+	SMT_ResultType_TIMEOUT,
+	SMT_ResultType_ERROR,
+} SMT_ResultType;
 
-	kind kind;
+typedef struct SMT_Result {
+	SMT_ResultType type;
 	CpuState counterexample;
-};
+} SMT_Result;
 
-result equiv(const program& a, const program& b, u64 live_outs);
+SMT_Result smt_equiv(const Program& a, const Program& b, u64 live_outs);
 
-z3::expr low6(z3::context& ctx, const z3::expr& v);
-z3::expr sext_w(z3::context& ctx, const z3::expr& v64);
-z3::expr bv32(z3::context& ctx, u64 v);
-z3::expr bv64(z3::context& ctx, u64 v);
-z3::expr ite_bool_to_bv64(z3::context& ctx, const z3::expr& cond);
+z3::expr smt_low6(z3::context& ctx, const z3::expr& v);
+z3::expr smt_sext_w(z3::context& ctx, const z3::expr& v64);
+z3::expr smt_bv32(z3::context& ctx, u64 v);
+z3::expr smt_bv64(z3::context& ctx, u64 v);
+z3::expr smt_ite_bool_to_bv64(z3::context& ctx, const z3::expr& cond);
 
-void wr(z3::context& ctx, state& state, u32 d, const z3::expr& v);
-void pin_x0(z3::context& ctx, state& state);
-state make_input_state(z3::context& ctx);
-state run(z3::context& ctx, const state& in, const program& p);
-} // namespace sup::smt
+void smt_wr(z3::context& ctx, SMT_State& state, u32 d, const z3::expr& v);
+void smt_pin_x0(z3::context& ctx, SMT_State& state);
+SMT_State smt_make_input_state(z3::context& ctx);
+SMT_State smt_run(z3::context& ctx, const SMT_State* in, const Program* p);
 
 #endif // #ifndef SMT_SMT_H

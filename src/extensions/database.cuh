@@ -9,15 +9,15 @@
 
 #define MaxProgramLen 8
 
-#define DatabaseExtensionList(X)                                               \
-	X(RV32I, "rv32i", 0)                                                         \
-	X(RV64I, "rv64i", 1)                                                         \
-	X(RV32M, "rv32m", 2)                                                         \
+#define DatabaseExtensionList(X)                                                                   \
+	X(RV32I, "rv32i", 0)                                                                             \
+	X(RV64I, "rv64i", 1)                                                                             \
+	X(RV32M, "rv32m", 2)                                                                             \
 	X(RV64M, "rv64m", 3)
 
-#define DatabaseExtensionOpcodeList(X)                                         \
-	ExtensionsRV32IOpcodes(X) ExtensionsRV64IOpcodes(X)                          \
-		ExtensionsRV32MOpcodes(X) ExtensionsRV64MOpcodes(X)
+#define DatabaseExtensionOpcodeList(X)                                                             \
+	ExtensionsRV32IOpcodes(X) ExtensionsRV64IOpcodes(X) ExtensionsRV32MOpcodes(X)                    \
+		ExtensionsRV64MOpcodes(X)
 
 // ExtRV32I is the base ISA and is always implied
 // rv64-prefixed extensions extend their rv32 counterpart and require
@@ -47,7 +47,7 @@ typedef enum InstructionOpcodeEnum : u32 {
 #define X(tag, mnemonic, shape, comm) InstructionOpcode_##tag,
 	DatabaseExtensionOpcodeList(X)
 #undef X
-	InstructionOpcode_Nop,
+		InstructionOpcode_Nop,
 	InstructionOpcode_Count,
 } InstructionOpcodeEnum;
 

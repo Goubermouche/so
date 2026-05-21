@@ -1,6 +1,6 @@
 ## adding new extensions:
 - Add a new directory in `src/extensions` named after the extension
-- In the extension directory, create `opcodes.def`, `run.cuh`, `smt.h`, defining the X-macro, SMT solver, and emulator for your extensions (use other extensions for inspiration)
+- In the extension directory, create `opcodes.def`, `run.cuh`, `smt.h`, defining the X-macro, SMT_State solver, and emulator for your extensions (use other extensions for inspiration)
 - In `src.cpu/instruction.cuh`:
   - `#include` the new `opcodes.def` file
   - Append the extension to `DatabaseExtensionList`, `DatabaseExtensionOpcodeList`

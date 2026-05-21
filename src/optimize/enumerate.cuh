@@ -5,8 +5,6 @@
 
 #define EnumImmPoolSize 64
 
-namespace sup {
-
 typedef struct EnumProgram {
 	Instruction code[MaxProgramLen];
 } EnumProgram;
@@ -91,6 +89,5 @@ void enum_run(Enum* e, EnumOptions* opt);
 void enum_make_meta_host(const EnumOpcodePool* pool, EnumMeta* out, u32* out_n);
 void enum_make_opcode_pool(EnumOpcodePool* pool, u32 ext_mask);
 void enum_make_imm_pool(EnumImmPool* pool);
-} // namespace sup
 
 #endif // OPT_ENUMERATE_CUH

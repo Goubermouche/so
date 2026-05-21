@@ -1,10 +1,9 @@
 #ifndef EXT_RV64M_RUN_CUH
 #define EXT_RV64M_RUN_CUH
 
-#include "extensions/rv32i/run.cuh"
 #include "cpu/instruction.cuh"
+#include "extensions/rv32i/run.cuh"
 
-namespace sup {
 SO_HD b32 ext_rv64m_run(u32 op, u64 regs[32], const Instruction* in) {
 	const u32 d = (u32)in->operands[0].reg;
 	const u64 a = regs[in->operands[1].reg];
@@ -64,6 +63,5 @@ SO_HD b32 ext_rv64m_run(u32 op, u64 regs[32], const Instruction* in) {
 
 	return false;
 }
-} // namespace sup
 
 #endif // #ifndef EXT_RV64M_RUN_CUH

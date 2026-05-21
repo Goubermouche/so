@@ -6,10 +6,9 @@
 #include "util/type.h"
 #include <z3++.h>
 
-namespace sup::smt {
-result equiv(const program& a, const program& b, u64 live_outs) {
+SMT_Result smt_equiv(const Program& a, const Program& b, u64 live_outs) {
 	const f64 t0 = get_time_ms();
-	result r = {};
+	SMT_Result r = {};
 
 	try {
 		// init Z3
@@ -18,12 +17,12 @@ result equiv(const program& a, const program& b, u64 live_outs) {
 		params.set("timeout", TIMEOUT_MS);
 
 		// make input state
-		state in = make_input_state(ctx);
-		pin_x0(ctx, in);
+		SMT_State in = smt_make_input_state(ctx);
+		smt_pin_x0(ctx, in);
 
 		// run programs
-		state out_target = run(ctx, in, a);
-		state out_rewrite = run(ctx, in, b);
+		SMT_State out_target = smt_run(ctx, &in, &a);
+		SMT_State out_rewrite = smt_run(ctx, &in, &b);
 
 		// OR over live regs of (out_target[reg] != out_rewrite[reg])
 		z3::expr_vector disjuncts(ctx);
@@ -36,7 +35,7 @@ result equiv(const program& a, const program& b, u64 live_outs) {
 
 		if(disjuncts.empty()) {
 			// trivially equivalent
-			r.kind = result::EQUIVALENT;
+			r.type = SMT_ResultType_EQUIVALENT;
 			return r;
 		}
 
@@ -50,7 +49,7 @@ result equiv(const program& a, const program& b, u64 live_outs) {
 		z3::check_result chk = solver.check();
 
 		switch(chk) {
-			case z3::unsat: r.kind = result::EQUIVALENT; break;
+			case z3::unsat: r.type = SMT_ResultType_EQUIVALENT; break;
 			case z3::sat: {
 				// programs are not equivalent => build counterexample
 				z3::model m = solver.get_model();
@@ -69,45 +68,43 @@ result equiv(const program& a, const program& b, u64 live_outs) {
 						r.counterexample.regs[i] = 0;
 					}
 				}
-				r.kind = result::COUNTEREXAMPLE;
+				r.type = SMT_ResultType_COUNTEREXAMPLE;
 				break;
 			}
 			case z3::unknown:
-			default: r.kind = result::TIMEOUT; break;
+			default: r.type = SMT_ResultType_TIMEOUT; break;
 		}
 	} catch(z3::exception& e) {
-		fprintf(stderr, "error: smt::z3: %s\n", e.msg());
-		r.kind = result::ERROR;
+		fprintf(stderr, "error: smt_z3: %s\n", e.msg());
+		r.type = SMT_ResultType_ERROR;
 	}
 
 	return r;
 }
 
-z3::expr low6(z3::context& ctx, const z3::expr& v) {
-	return v & ctx.bv_val(0x3F, 64);
-}
+z3::expr smt_low6(z3::context& ctx, const z3::expr& v) { return v & ctx.bv_val(0x3F, 64); }
 
-z3::expr sext_w(z3::context& ctx, const z3::expr& v64) {
+z3::expr smt_sext_w(z3::context& ctx, const z3::expr& v64) {
 	z3::expr lo32 = v64.extract(31, 0);
 	return z3::sext(lo32, 32);
 }
 
-z3::expr bv32(z3::context& ctx, u64 v) { return ctx.bv_val((uint64_t)v, 32); }
+z3::expr smt_bv32(z3::context& ctx, u64 v) { return ctx.bv_val((uint64_t)v, 32); }
 
-z3::expr bv64(z3::context& ctx, u64 v) { return ctx.bv_val((uint64_t)v, 64); }
+z3::expr smt_bv64(z3::context& ctx, u64 v) { return ctx.bv_val((uint64_t)v, 64); }
 
-z3::expr ite_bool_to_bv64(z3::context& ctx, const z3::expr& cond) {
+z3::expr smt_ite_bool_to_bv64(z3::context& ctx, const z3::expr& cond) {
 	return z3::ite(cond, ctx.bv_val(1, 64), ctx.bv_val(0, 64));
 }
 
-void wr(z3::context& ctx, state& state, u32 d, const z3::expr& v) {
+void smt_wr(z3::context& ctx, SMT_State& state, u32 d, const z3::expr& v) {
 	if(d == 0) { return; }
 	state.r[d] = v;
 }
 
-void pin_x0(z3::context& ctx, state& state) { state.r[0] = ctx.bv_val(0, 64); }
+void smt_pin_x0(z3::context& ctx, SMT_State& state) { state.r[0] = ctx.bv_val(0, 64); }
 
-state make_input_state(z3::context& ctx) {
+SMT_State smt_make_input_state(z3::context& ctx) {
 	static const c8* names[32] = {
 		"s_x0",	 "s_x1",	"s_x2",	 "s_x3",	"s_x4",	 "s_x5",	"s_x6",	 "s_x7",
 		"s_x8",	 "s_x9",	"s_x10", "s_x11", "s_x12", "s_x13", "s_x14", "s_x15",
@@ -116,18 +113,18 @@ state make_input_state(z3::context& ctx) {
 	};
 
 	// Call the new constructor with the z3::context
-	state a(ctx);
+	SMT_State a(ctx);
 
 	for(u32 i = 0; i < 32; ++i) { a.r[i] = ctx.bv_const(names[i], 64); }
 	return a;
 }
 
-state run(z3::context& ctx, const state& in, const program& p) {
-	state regs = in;
-	pin_x0(ctx, regs);
+SMT_State smt_run(z3::context& ctx, const SMT_State* in, const Program* p) {
+	SMT_State regs = *in;
+	smt_pin_x0(ctx, regs);
 
-	for(u32 i = 0; i < p.size; ++i) {
-		const Instruction& ins = p[i];
+	for(u32 i = 0; i < p->size; ++i) {
+		const Instruction& ins = p->instructions[i];
 		const u32 op = (u32)ins.op;
 
 		if(op == InstructionOpcode_Nop) { continue; }
@@ -144,7 +141,7 @@ state run(z3::context& ctx, const state& in, const program& p) {
 			}
 		}
 
-		decode dec = {.imm = imm};
+		SMT_Decode dec = {.imm = imm};
 		dec.op = op;
 		dec.d = info->dst_slot >= 0 ? ins.operands[info->dst_slot].reg : 0;
 		dec.s1 = info->src_slot >= 0 ? ins.operands[info->src_slot].reg : 0;
@@ -158,9 +155,8 @@ state run(z3::context& ctx, const state& in, const program& p) {
 		if(!handled) handled = ext_rv64m_smt(ctx, regs, dec);
 
 		ASSERT(handled, "smt: unknown InstructionOpcode\n");
-		pin_x0(ctx, regs);
+		smt_pin_x0(ctx, regs);
 	}
 
 	return regs;
 }
-} // namespace sup::smt
