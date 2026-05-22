@@ -261,7 +261,7 @@ SMT_State smt_run(Z3_context ctx, const SMT_State* in, const Program* p) {
 		if(!handled) handled = ext_rv64m_smt(ctx, &regs, &dec);
 
 		Z3_dec_ref(ctx, imm);
-		ASSERT(handled, "smt: unknown InstructionOpcode\n");
+		Assert(handled, "smt: unknown InstructionOpcode\n");
 		smt_pin_x0(ctx, &regs);
 	}
 

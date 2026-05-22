@@ -54,7 +54,7 @@ struct arena {
 
 	block* make_block(u64 size) {
 		block* b = (block*)malloc(sizeof(block) + size);
-		ASSERT(b != 0, "arena::make_block: malloc failed with size = %zu\n", size);
+		Assert(b != 0, "arena::make_block: malloc failed with size = %zu\n", size);
 		b->next = 0;
 		b->size = size;
 		b->used = 0;

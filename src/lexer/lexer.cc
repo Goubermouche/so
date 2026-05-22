@@ -29,7 +29,7 @@ b32 lexer_token_is_reg(LexerToken tok) {
 }
 
 u64 lexer_token_to_reg_index(LexerToken tok) {
-	ASSERT(lexer_token_is_reg(tok), "LexerToken is not a register");
+	Assert(lexer_token_is_reg(tok), "LexerToken is not a register");
 	return (u64)tok - (u64)LexerToken_RegX0;
 }
 
@@ -75,7 +75,7 @@ LexerToken lexer_next_tok(Lexer* lexer) {
 		case EOF: return lexer->curr = LexerToken_EndOfFile;
 	}
 
-	ASSERT(false, "unknown character '%c' received\n", lexer->current_char);
+	Assert(false, "unknown character '%c' received\n", lexer->current_char);
 	return LexerToken_Unknown;
 }
 
@@ -125,12 +125,12 @@ LexerToken lexer_next_tok_comment(Lexer* lexer) {
 }
 
 LexerToken lexer_next_tok_string(Lexer* lexer) {
-	ASSERT(false, "TODO: next_tok_string");
+	Assert(false, "TODO: next_tok_string");
 	return LexerToken_Unknown;
 }
 
 LexerToken lexer_next_tok_char(Lexer* lexer) {
-	ASSERT(false, "TODO: next_tok_char");
+	Assert(false, "TODO: next_tok_char");
 	return LexerToken_Unknown;
 }
 
@@ -179,7 +179,7 @@ LexerToken lexer_str_to_tok(string string) {
 LexerToken lexer_str_to_num_tok(Lexer* lexer, string string) {
 	i32 base = 10;
 	c8 buf[64];
-	ASSERT(string.size < sizeof(buf), "numeric literal too long ('%.*s')\n", (int)string.size,
+	Assert(string.size < sizeof(buf), "numeric literal too long ('%.*s')\n", (int)string.size,
 				 (const c8*)string.ptr);
 	memcpy(buf, string.ptr, string.size);
 	if(string.size >= sizeof(buf)) __builtin_unreachable();
@@ -200,13 +200,13 @@ LexerToken lexer_str_to_num_tok(Lexer* lexer, string string) {
 				base = 2;
 				data += 2;
 				break;
-			default: ASSERT(false, "unknown literal type\n");
+			default: Assert(false, "unknown literal type\n");
 		}
 	}
 
 	errno = 0;
 	const u64 number = strtoull(data, nullptr, base);
-	ASSERT(errno == 0, "strtoull failed for '%s'\n", buf);
+	Assert(errno == 0, "strtoull failed for '%s'\n", buf);
 	lexer->curr_imm = (i64)number;
 	return lexer->curr = LexerToken_Number;
 }

@@ -11,49 +11,49 @@
 #include <string.h>
 #include <time.h>
 
-#ifdef DEBUG
-#define DEBUG_MODE
+#ifdef Debug
+#define DebugMode
 #else
-#define RELEASE_MODE
-#endif // #ifdef DEBUG
+#define ReleaseMode
+#endif // #ifdef Debug
 
 #ifdef _WIN32
 // windows
 #include <intrin.h>
 
-#define DEBUG_BREAK() __debugbreak()
-#define SYSTEM_WINDOWS
+#define DebugBreak() __debugbreak()
+#define SystemWindows
 #elif __linux__
 // linux
 #include <signal.h>
 
-#define DEBUG_BREAK() raise(SIGTRAP)
-#define SYSTEM_LINUX
+#define DebugBreak() raise(SIGTRAP)
+#define SystemLinux
 #else
 // unknown system
-#error "unsupported platform!"
+#error "error: unsupported platform!"
 #endif // #ifdef _WIN32
 
-// #ifdef DEBUG_MODE
-#define ASSERT(__condition, __message, ...)                                    \
-	do {                                                                         \
-		if(!(__condition)) {                                                       \
-			fprintf(stderr, __message, ##__VA_ARGS__);                               \
-			fflush(stderr);                                                          \
-			DEBUG_BREAK();                                                           \
-		}                                                                          \
+// #ifdef DebugMode
+#define Assert(__condition, __message, ...)                                                        \
+	do {                                                                                             \
+		if(!(__condition)) {                                                                           \
+			fprintf(stderr, __message, ##__VA_ARGS__);                                                   \
+			fflush(stderr);                                                                              \
+			DebugBreak();                                                                                \
+		}                                                                                              \
 	} while(false)
 // #else
-// #define ASSERT(__condition, __message, ...)
-// #endif // #ifdef DEBUG_MODE
+// #define Assert(__condition, __message, ...)
+// #endif // #ifdef DebugMode
 
 #define KB(n) (((u64)(n)) << 10)
 #define MB(n) (((u64)(n)) << 20)
 #define GB(n) (((u64)(n)) << 30)
 #define TB(n) (((u64)(n)) << 40)
 
-#define MIN(a, b) (((a) < (b)) ? (a) : (b))
-#define MAX(a, b) (((a) > (b)) ? (a) : (b))
+#define Min(a, b) (((a) < (b)) ? (a) : (b))
+#define Max(a, b) (((a) > (b)) ? (a) : (b))
 
 using u8 = uint8_t;
 using u16 = uint16_t;

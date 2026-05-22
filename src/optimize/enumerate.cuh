@@ -76,7 +76,7 @@ typedef struct Enum {
 	void* d_offsets;
 	void* d_out;
 	void* d_scan_tmp;
-	size_t scan_tmp_bytes;
+	u64 scan_tmp_bytes;
 	// output
 	EnumProgram* out_d_cands;
 	u64 out_n_cands;

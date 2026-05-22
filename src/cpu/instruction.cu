@@ -1,5 +1,5 @@
 #include "cpu/instruction.cuh"
-#include "util/device.h"
+#include "util/device.cuh"
 
 InstructionOperandType instruction_shape_op0(InstructionShape s) {
 	return s == InstructionShape_None ? InstructionOperandType_None : InstructionOperandType_Reg;

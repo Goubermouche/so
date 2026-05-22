@@ -36,11 +36,11 @@ i32 program_parse(Program* Program, arena* a, string source) {
 					operand_types[operand_count] = InstructionOperandType_Imm;
 				} else if(lexer.curr == LexerToken_Minus) {
 					lexer_next_tok(&lexer);
-					ASSERT(lexer.curr == LexerToken_Number, "expected number after '-'");
+					Assert(lexer.curr == LexerToken_Number, "expected number after '-'");
 					curr_inst.operands[operand_count].imm = (u64)(-lexer.curr_imm);
 					operand_types[operand_count] = InstructionOperandType_Imm;
 				} else {
-					ASSERT(false, "unrecognized operand type received ('%s')",
+					Assert(false, "unrecognized operand type received ('%s')",
 								 lexer_token_to_str(lexer.curr).ptr);
 				}
 
@@ -62,7 +62,7 @@ i32 program_parse(Program* Program, arena* a, string source) {
 			}
 
 			curr_inst.op = instruction_db_find(saved, operand_types, operand_count);
-			ASSERT(curr_inst.op != InstructionOpcode_Count,
+			Assert(curr_inst.op != InstructionOpcode_Count,
 						 "no InstructionOpcode matches mnemonic '%.*s' with %d operand(s)\n", (int)saved.size,
 						 (const c8*)saved.ptr, (int)operand_count);
 			result.push(curr_inst);
@@ -71,7 +71,7 @@ i32 program_parse(Program* Program, arena* a, string source) {
 			continue;
 		}
 
-		ASSERT(false, "expected mnemonic, got '%s'", lexer_token_to_str(lexer.curr).ptr);
+		Assert(false, "expected mnemonic, got '%s'", lexer_token_to_str(lexer.curr).ptr);
 	}
 
 	Instruction* data = a->push<Instruction>(result.size);

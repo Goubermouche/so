@@ -77,7 +77,7 @@ b32 optimizer_run_length(Optimizer* optimizer, u32 len) {
 	enum_make_opcode_pool(&opcodes, effective_mask);
 	enum_make_imm_pool(&immediates);
 
-	u32 max_scratch = MIN(32, 5 + len);
+	u32 max_scratch = Min(32, 5 + len);
 	u32 iter = 0;
 
 	// CEGIS main loop for instructions of length 'len', iterates until we either

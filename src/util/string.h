@@ -21,7 +21,7 @@ struct string : slice<c8> {
 		va_copy(ap2, ap);
 		int n = vsnprintf(0, 0, fmt, ap);
 		va_end(ap);
-		ASSERT(n >= 0, "string::format: vsnprintf failed\n");
+		Assert(n >= 0, "string::format: vsnprintf failed\n");
 		c8* dst = a.push<c8>((u64)n + 1);
 		vsnprintf((c8*)dst, (u64)n + 1, fmt, ap2);
 		va_end(ap2);

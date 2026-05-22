@@ -1,6 +1,5 @@
 #include "optimize/enumerate.cuh"
-#include "util/device.h"
-#include <cub/cub.cuh>
+#include "util/device.cuh"
 
 void enum_make_opcode_pool(EnumOpcodePool* pool, u32 ext_mask) {
 	*pool = {};
@@ -251,7 +250,7 @@ i32 enum_make(Enum* e, u64 batch_size) {
 	dmalloc(&e->d_imms, (u64)64 * sizeof(i64));
 	e->n_meta = 0;
 	e->n_imms_cap = 64;
-	u64 capacity = MAX(1024, batch_size);
+	u64 capacity = Max(1024, batch_size);
 
 	{
 		u64 free_mem = 0;
@@ -274,10 +273,7 @@ i32 enum_make(Enum* e, u64 batch_size) {
 	dmalloc(&e->d_offsets, capacity * sizeof(u64));
 	dmalloc(&e->d_out, capacity * sizeof(EnumProgram));
 	e->scan_tmp_bytes = 0;
-
-	// TODO: cleanup
-	cub::DeviceScan::ExclusiveSum(nullptr, e->scan_tmp_bytes, (u32*)e->d_counts, (u64*)e->d_offsets,
-																(i32)capacity);
+	device_exclusive_sum(0, &e->scan_tmp_bytes, (u32*)e->d_counts, (u64*)e->d_offsets, (i32)capacity);
 	dmalloc(&e->d_scan_tmp, e->scan_tmp_bytes);
 
 	return 0;
@@ -321,7 +317,7 @@ void enum_run(Enum* e, EnumOptions* opt) {
 	u64* d_offsets = (u64*)e->d_offsets;
 	EnumProgram* d_out = (EnumProgram*)e->d_out;
 	void* d_scan_tmp = e->d_scan_tmp;
-	size_t scan_tmp_bytes = e->scan_tmp_bytes;
+	u64 scan_tmp_bytes = e->scan_tmp_bytes;
 
 	// init root
 	EnumState h_root;
@@ -377,8 +373,7 @@ void enum_run(Enum* e, EnumOptions* opt) {
 		// count
 		opt_count_kernel<<<blocks, threads>>>(d_front_a, (u32)n_front, lctx, d_counts);
 		check_cuda(cudaGetLastError(), "enum count kernel");
-		// TODO: cleanup
-		cub::DeviceScan::ExclusiveSum(d_scan_tmp, scan_tmp_bytes, d_counts, d_offsets, (i32)n_front);
+		device_exclusive_sum(d_scan_tmp, &scan_tmp_bytes, d_counts, d_offsets, (i32)n_front);
 
 		// copyback
 		u64 last_off = 0;
