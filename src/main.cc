@@ -12,7 +12,7 @@ I32 version() {
 }
 
 I32 help() {
-	fprintf(stderr, "usage: sup [options] file\n");
+	fprintf(stderr, "usage: sup [options] <file>\n");
 	fprintf(stderr, "options:\n");
 	fprintf(stderr, "  --version    display version infromation\n");
 	fprintf(stderr, "  --help       display this information\n");
