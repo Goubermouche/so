@@ -24,7 +24,7 @@ Str str_make_format(Arena* a, const C8* fmt, ...) {
 	int n = vsnprintf(0, 0, fmt, ap);
 	va_end(ap);
 	Assert(n >= 0, "str_make_format: vsnprintf failed\n");
-	C8* dst = a->push<C8>((U64)n + 1);
+	C8* dst = ArenaPush(a, C8, (U64)n + 1);
 	vsnprintf(dst, (U64)n + 1, fmt, ap2);
 	va_end(ap2);
 	Str r;
@@ -36,7 +36,7 @@ Str str_make_format(Arena* a, const C8* fmt, ...) {
 Str str_pad(Arena* a, Str s, U8 pad_byte, U64 target_size) {
 	if(target_size <= s.size) { return s; }
 	U64 pad_len = target_size - s.size;
-	C8* dst =  a->push<C8>(target_size);
+	C8* dst =  ArenaPush(a, C8, target_size);
 	memcpy(dst, s.ptr, s.size);
 	memset(dst + s.size, pad_byte, pad_len);
 	Str r;
@@ -63,7 +63,7 @@ Str str_list_flatten(Arena* a, const array<Str>& parts, Str sep) {
 	for(U64 i = 0; i < n; ++i) { total += parts[i].size; }
 	if(sep.size > 0 && n > 1) { total += sep.size * (n - 1); }
 
-	C8* dst = a->push<C8>(total);
+	C8* dst = ArenaPush(a, C8, total);
 	U64 off = 0;
 	for(U64 i = 0; i < n; ++i) {
 		Str s = parts[i];

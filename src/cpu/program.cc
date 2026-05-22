@@ -74,7 +74,7 @@ I32 program_parse(Program* Program, Arena* a, Str source) {
 		Assert(false, "expected mnemonic, got '%s'", lexer_token_to_str(lexer.curr).ptr);
 	}
 
-	Instruction* data = a->push<Instruction>(result.size);
+	Instruction* data = ArenaPush(a, Instruction, result.size);
 	memcpy(data, result.ptr, sizeof(Instruction) * result.size);
 	Program->instructions = data;
 	Program->size = result.size;

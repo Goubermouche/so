@@ -4,6 +4,7 @@
 #include "optimize/enumerate.cuh"
 #include "optimize/filter.cuh"
 #include "smt/smt.h"
+#include "util/arena.h"
 #include "util/type.h"
 
 void optimizer_make_default_options(OptimizerOptions* opt) {
@@ -22,6 +23,7 @@ I32 optimizer_make(Optimizer* optimizer, OptimizerOptions* opt) {
 	optimizer->ms_filter = 0.0;
 	optimizer->ms_smt = 0.0;
 	optimizer->ms_total = 0.0;
+	optimizer->mem = arena_make(0);
 
 	if(filter_make(&optimizer->filter, optimizer->opt->batch_size)) {
 		fprintf(stderr, "error: filter::init failed\n");
@@ -39,6 +41,7 @@ I32 optimizer_make(Optimizer* optimizer, OptimizerOptions* opt) {
 void optimizer_free(Optimizer* optimizer) {
 	enum_free(&optimizer->enumerate);
 	filter_free(&optimizer->filter);
+	arena_free(optimizer->mem);
 }
 
 I32 optimizer_run(Optimizer* optimizer, Program* program) {
@@ -119,7 +122,7 @@ B32 optimizer_run_length(Optimizer* optimizer, U32 len) {
 
 B32 optimizer_filter_batch(Optimizer* optimizer, EnumProgram* p, U64 p_cnt, U32 len) {
 	if(p_cnt == 0) { return false; }
-	Arena scratch;
+	Arena* scratch = arena_make(0);
 	FilterOptions cfg;
 	cfg.live_mask = optimizer->live_out;
 	cfg.prog_len = len;
@@ -127,7 +130,7 @@ B32 optimizer_filter_batch(Optimizer* optimizer, EnumProgram* p, U64 p_cnt, U32 
 	cfg.n_candidates = p_cnt;
 	cfg.test_in = optimizer->test_in;
 	cfg.target_out = optimizer->target_out;
-	U8* pass_counts = scratch.push<U8>(p_cnt);
+	U8* pass_counts = ArenaPush(scratch, U8, p_cnt);
 
 	// run mass filter - remove the majority of candidate programs by verifying
 	// their correctness against a set of random and counterexample tests
@@ -153,7 +156,7 @@ B32 optimizer_filter_batch(Optimizer* optimizer, EnumProgram* p, U64 p_cnt, U32 
 
 			if(res.type == SMT_ResultType_EQUIVALENT) {
 				// equivalent Program
-				Instruction* dst = optimizer->mem.push<Instruction>(len);
+				Instruction* dst = ArenaPush(optimizer->mem, Instruction, len);
 				memcpy(dst, survivor_inst, sizeof(Instruction) * len);
 				optimizer->best = {dst, len};
 				return true;
@@ -168,14 +171,15 @@ B32 optimizer_filter_batch(Optimizer* optimizer, EnumProgram* p, U64 p_cnt, U32 
 		}
 	}
 
+	arena_free(scratch);
 	return false;
 }
 
 void optimizer_log_startup(Optimizer* optimizer) {
-	Arena scratch;
+	Arena* scratch = arena_make(0);
 
 	printf("source (len: %u):\n", optimizer->prog->size);
-	Str src = program_to_string(optimizer->prog, &scratch);
+	Str src = program_to_string(optimizer->prog, scratch);
 	printf("%s", (const C8*)src.ptr);
 	printf("live-in:  { ");
 	opt_print_reg_mask(optimizer->live_in);
@@ -196,6 +200,7 @@ void optimizer_log_startup(Optimizer* optimizer) {
 	printf("\n");
 	printf("max prog len: %u\n", MaxProgramLen);
 	printf("batch size: %zu cands\n", optimizer->opt->batch_size);
+	arena_free(scratch);
 }
 
 void optimizer_log_results(Optimizer* optimizer, B32 found) {
@@ -205,7 +210,7 @@ void optimizer_log_results(Optimizer* optimizer, B32 found) {
 	}
 
 	printf("done: optimization found (len: %u):\n", optimizer->best.size);
-	Str s = program_to_string(&optimizer->best, &optimizer->mem);
+	Str s = program_to_string(&optimizer->best, optimizer->mem);
 	printf("%s", (const C8*)s.ptr);
 }
 
