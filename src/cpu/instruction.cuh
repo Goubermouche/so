@@ -6,7 +6,7 @@
 
 typedef union InstructionOperand {
 	Reg reg;
-	u64 imm;
+	U64 imm;
 } InstructionOperand;
 
 typedef enum InstructionOperandType {
@@ -15,7 +15,7 @@ typedef enum InstructionOperandType {
 	InstructionOperandType_Imm,
 } InstructionOperandType;
 
-typedef u32 InstructionOpcode; // enum in ext
+typedef U32 InstructionOpcode; // enum in ext
 
 typedef struct Instruction {
 	InstructionOpcode op;
@@ -23,15 +23,15 @@ typedef struct Instruction {
 } Instruction;
 
 typedef struct InstructionInfo {
-	const c8* name;
+	const C8* name;
 	InstructionOperandType operands[4];
 	InstructionOpcode op;
-	i8 dst_slot;
-	i8 src_slot;
-	i8 src2_slot;
-	u32 ext;
-	u8 commutative;
-	u8 operand_count;
+	I8 dst_slot;
+	I8 src_slot;
+	I8 src2_slot;
+	U32 ext;
+	U8 commutative;
+	U8 operand_count;
 } InstructionInfo;
 
 typedef enum InstructionShape {
@@ -46,9 +46,9 @@ InstructionOperandType instruction_shape_op0(InstructionShape s);
 InstructionOperandType instruction_shape_op1(InstructionShape s);
 InstructionOperandType instruction_shape_op2(InstructionShape s);
 
-i8 instruction_shape_dst_slot(InstructionShape s);
-i8 instruction_shape_src_slot(InstructionShape s);
-i8 instruction_shape_src2_slot(InstructionShape s);
+I8 instruction_shape_dst_slot(InstructionShape s);
+I8 instruction_shape_src_slot(InstructionShape s);
+I8 instruction_shape_src2_slot(InstructionShape s);
 
 string operand_to_string(arena* a, InstructionOperand op, InstructionOperandType ty);
 

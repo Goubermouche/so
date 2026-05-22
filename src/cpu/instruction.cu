@@ -23,11 +23,11 @@ InstructionOperandType instruction_shape_op2(InstructionShape s) {
 	}
 }
 
-i8 instruction_shape_dst_slot(InstructionShape s) {
-	return s == InstructionShape_None ? (i8)-1 : (i8)0;
+I8 instruction_shape_dst_slot(InstructionShape s) {
+	return s == InstructionShape_None ? (I8)-1 : (I8)0;
 }
 
-i8 instruction_shape_src_slot(InstructionShape s) {
+I8 instruction_shape_src_slot(InstructionShape s) {
 	switch(s) {
 		case InstructionShape_RRR:
 		case InstructionShape_RRI:
@@ -36,14 +36,14 @@ i8 instruction_shape_src_slot(InstructionShape s) {
 	}
 }
 
-i8 instruction_shape_src2_slot(InstructionShape s) {
-	return s == InstructionShape_RRR ? (i8)2 : (i8)-1;
+I8 instruction_shape_src2_slot(InstructionShape s) {
+	return s == InstructionShape_RRR ? (I8)2 : (I8)-1;
 }
 
 string operand_to_string(arena* a, InstructionOperand op, InstructionOperandType ty) {
 	switch(ty) {
-		case InstructionOperandType_Reg: return reg_name((u32)op.reg);
-		case InstructionOperandType_Imm: return string::format(*a, "%lld", (i64)op.imm);
+		case InstructionOperandType_Reg: return reg_name((U32)op.reg);
+		case InstructionOperandType_Imm: return string::format(*a, "%lld", (I64)op.imm);
 		default: return "?";
 	}
 }

@@ -5,26 +5,26 @@
 
 template<typename T> struct slice {
 	slice() : ptr(0), size(0) {}
-	slice(T* ptr, u64 len) : ptr(ptr), size(len) {}
+	slice(T* ptr, U64 len) : ptr(ptr), size(len) {}
 
-	b32 operator==(const slice<T>& other) const {
+	B32 operator==(const slice<T>& other) const {
 		if(other.size != size) { return false; }
 		return memcmp(other.ptr, ptr, size * sizeof(T)) == 0;
 	}
 
-	T& operator[](u64 i) { return ptr[i]; }
-	const T& operator[](u64 i) const { return ptr[i]; }
+	T& operator[](U64 i) { return ptr[i]; }
+	const T& operator[](U64 i) const { return ptr[i]; }
 
 	T* ptr;
-	u64 size;
+	U64 size;
 };
 
 template<typename T> struct array {
 	array() : ptr(0), size(0), cap(0) {}
-	array(u64 n) : ptr(0), size(0), cap(0) { reserve(n); }
+	array(U64 n) : ptr(0), size(0), cap(0) { reserve(n); }
 	array(const array& o) : ptr(0), size(0), cap(0) {
 		reserve(o.size);
-		for(u64 i = 0; i < o.size; ++i) new(ptr + i) T(o.ptr[i]);
+		for(U64 i = 0; i < o.size; ++i) new(ptr + i) T(o.ptr[i]);
 		size = o.size;
 	}
 	array(array&& o) noexcept : ptr(o.ptr), size(o.size), cap(o.cap) {
@@ -41,7 +41,7 @@ template<typename T> struct array {
 		if(this == &o) return *this;
 		clear();
 		reserve(o.size);
-		for(u64 i = 0; i < o.size; ++i) new(ptr + i) T(o.ptr[i]);
+		for(U64 i = 0; i < o.size; ++i) new(ptr + i) T(o.ptr[i]);
 		size = o.size;
 		return *this;
 	}
@@ -59,12 +59,12 @@ template<typename T> struct array {
 		return *this;
 	}
 
-	void reserve(u64 n) {
+	void reserve(U64 n) {
 		if(n <= cap) return;
-		u64 nc = cap ? cap * 2 : 8;
+		U64 nc = cap ? cap * 2 : 8;
 		if(nc < n) nc = n;
 		T* np = (T*)malloc(nc * sizeof(T));
-		for(u64 i = 0; i < size; ++i) {
+		for(U64 i = 0; i < size; ++i) {
 			new(np + i) T((T&&)ptr[i]);
 			ptr[i].~T();
 		}
@@ -73,12 +73,12 @@ template<typename T> struct array {
 		cap = nc;
 	}
 
-	void resize(u64 n) {
+	void resize(U64 n) {
 		if(n < size) {
-			for(u64 i = n; i < size; ++i) ptr[i].~T();
+			for(U64 i = n; i < size; ++i) ptr[i].~T();
 		} else {
 			reserve(n);
-			for(u64 i = size; i < n; ++i) new(ptr + i) T();
+			for(U64 i = size; i < n; ++i) new(ptr + i) T();
 		}
 		size = n;
 	}
@@ -101,12 +101,12 @@ template<typename T> struct array {
 	}
 
 	void clear() {
-		for(u64 i = 0; i < size; ++i) ptr[i].~T();
+		for(U64 i = 0; i < size; ++i) ptr[i].~T();
 		size = 0;
 	}
 
-	T& operator[](u64 i) { return ptr[i]; }
-	const T& operator[](u64 i) const { return ptr[i]; }
+	T& operator[](U64 i) { return ptr[i]; }
+	const T& operator[](U64 i) const { return ptr[i]; }
 
 	T* begin() { return ptr; }
 	T* end() { return ptr + size; }
@@ -114,15 +114,15 @@ template<typename T> struct array {
 	const T* end() const { return ptr + size; }
 
 	slice<T> get_slice() { return slice<T>(ptr, size); }
-	slice<T> get_slice(u64 s, u64 e) { return slice<T>(ptr + s, e - s); }
+	slice<T> get_slice(U64 s, U64 e) { return slice<T>(ptr + s, e - s); }
 	const slice<T> get_slice() const { return slice<T>(ptr, size); }
-	const slice<T> get_slice(u64 s, u64 e) const {
+	const slice<T> get_slice(U64 s, U64 e) const {
 		return slice<T>(ptr + s, e - s);
 	}
 
 	T* ptr;
-	u64 size;
-	u64 cap;
+	U64 size;
+	U64 cap;
 };
 
 #endif // #ifndef UTL_arr_H

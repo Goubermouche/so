@@ -47,33 +47,33 @@
 // #define Assert(__condition, __message, ...)
 // #endif // #ifdef DebugMode
 
-#define KB(n) (((u64)(n)) << 10)
-#define MB(n) (((u64)(n)) << 20)
-#define GB(n) (((u64)(n)) << 30)
-#define TB(n) (((u64)(n)) << 40)
+#define KB(n) (((U64)(n)) << 10)
+#define MB(n) (((U64)(n)) << 20)
+#define GB(n) (((U64)(n)) << 30)
+#define TB(n) (((U64)(n)) << 40)
 
 #define Min(a, b) (((a) < (b)) ? (a) : (b))
 #define Max(a, b) (((a) > (b)) ? (a) : (b))
 
-using u8 = uint8_t;
-using u16 = uint16_t;
-using u32 = uint32_t;
-using u64 = uint64_t;
+using U8 = uint8_t;
+using U16 = uint16_t;
+using U32 = uint32_t;
+using U64 = uint64_t;
 
-using i8 = int8_t;
-using i16 = int16_t;
-using i32 = int32_t;
-using i64 = int64_t;
+using I8 = int8_t;
+using I16 = int16_t;
+using I32 = int32_t;
+using I64 = int64_t;
 
-using f32 = float;
-using f64 = double;
-using b32 = bool;
-using c8 = char;
+using F32 = float;
+using F64 = double;
+using B32 = bool;
+using C8 = char;
 
-static inline f64 get_time_ms() {
+static inline F64 get_time_ms() {
 	struct timespec ts;
 	clock_gettime(CLOCK_MONOTONIC, &ts);
-	return (f64)ts.tv_sec * 1000.0 + (f64)ts.tv_nsec / 1000000.0;
+	return (F64)ts.tv_sec * 1000.0 + (F64)ts.tv_nsec / 1000000.0;
 }
 
 #endif // #ifndef TYPE_H

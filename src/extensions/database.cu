@@ -7,8 +7,8 @@ __device__ const InstructionInfo* instruction_db_find_info_dev(InstructionOpcode
 	return &instruction_db_dev.row[op];
 }
 
-static void instruction_db_row(InstructionDB* d, InstructionOpcode op, const c8* name,
-															 InstructionShape shape, u8 commutative, u32 ext_bit) {
+static void instruction_db_row(InstructionDB* d, InstructionOpcode op, const C8* name,
+															 InstructionShape shape, U8 commutative, U32 ext_bit) {
 	InstructionInfo* r = &d->row[op];
 	r->name = name;
 	r->operands[0] = instruction_shape_op0(shape);
@@ -34,19 +34,19 @@ static void InstructionDatabase_build_host(InstructionDB* d) {
 	memset(d, 0, sizeof(*d));
 
 #define X(tag, mn, shape, comm)                                                                    \
-	instruction_db_row(d, InstructionOpcode_##tag, mn, shape, (u8)(comm), ExtRV32I);
+	instruction_db_row(d, InstructionOpcode_##tag, mn, shape, (U8)(comm), ExtRV32I);
 	ExtensionsRV32IOpcodes(X)
 #undef X
 #define X(tag, mn, shape, comm)                                                                    \
-	instruction_db_row(d, InstructionOpcode_##tag, mn, shape, (u8)(comm), ExtRV64I);
+	instruction_db_row(d, InstructionOpcode_##tag, mn, shape, (U8)(comm), ExtRV64I);
 		ExtensionsRV64IOpcodes(X)
 #undef X
 #define X(tag, mn, shape, comm)                                                                    \
-	instruction_db_row(d, InstructionOpcode_##tag, mn, shape, (u8)(comm), ExtRV32M);
+	instruction_db_row(d, InstructionOpcode_##tag, mn, shape, (U8)(comm), ExtRV32M);
 			ExtensionsRV32MOpcodes(X)
 #undef X
 #define X(tag, mn, shape, comm)                                                                    \
-	instruction_db_row(d, InstructionOpcode_##tag, mn, shape, (u8)(comm), ExtRV64M);
+	instruction_db_row(d, InstructionOpcode_##tag, mn, shape, (U8)(comm), ExtRV64M);
 				ExtensionsRV64MOpcodes(X)
 #undef X
 
@@ -65,14 +65,14 @@ static void InstructionDatabase_build_host(InstructionDB* d) {
 	nop->commutative = 0;
 }
 
-InstructionOpcode instruction_db_find(string name, const InstructionOperandType* ops, u8 op_cnt) {
-	for(u32 i = 0; i < (u32)InstructionOpcode_Count; ++i) {
+InstructionOpcode instruction_db_find(string name, const InstructionOperandType* ops, U8 op_cnt) {
+	for(U32 i = 0; i < (U32)InstructionOpcode_Count; ++i) {
 		const InstructionInfo* info = &instruction_db_host.row[i];
 		if(name != info->name) { continue; }
 		if(info->operand_count != op_cnt) { continue; }
-		b32 ok = true;
+		B32 ok = true;
 
-		for(u8 k = 0; k < op_cnt; ++k) {
+		for(U8 k = 0; k < op_cnt; ++k) {
 			if(info->operands[k] != ops[k]) {
 				ok = false;
 				break;

@@ -3,7 +3,7 @@
 
 #include "util/device.cuh"
 
-typedef enum Reg : u32 {
+typedef enum Reg : U32 {
 	Reg_X0 = 0,
 	Reg_X1,
 	Reg_X2,
@@ -40,10 +40,10 @@ typedef enum Reg : u32 {
 } Reg;
 
 typedef struct CpuState {
-	u64 regs[32];
+	U64 regs[32];
 } CpuState;
 
-HostDevice const c8* reg_name(u32 r) {
+HostDevice const C8* reg_name(U32 r) {
 	switch(r) {
 		case 0: return "x0";
 		case 1: return "x1";
@@ -81,10 +81,10 @@ HostDevice const c8* reg_name(u32 r) {
 	}
 }
 
-inline void opt_print_reg_mask(u64 mask) {
-	b32 first = true;
+inline void opt_print_reg_mask(U64 mask) {
+	B32 first = true;
 
-	for(u32 r = 0; r < 32; ++r) {
+	for(U32 r = 0; r < 32; ++r) {
 		if(mask & (1ull << r)) {
 			printf("%s%s", first ? "" : ",", reg_name(r));
 			first = false;

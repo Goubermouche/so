@@ -4,59 +4,59 @@
 #include "cpu/instruction.cuh"
 #include "extensions/rv32i/run.cuh"
 
-HostDevice b32 ext_rv64m_run(u32 op, u64 regs[32], const Instruction* in) {
-	const u32 d = (u32)in->operands[0].reg;
-	const u64 a = regs[in->operands[1].reg];
-	const u64 b = regs[in->operands[2].reg];
+HostDevice B32 ext_rv64m_run(U32 op, U64 regs[32], const Instruction* in) {
+	const U32 d = (U32)in->operands[0].reg;
+	const U64 a = regs[in->operands[1].reg];
+	const U64 b = regs[in->operands[2].reg];
 
 	switch(op) {
 		case InstructionOpcode_Mulw: {
-			const i32 r = (i32)a * (i32)b;
-			ext_rv_wr(regs, d, (u64)(i64)r);
+			const I32 r = (I32)a * (I32)b;
+			ext_rv_wr(regs, d, (U64)(I64)r);
 			return true;
 		}
 		case InstructionOpcode_Divw: {
-			const i32 sa = (i32)a;
-			const i32 sb = (i32)b;
-			i32 r;
+			const I32 sa = (I32)a;
+			const I32 sb = (I32)b;
+			I32 r;
 
 			if(sb == 0) {
 				r = -1;
-			} else if(sa == (i32)0x80000000 && sb == -1) {
+			} else if(sa == (I32)0x80000000 && sb == -1) {
 				r = sa;
 			} else {
 				r = sa / sb;
 			}
 
-			ext_rv_wr(regs, d, (u64)(i64)r);
+			ext_rv_wr(regs, d, (U64)(I64)r);
 			return true;
 		}
 		case InstructionOpcode_Divuw: {
-			const u32 ua = (u32)a;
-			const u32 ub = (u32)b;
-			ext_rv_wr(regs, d, (u64)ext_rv_sext32(ub == 0 ? (u32)-1 : ua / ub));
+			const U32 ua = (U32)a;
+			const U32 ub = (U32)b;
+			ext_rv_wr(regs, d, (U64)ext_rv_sext32(ub == 0 ? (U32)-1 : ua / ub));
 			return true;
 		}
 		case InstructionOpcode_Remw: {
-			const i32 sa = (i32)a;
-			const i32 sb = (i32)b;
-			i32 r;
+			const I32 sa = (I32)a;
+			const I32 sb = (I32)b;
+			I32 r;
 
 			if(sb == 0) {
 				r = sa;
-			} else if(sa == (i32)0x80000000 && sb == -1) {
+			} else if(sa == (I32)0x80000000 && sb == -1) {
 				r = 0;
 			} else {
 				r = sa % sb;
 			}
 
-			ext_rv_wr(regs, d, (u64)(i64)r);
+			ext_rv_wr(regs, d, (U64)(I64)r);
 			return true;
 		}
 		case InstructionOpcode_Remuw: {
-			const u32 ua = (u32)a;
-			const u32 ub = (u32)b;
-			ext_rv_wr(regs, d, (u64)ext_rv_sext32(ub == 0 ? ua : ua % ub));
+			const U32 ua = (U32)a;
+			const U32 ub = (U32)b;
+			ext_rv_wr(regs, d, (U64)ext_rv_sext32(ub == 0 ? ua : ua % ub));
 			return true;
 		}
 	}

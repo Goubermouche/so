@@ -1,7 +1,7 @@
 #include "cpu/program.h"
 #include "lexer/lexer.h"
 
-i32 program_parse(Program* Program, arena* a, string source) {
+I32 program_parse(Program* Program, arena* a, string source) {
 	array<Instruction> result;
 	Lexer lexer;
 	lexer_make(&lexer, source);
@@ -24,7 +24,7 @@ i32 program_parse(Program* Program, arena* a, string source) {
 			// not a label after all - rewind by re-parsing as a mnemonic
 			Instruction curr_inst = {};
 			InstructionOperandType operand_types[4] = {};
-			u8 operand_count = 0;
+			U8 operand_count = 0;
 
 			while(lexer.curr != LexerToken_Newline && lexer.curr != LexerToken_EndOfFile &&
 						operand_count < 4) {
@@ -32,12 +32,12 @@ i32 program_parse(Program* Program, arena* a, string source) {
 					curr_inst.operands[operand_count].reg = (Reg)(lexer_token_to_reg_index(lexer.curr));
 					operand_types[operand_count] = InstructionOperandType_Reg;
 				} else if(lexer.curr == LexerToken_Number) {
-					curr_inst.operands[operand_count].imm = (u64)lexer.curr_imm;
+					curr_inst.operands[operand_count].imm = (U64)lexer.curr_imm;
 					operand_types[operand_count] = InstructionOperandType_Imm;
 				} else if(lexer.curr == LexerToken_Minus) {
 					lexer_next_tok(&lexer);
 					Assert(lexer.curr == LexerToken_Number, "expected number after '-'");
-					curr_inst.operands[operand_count].imm = (u64)(-lexer.curr_imm);
+					curr_inst.operands[operand_count].imm = (U64)(-lexer.curr_imm);
 					operand_types[operand_count] = InstructionOperandType_Imm;
 				} else {
 					Assert(false, "unrecognized operand type received ('%s')",
@@ -64,7 +64,7 @@ i32 program_parse(Program* Program, arena* a, string source) {
 			curr_inst.op = instruction_db_find(saved, operand_types, operand_count);
 			Assert(curr_inst.op != InstructionOpcode_Count,
 						 "no InstructionOpcode matches mnemonic '%.*s' with %d operand(s)\n", (int)saved.size,
-						 (const c8*)saved.ptr, (int)operand_count);
+						 (const C8*)saved.ptr, (int)operand_count);
 			result.push(curr_inst);
 
 			if(lexer.curr == LexerToken_Newline) { lexer_next_tok(&lexer); }
@@ -84,7 +84,7 @@ i32 program_parse(Program* Program, arena* a, string source) {
 string program_to_string(Program* Program, arena* a) {
 	array<string> builder;
 
-	for(u32 i = 0; i < Program->size; ++i) {
+	for(U32 i = 0; i < Program->size; ++i) {
 		const Instruction Instruction = Program->instructions[i];
 		const InstructionInfo* info = instruction_db_find_info(Instruction.op);
 		builder.push("  ");
@@ -92,8 +92,8 @@ string program_to_string(Program* Program, arena* a) {
 		inst_name.pad(*a, ' ', 8);
 		builder.push(inst_name);
 
-		const u8 nop = info->operand_count;
-		for(u8 j = 0; j < nop; ++j) {
+		const U8 nop = info->operand_count;
+		for(U8 j = 0; j < nop; ++j) {
 			builder.push(operand_to_string(a, Instruction.operands[j], info->operands[j]));
 			if(j + 1 < nop) { builder.push(", "); }
 		}
@@ -104,21 +104,21 @@ string program_to_string(Program* Program, arena* a) {
 	return str_list_flatten(*a, builder, "");
 }
 
-u64 program_get_live_out(Program* Program) {
-	u64 touched = 0;
-	u64 live_out = 0;
+U64 program_get_live_out(Program* Program) {
+	U64 touched = 0;
+	U64 live_out = 0;
 
-	for(u64 idx = Program->size; idx-- > 0;) {
+	for(U64 idx = Program->size; idx-- > 0;) {
 		const Instruction& in = Program->instructions[idx];
 		const InstructionInfo* info = instruction_db_find_info(in.op);
 
 		// write side first
 		if(info->dst_slot >= 0) {
-			const u32 r = (u32)in.operands[info->dst_slot].reg;
+			const U32 r = (U32)in.operands[info->dst_slot].reg;
 
 			// x0 writes don't define anything
 			if(r != 0) {
-				const u64 bit = 1ULL << r;
+				const U64 bit = 1ULL << r;
 
 				if(!(touched & bit)) {
 					live_out |= bit;
@@ -129,12 +129,12 @@ u64 program_get_live_out(Program* Program) {
 
 		// read side
 		if(info->src_slot >= 0) {
-			const u32 r = (u32)in.operands[info->src_slot].reg;
+			const U32 r = (U32)in.operands[info->src_slot].reg;
 			touched |= 1ULL << r;
 		}
 
 		if(info->src2_slot >= 0) {
-			const u32 r = (u32)in.operands[info->src2_slot].reg;
+			const U32 r = (U32)in.operands[info->src2_slot].reg;
 			touched |= 1ULL << r;
 		}
 	}
@@ -142,25 +142,25 @@ u64 program_get_live_out(Program* Program) {
 	return live_out;
 }
 
-u64 program_get_live_in(Program* Program) {
-	u64 written = 0;
-	u64 live_in = 0;
+U64 program_get_live_in(Program* Program) {
+	U64 written = 0;
+	U64 live_in = 0;
 
-	for(u32 i = 0; i < Program->size; ++i) {
+	for(U32 i = 0; i < Program->size; ++i) {
 		const InstructionInfo* info = instruction_db_find_info(Program->instructions[i].op);
 
 		if(info->src_slot >= 0) {
-			const u32 r = (u32)Program->instructions[i].operands[info->src_slot].reg;
+			const U32 r = (U32)Program->instructions[i].operands[info->src_slot].reg;
 			if(!(written & (1ull << r))) { live_in |= 1ull << r; }
 		}
 
 		if(info->src2_slot >= 0) {
-			const u32 r = (u32)Program->instructions[i].operands[info->src2_slot].reg;
+			const U32 r = (U32)Program->instructions[i].operands[info->src2_slot].reg;
 			if(!(written & (1ull << r))) { live_in |= 1ull << r; }
 		}
 
 		if(info->dst_slot >= 0) {
-			const u32 r = (u32)Program->instructions[i].operands[info->dst_slot].reg;
+			const U32 r = (U32)Program->instructions[i].operands[info->dst_slot].reg;
 			written |= 1ull << r;
 		}
 	}

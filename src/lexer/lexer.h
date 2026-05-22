@@ -60,14 +60,14 @@ typedef enum LexerToken {
 
 typedef struct Lexer {
 	string source;
-	c8 current_char;
-	u64 index;
+	C8 current_char;
+	U64 index;
 	LexerToken curr;
 	string curr_string;
-	i64 curr_imm; // signed
+	I64 curr_imm; // signed
 } Lexer;
 
-i32 lexer_make(Lexer* lexer, string source);
+I32 lexer_make(Lexer* lexer, string source);
 
 LexerToken lexer_next_tok(Lexer* lexer);
 LexerToken lexer_next_tok_identifier(Lexer* lexer);
@@ -75,16 +75,16 @@ LexerToken lexer_next_tok_comment(Lexer* lexer);
 LexerToken lexer_next_tok_string(Lexer* lexer);
 LexerToken lexer_next_tok_char(Lexer* lexer);
 
-c8   lexer_next_char(Lexer* lexer);
-b32  lexer_is_at_end(Lexer* lexer);
+C8   lexer_next_char(Lexer* lexer);
+B32  lexer_is_at_end(Lexer* lexer);
 void lexer_consume_spaces(Lexer* lexer);
-b32  lexer_is_whitespace(c8 c);
+B32  lexer_is_whitespace(C8 c);
 
 LexerToken lexer_str_to_tok(string string);
 LexerToken lexer_str_to_num_tok(Lexer* lexer, string string);
 
 string lexer_token_to_str(LexerToken tok);
-b32    lexer_token_is_reg(LexerToken tok);
-u64    lexer_token_to_reg_index(LexerToken tok);
+B32    lexer_token_is_reg(LexerToken tok);
+U64    lexer_token_to_reg_index(LexerToken tok);
 
 #endif // LEX_LEXER_H

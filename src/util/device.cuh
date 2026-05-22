@@ -11,16 +11,16 @@
 #define Device inline
 #endif // #ifdef __CUDACC__
 
-void dmalloc(void** ptr, u64 size);
-void hmalloc(void** ptr, u64 size);
-void htod_memcpy(void* dst, const void* src, u64 count);
-void dtoh_memcpy(void* dst, const void* src, u64 count);
-void check_cuda(cudaError_t err, const c8* msg);
-i32 device_init();
+void dmalloc(void** ptr, U64 size);
+void hmalloc(void** ptr, U64 size);
+void htod_memcpy(void* dst, const void* src, U64 count);
+void dtoh_memcpy(void* dst, const void* src, U64 count);
+void check_cuda(cudaError_t err, const C8* msg);
+I32 device_init();
 
 #define DeviceExclusiveSumScanBlock 256
 #define DeviceExclusiveSumScanTile DeviceExclusiveSumScanBlock
 
-void device_exclusive_sum(void* d_tmp, u64* tmp_bytes, const u32* d_in, u64* d_out, i32 n);
+void device_exclusive_sum(void* d_tmp, U64* tmp_bytes, const U32* d_in, U64* d_out, I32 n);
 
 #endif // #define DEVICE_H

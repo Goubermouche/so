@@ -6,10 +6,10 @@
 #include "optimize/filter.cuh"
 
 typedef struct OptimizerOptions {
-	u64 seed;
-	u32 ext_mask;
-	u64 batch_size;
-	u32 max_cegis_iters;
+	U64 seed;
+	U32 ext_mask;
+	U64 batch_size;
+	U32 max_cegis_iters;
 } OptimizerOptions;
 
 typedef struct Optimizer {
@@ -17,37 +17,37 @@ typedef struct Optimizer {
 	OptimizerOptions* opt;
 	arena mem; // NOTE: maybe not really worth it here
 	// input
-	u64 live_in;
-	u64 live_out;
+	U64 live_in;
+	U64 live_out;
 	// pass contexts
 	Enum enumerate;
 	// filter
 	Filter filter;
 	CpuState test_in[FilterTestCount];
 	CpuState target_out[FilterTestCount];
-	u32 counterexample_count; // needed for the round robin test retire
+	U32 counterexample_count; // needed for the round robin test retire
 	// output
 	Program best;
 	// stats
-	u64 total_candidates;
-	u64 filter_passes;
-	u64 smt_calls;
-	f64 ms_enum;
-	f64 ms_filter;
-	f64 ms_smt;
-	f64 ms_total;
+	U64 total_candidates;
+	U64 filter_passes;
+	U64 smt_calls;
+	F64 ms_enum;
+	F64 ms_filter;
+	F64 ms_smt;
+	F64 ms_total;
 } Optimize;
 
 void optimizer_make_default_options(OptimizerOptions* opt);
-i32 optimizer_make(Optimizer* optimizer, OptimizerOptions* opt);
+I32 optimizer_make(Optimizer* optimizer, OptimizerOptions* opt);
 void optimizer_free(Optimizer* optimizer);
 
-i32 optimizer_run(Optimizer* optimizer, Program* Program);
-b32 optimizer_run_length(Optimizer* optimizer, u32 len);
-b32 optimizer_filter_batch(Optimizer* optimizer, EnumProgram* p, u64 p_cnt, u32 len);
+I32 optimizer_run(Optimizer* optimizer, Program* Program);
+B32 optimizer_run_length(Optimizer* optimizer, U32 len);
+B32 optimizer_filter_batch(Optimizer* optimizer, EnumProgram* p, U64 p_cnt, U32 len);
 void optimizer_init_tests(Optimizer* optimizer);
 
 void optimizer_log_startup(Optimizer* optimizer);
-void optimizer_log_results(Optimizer* optimizer, b32 found);
+void optimizer_log_results(Optimizer* optimizer, B32 found);
 void optimizer_log_stats(Optimizer* optimizer);
 #endif // #ifndef OPT_OPTIMIZE_H

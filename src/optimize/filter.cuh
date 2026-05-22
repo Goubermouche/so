@@ -12,7 +12,7 @@
 #define FilterThreadsPerBlock FilterWarpsPerBlock * 32
 
 typedef struct Filter {
-	u64 max_chunk_cands;
+	U64 max_chunk_cands;
 	// device
 	void* d_cands;
 	void* d_test_in;		// reference inputs
@@ -21,10 +21,10 @@ typedef struct Filter {
 } Filter;
 
 typedef struct FilterOptions {
-	u64 live_mask;
-	u32 prog_len;
+	U64 live_mask;
+	U32 prog_len;
 	const Instruction* candidates;
-	u64 n_candidates;
+	U64 n_candidates;
 	const CpuState* test_in;		 // reference inputs
 	const CpuState* target_out; // reference outputs
 } FilterOptions;
@@ -33,16 +33,16 @@ typedef struct FilterSharedBlock {
 	Instruction progs[FilterWarpsPerBlock][MaxProgramLen];
 } FilterSharedBlock;
 
-i32  filter_make(Filter* filter, u64 max_chunk_cands);
+I32  filter_make(Filter* filter, U64 max_chunk_cands);
 void filter_free(Filter* filter);
-void filter_run(Filter* filter, FilterOptions* opt, u8* pass_counts);
+void filter_run(Filter* filter, FilterOptions* opt, U8* pass_counts);
 
-HostDevice void filter_run_lane(u64 regs[32], const Instruction* prog, u32 prog_len) {
+HostDevice void filter_run_lane(U64 regs[32], const Instruction* prog, U32 prog_len) {
 	regs[0] = 0;
 
-	for(u32 i = 0; i < prog_len; ++i) {
+	for(U32 i = 0; i < prog_len; ++i) {
 		const Instruction* in = &prog[i];
-		const u32 op = (u32)in->op;
+		const U32 op = (U32)in->op;
 
 		if(op == InstructionOpcode_Nop) { continue; }
 

@@ -6,12 +6,12 @@
 		return 1;                                                                                      \
 	}
 
-i32 version() {
+I32 version() {
 	printf("sup version 0 compiled on %s\n", __DATE__);
 	return 0;
 }
 
-i32 help() {
+I32 help() {
 	fprintf(stderr, "usage: sup [options] file\n");
 	fprintf(stderr, "options:\n");
 	fprintf(stderr, "  --version    display version infromation\n");
@@ -26,24 +26,24 @@ i32 help() {
 	return 0;
 }
 
-i32 list_e() {
-	for(u64 i = 0; i < DatabaseExtensionCount; ++i) printf("%s\n", DatabaseExtensionNames[i].ptr);
+I32 list_e() {
+	for(U64 i = 0; i < DatabaseExtensionCount; ++i) printf("%s\n", DatabaseExtensionNames[i].ptr);
 	return 0;
 }
 
-i32 parse_e(OptimizerOptions& opt, const c8* p) {
+I32 parse_e(OptimizerOptions& opt, const C8* p) {
 	opt.ext_mask = 0;
 	while(*p) {
 		while(*p == ' ' || *p == ',' || *p == '+') p++;
 		if(!*p) break;
 
-		const c8* start = p;
+		const C8* start = p;
 		while(*p && *p != ' ' && *p != ',' && *p != '+') p++;
 
-		b32 found = false;
-		for(u32 i = 0; i < DatabaseExtensionCount; ++i) {
-			const c8* ext = DatabaseExtensionNames[i].ptr;
-			const c8* s = start;
+		B32 found = false;
+		for(U32 i = 0; i < DatabaseExtensionCount; ++i) {
+			const C8* ext = DatabaseExtensionNames[i].ptr;
+			const C8* s = start;
 
 			while(s < p && *ext == *s) {
 				ext++;
@@ -58,9 +58,9 @@ i32 parse_e(OptimizerOptions& opt, const c8* p) {
 		}
 
 		if(!found) {
-			c8 buf[32] = {0};
-			u64 len = (p - start < 31) ? (p - start) : 31;
-			for(u64 k = 0; k < len; ++k) buf[k] = start[k];
+			C8 buf[32] = {0};
+			U64 len = (p - start < 31) ? (p - start) : 31;
+			for(U64 k = 0; k < len; ++k) buf[k] = start[k];
 			fprintf(stderr, "error: unknown extension '%s'\n", buf);
 			return 1;
 		}
@@ -69,10 +69,10 @@ i32 parse_e(OptimizerOptions& opt, const c8* p) {
 	return 0;
 }
 
-i32 parse_u32(const c8* src, u32& out) {
-	c8* endptr;
+I32 parse_u32(const C8* src, U32& out) {
+	C8* endptr;
 	errno = 0;
-	u32 num = strtoul(src, &endptr, 10);
+	U32 num = strtoul(src, &endptr, 10);
 
 	if(errno == ERANGE) {
 		fprintf(stderr, "error: number is too large\n");
@@ -93,7 +93,7 @@ i32 parse_u32(const c8* src, u32& out) {
 	return 0;
 }
 
-i32 read_file(const c8* filename, c8** out, u64* out_len) {
+I32 read_file(const C8* filename, C8** out, U64* out_len) {
 	FILE* file = fopen(filename, "rb");
 	if(!file) {
 		fprintf(stderr, "error: cannot open file '%s'\n", filename);
@@ -101,7 +101,7 @@ i32 read_file(const c8* filename, c8** out, u64* out_len) {
 	}
 
 	fseek(file, 0, SEEK_END);
-	i32 length = ftell(file);
+	I32 length = ftell(file);
 	fseek(file, 0, SEEK_SET);
 
 	if(length < 0) {
@@ -110,14 +110,14 @@ i32 read_file(const c8* filename, c8** out, u64* out_len) {
 		return 1;
 	}
 
-	c8* buffer = (c8*)malloc(length + 1);
+	C8* buffer = (C8*)malloc(length + 1);
 	if(!buffer) {
 		fclose(file);
 		fprintf(stderr, "error: cannot allocate file buffer\n");
 		return 1;
 	}
 
-	u64 read_bytes = fread(buffer, 1, length, file);
+	U64 read_bytes = fread(buffer, 1, length, file);
 	buffer[read_bytes] = '\0';
 	fclose(file);
 	*out = buffer;
@@ -126,18 +126,18 @@ i32 read_file(const c8* filename, c8** out, u64* out_len) {
 	return 0;
 }
 
-i32 main(i32 argc, c8** argv) {
+I32 main(I32 argc, C8** argv) {
 	OptimizerOptions opt;
 	optimizer_make_default_options(&opt);
-	i32 argi = 1;
-	c8* source = 0;
-	u64 source_len = 0;
-	u32 run_count = 1;
+	I32 argi = 1;
+	C8* source = 0;
+	U64 source_len = 0;
+	U32 run_count = 1;
 
 	// parse arguments
 	for(; argi < argc; ++argi) {
 		if(argv[argi][0] != '-') {
-			i32 res = read_file(argv[argi], &source, &source_len);
+			I32 res = read_file(argv[argi], &source, &source_len);
 			if(res) { return res; }
 		} else if(!strcmp(argv[argi], "--version")) {
 			return version();
@@ -145,11 +145,11 @@ i32 main(i32 argc, c8** argv) {
 			return help();
 		} else if(!strcmp(argv[argi], "-e")) {
 			VerifyArg("-e", "<list>");
-			i32 res = parse_e(opt, argv[++argi]);
+			I32 res = parse_e(opt, argv[++argi]);
 			if(res) { return res; }
 		} else if(!strcmp(argv[argi], "-r")) {
 			VerifyArg("-r", "<num>");
-			i32 res = parse_u32(argv[++argi], run_count);
+			I32 res = parse_u32(argv[++argi], run_count);
 			if(res) { return res; }
 		} else if(!strcmp(argv[argi], "-l")) {
 			return list_e();
@@ -168,7 +168,7 @@ i32 main(i32 argc, c8** argv) {
 	if(device_init()) { return 1; }
 	instruction_db_load();
 
-	for(u32 run = 0; run < run_count; ++run) {
+	for(U32 run = 0; run < run_count; ++run) {
 		arena a;
 		Optimizer optimizer;
 		optimizer_make(&optimizer, &opt);

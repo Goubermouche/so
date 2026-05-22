@@ -35,7 +35,7 @@ static string const DatabaseExtensionNames[] = {
 #undef X
 };
 
-static const u32 DatabaseExtensionBits[] = {
+static const U32 DatabaseExtensionBits[] = {
 #define X(tag, dir, bit) (1u << (bit)),
 	DatabaseExtensionList(X)
 #undef X
@@ -43,7 +43,7 @@ static const u32 DatabaseExtensionBits[] = {
 
 #define DatabaseExtensionCount (sizeof(DatabaseExtensionNames) / sizeof(DatabaseExtensionNames[0]))
 
-typedef enum InstructionOpcodeEnum : u32 {
+typedef enum InstructionOpcodeEnum : U32 {
 #define X(tag, mnemonic, shape, comm) InstructionOpcode_##tag,
 	DatabaseExtensionOpcodeList(X)
 #undef X
@@ -71,6 +71,6 @@ HostDevice const InstructionInfo* instruction_db_find_info(InstructionOpcode op)
 #endif // #ifdef __CUDA_ARCH__
 }
 
-InstructionOpcode instruction_db_find(string name, const InstructionOperandType* ops, u8 op_cnt);
+InstructionOpcode instruction_db_find(string name, const InstructionOperandType* ops, U8 op_cnt);
 
 #endif // #ifndef EXT_DATABASE_CUH
