@@ -2,7 +2,8 @@
 #include "lexer/lexer.h"
 
 I32 program_parse(Program* Program, Arena* a, Str source) {
-	array<Instruction> result;
+	Instruction buf[MaxProgramLen];
+	U32 count = 0;
 	Lexer lexer;
 	lexer_make(&lexer, source);
 	lexer_next_char(&lexer);
@@ -21,7 +22,8 @@ I32 program_parse(Program* Program, Arena* a, Str source) {
 				if(lexer.curr == LexerToken_Newline) lexer_next_tok(&lexer);
 				continue;
 			}
-			// not a label after all - rewind by re-parsing as a mnemonic
+
+			// not a label after all - parse as a mnemonic
 			Instruction curr_inst = {};
 			InstructionOperandType operand_types[4] = {};
 			U8 operand_count = 0;
@@ -65,7 +67,13 @@ I32 program_parse(Program* Program, Arena* a, Str source) {
 			Assert(curr_inst.op != InstructionOpcode_Count,
 						 "no InstructionOpcode matches mnemonic '%.*s' with %d operand(s)\n", (int)saved.size,
 						 (const C8*)saved.ptr, (int)operand_count);
-			result.push(curr_inst);
+
+			if(count >= MaxProgramLen) {
+				fprintf(stderr, "error: program_parse: source exceeds MaxProgramLen (%d) instructions\n",
+								MaxProgramLen);
+				return 1;
+			}
+			buf[count++] = curr_inst;
 
 			if(lexer.curr == LexerToken_Newline) { lexer_next_tok(&lexer); }
 			continue;
@@ -74,34 +82,51 @@ I32 program_parse(Program* Program, Arena* a, Str source) {
 		Assert(false, "expected mnemonic, got '%s'", lexer_token_to_str(lexer.curr).ptr);
 	}
 
-	Instruction* data = ArenaPush(a, Instruction, result.size);
-	memcpy(data, result.ptr, sizeof(Instruction) * result.size);
+	Instruction* data = ArenaPush(a, Instruction, count);
+	memcpy(data, buf, sizeof(Instruction) * count);
 	Program->instructions = data;
-	Program->size = result.size;
+	Program->size = count;
 	return 0;
 }
 
 Str program_to_string(Program* Program, Arena* a) {
-	array<Str> builder;
+	Arena* scratch = arena_make(0);
+	C8* start = (C8*)ArenaPush(a, C8, 0);
+	U64 total = 0;
 
 	for(U32 i = 0; i < Program->size; ++i) {
-		const Instruction Instruction = Program->instructions[i];
-		const InstructionInfo* info = instruction_db_find_info(Instruction.op);
-		builder.push(StrLit("  "));
-		Str inst_name = str_make_from_cstr(info->name);
-		str_pad(a, inst_name, ' ', 8);
-		builder.push(inst_name);
+		const Instruction inst = Program->instructions[i];
+		const InstructionInfo* info = instruction_db_find_info(inst.op);
+		arena_push_data(a, "  ", 2);
+		total += 2;
+
+		U64 name_len = strlen(info->name);
+		arena_push_data(a, info->name, name_len);
+		total += name_len;
+		if(name_len < 8) {
+			C8 pad[8] = {' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '};
+			arena_push_data(a, pad, 8 - name_len);
+			total += 8 - name_len;
+		}
 
 		const U8 nop = info->operand_count;
 		for(U8 j = 0; j < nop; ++j) {
-			builder.push(operand_to_string(a, Instruction.operands[j], info->operands[j]));
-			if(j + 1 < nop) { builder.push(StrLit(", ")); }
+			Str s = operand_to_string(scratch, inst.operands[j], info->operands[j]);
+			arena_push_data(a, s.ptr, s.size);
+			total += s.size;
+			if(j + 1 < nop) {
+				arena_push_data(a, ", ", 2);
+				total += 2;
+			}
 		}
 
-		builder.push(StrLit("\n"));
+		arena_push_data(a, "\n", 1);
+		total += 1;
 	}
 
-	return str_list_flatten(a, builder, StrLit(""));
+	arena_free(scratch);
+	Str r = str_make(start, total);
+	return r;
 }
 
 U64 program_get_live_out(Program* Program) {

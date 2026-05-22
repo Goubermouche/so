@@ -51,34 +51,3 @@ B32 str_match_cstr(Str s, const C8* cstr) {
 	}
 	return cstr[s.size] == '\0';
 }
-
-Str str_list_flatten(Arena* a, const array<Str>& parts, Str sep) {
-	U64 n = parts.size;
-	if(n == 0) {
-		Str r = {0};
-		return r;
-	}
-
-	U64 total = 0;
-	for(U64 i = 0; i < n; ++i) { total += parts[i].size; }
-	if(sep.size > 0 && n > 1) { total += sep.size * (n - 1); }
-
-	C8* dst = ArenaPush(a, C8, total);
-	U64 off = 0;
-	for(U64 i = 0; i < n; ++i) {
-		Str s = parts[i];
-		if(s.size > 0) {
-			memcpy(dst + off, s.ptr, s.size);
-			off += s.size;
-		}
-		if(sep.size > 0 && i + 1 < n) {
-			memcpy(dst + off, sep.ptr, sep.size);
-			off += sep.size;
-		}
-	}
-
-	Str r;
-	r.ptr = dst;
-	r.size = total;
-	return r;
-}

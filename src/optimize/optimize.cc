@@ -45,6 +45,11 @@ void optimizer_free(Optimizer* optimizer) {
 }
 
 I32 optimizer_run(Optimizer* optimizer, Program* program) {
+	if(program->size > MaxProgramLen) {
+		fprintf(stderr, "error: optimizer_run: max program size (%d) exceeded", MaxProgramLen);
+		return 1;
+	}
+
 	optimizer->prog = program;
 	optimizer->live_out = program_get_live_out(program);
 	optimizer->live_in = program_get_live_in(program);

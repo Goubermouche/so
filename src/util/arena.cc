@@ -49,3 +49,8 @@ void* arena_push_aligned(Arena* a, U64 size, U64 align) {
 	b->used += pad + size;
 	return p;
 }
+
+void arena_push_data(Arena* a, const void* src, U64 size) {
+	C8* dst = ArenaPush(a, C8, size);
+	memcpy(dst, src, size);
+}
