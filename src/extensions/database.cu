@@ -65,10 +65,10 @@ static void InstructionDatabase_build_host(InstructionDB* d) {
 	nop->commutative = 0;
 }
 
-InstructionOpcode instruction_db_find(string name, const InstructionOperandType* ops, U8 op_cnt) {
+InstructionOpcode instruction_db_find(Str name, const InstructionOperandType* ops, U8 op_cnt) {
 	for(U32 i = 0; i < (U32)InstructionOpcode_Count; ++i) {
 		const InstructionInfo* info = &instruction_db_host.row[i];
-		if(name != info->name) { continue; }
+		if(!str_match_cstr(name, info->name)) { continue; }
 		if(info->operand_count != op_cnt) { continue; }
 		B32 ok = true;
 

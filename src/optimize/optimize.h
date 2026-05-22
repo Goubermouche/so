@@ -15,7 +15,7 @@ typedef struct OptimizerOptions {
 typedef struct Optimizer {
 	Program* prog;
 	OptimizerOptions* opt;
-	arena mem; // NOTE: maybe not really worth it here
+	Arena mem; // NOTE: maybe not really worth it here
 	// input
 	U64 live_in;
 	U64 live_out;

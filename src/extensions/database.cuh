@@ -29,8 +29,8 @@ typedef enum DatabaseExtensionBitsEnum {
 } DatabaseExtensionBitsEnum;
 
 // array of all extension directory names
-static string const DatabaseExtensionNames[] = {
-#define X(tag, dir, bit) dir,
+static Str const DatabaseExtensionNames[] = {
+#define X(tag, dir, bit) StrLit(dir),
 	DatabaseExtensionList(X)
 #undef X
 };
@@ -71,6 +71,6 @@ HostDevice const InstructionInfo* instruction_db_find_info(InstructionOpcode op)
 #endif // #ifdef __CUDA_ARCH__
 }
 
-InstructionOpcode instruction_db_find(string name, const InstructionOperandType* ops, U8 op_cnt);
+InstructionOpcode instruction_db_find(Str name, const InstructionOperandType* ops, U8 op_cnt);
 
 #endif // #ifndef EXT_DATABASE_CUH

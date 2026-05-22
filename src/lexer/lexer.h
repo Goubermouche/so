@@ -59,15 +59,15 @@ typedef enum LexerToken {
 } LexerToken;
 
 typedef struct Lexer {
-	string source;
+	Str source;
 	C8 current_char;
 	U64 index;
 	LexerToken curr;
-	string curr_string;
+	Str curr_string;
 	I64 curr_imm; // signed
 } Lexer;
 
-I32 lexer_make(Lexer* lexer, string source);
+I32 lexer_make(Lexer* lexer, Str source);
 
 LexerToken lexer_next_tok(Lexer* lexer);
 LexerToken lexer_next_tok_identifier(Lexer* lexer);
@@ -80,10 +80,10 @@ B32  lexer_is_at_end(Lexer* lexer);
 void lexer_consume_spaces(Lexer* lexer);
 B32  lexer_is_whitespace(C8 c);
 
-LexerToken lexer_str_to_tok(string string);
-LexerToken lexer_str_to_num_tok(Lexer* lexer, string string);
+LexerToken lexer_str_to_tok(Str Str);
+LexerToken lexer_str_to_num_tok(Lexer* lexer, Str Str);
 
-string lexer_token_to_str(LexerToken tok);
+Str lexer_token_to_str(LexerToken tok);
 B32    lexer_token_is_reg(LexerToken tok);
 U64    lexer_token_to_reg_index(LexerToken tok);
 

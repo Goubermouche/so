@@ -3,7 +3,7 @@
 
 #include "util/type.h"
 
-struct arena {
+struct Arena {
 	static constexpr U64 DEFAULT_BLOCK_SIZE = KB(2);
 	static constexpr U64 DEFAULT_ALIGN = 8;
 
@@ -14,11 +14,11 @@ struct arena {
 		U8 base[1];
 	};
 
-	arena(U64 block_size = DEFAULT_BLOCK_SIZE) : block_size(block_size) {
+	Arena(U64 block_size = DEFAULT_BLOCK_SIZE) : block_size(block_size) {
 		head = make_block(block_size);
 	}
 
-	~arena() {
+	~Arena() {
 		block* b = head;
 		while(b) {
 			block* next = b->next;
@@ -54,7 +54,7 @@ struct arena {
 
 	block* make_block(U64 size) {
 		block* b = (block*)malloc(sizeof(block) + size);
-		Assert(b != 0, "arena::make_block: malloc failed with size = %zu\n", size);
+		Assert(b != 0, "Arena::make_block: malloc failed with size = %zu\n", size);
 		b->next = 0;
 		b->size = size;
 		b->used = 0;

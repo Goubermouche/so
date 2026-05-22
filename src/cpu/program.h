@@ -8,8 +8,8 @@ typedef struct Program {
 	U32 size;
 } Program;
 
-I32 program_parse(Program* Program, arena* a, string source);
-string program_to_string(Program* Program, arena* a);
+I32 program_parse(Program* Program, Arena* a, Str source);
+Str program_to_string(Program* Program, Arena* a);
 U64 program_get_live_out(Program* Program);
 U64 program_get_live_in(Program* Program);
 

@@ -1,7 +1,7 @@
 #include "cpu/program.h"
 #include "lexer/lexer.h"
 
-I32 program_parse(Program* Program, arena* a, string source) {
+I32 program_parse(Program* Program, Arena* a, Str source) {
 	array<Instruction> result;
 	Lexer lexer;
 	lexer_make(&lexer, source);
@@ -14,7 +14,7 @@ I32 program_parse(Program* Program, arena* a, string source) {
 		if(lexer.curr == LexerToken_EndOfFile) break;
 
 		if(lexer.curr == LexerToken_Identifier) {
-			string saved = lexer.curr_string;
+			Str saved = lexer.curr_string;
 			lexer_next_tok(&lexer);
 			if(lexer.curr == LexerToken_Colon) {
 				lexer_next_tok(&lexer);
@@ -52,10 +52,10 @@ I32 program_parse(Program* Program, arena* a, string source) {
 
 			// pseudo-op rewriting
 			//   sext.w rd, rs1   ->   addiw rd, rs1, 0
-			if(saved == "sext.w" && operand_count == 2 &&
+			if(str_match_cstr(saved, "sext.w") && operand_count == 2 &&
 				 operand_types[0] == InstructionOperandType_Reg &&
 				 operand_types[1] == InstructionOperandType_Reg) {
-				saved = "addiw";
+				saved = StrLit("addiw");
 				curr_inst.operands[2].imm = 0;
 				operand_types[2] = InstructionOperandType_Imm;
 				operand_count = 3;
@@ -81,27 +81,27 @@ I32 program_parse(Program* Program, arena* a, string source) {
 	return 0;
 }
 
-string program_to_string(Program* Program, arena* a) {
-	array<string> builder;
+Str program_to_string(Program* Program, Arena* a) {
+	array<Str> builder;
 
 	for(U32 i = 0; i < Program->size; ++i) {
 		const Instruction Instruction = Program->instructions[i];
 		const InstructionInfo* info = instruction_db_find_info(Instruction.op);
-		builder.push("  ");
-		string inst_name = string(info->name);
-		inst_name.pad(*a, ' ', 8);
+		builder.push(StrLit("  "));
+		Str inst_name = str_make_from_cstr(info->name);
+		str_pad(a, inst_name, ' ', 8);
 		builder.push(inst_name);
 
 		const U8 nop = info->operand_count;
 		for(U8 j = 0; j < nop; ++j) {
 			builder.push(operand_to_string(a, Instruction.operands[j], info->operands[j]));
-			if(j + 1 < nop) { builder.push(", "); }
+			if(j + 1 < nop) { builder.push(StrLit(", ")); }
 		}
 
-		builder.push("\n");
+		builder.push(StrLit("\n"));
 	}
 
-	return str_list_flatten(*a, builder, "");
+	return str_list_flatten(a, builder, StrLit(""));
 }
 
 U64 program_get_live_out(Program* Program) {

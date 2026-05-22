@@ -119,7 +119,7 @@ B32 optimizer_run_length(Optimizer* optimizer, U32 len) {
 
 B32 optimizer_filter_batch(Optimizer* optimizer, EnumProgram* p, U64 p_cnt, U32 len) {
 	if(p_cnt == 0) { return false; }
-	arena scratch;
+	Arena scratch;
 	FilterOptions cfg;
 	cfg.live_mask = optimizer->live_out;
 	cfg.prog_len = len;
@@ -172,10 +172,10 @@ B32 optimizer_filter_batch(Optimizer* optimizer, EnumProgram* p, U64 p_cnt, U32 
 }
 
 void optimizer_log_startup(Optimizer* optimizer) {
-	arena scratch;
+	Arena scratch;
 
 	printf("source (len: %u):\n", optimizer->prog->size);
-	string src = program_to_string(optimizer->prog, &scratch);
+	Str src = program_to_string(optimizer->prog, &scratch);
 	printf("%s", (const C8*)src.ptr);
 	printf("live-in:  { ");
 	opt_print_reg_mask(optimizer->live_in);
@@ -205,7 +205,7 @@ void optimizer_log_results(Optimizer* optimizer, B32 found) {
 	}
 
 	printf("done: optimization found (len: %u):\n", optimizer->best.size);
-	string s = program_to_string(&optimizer->best, &optimizer->mem);
+	Str s = program_to_string(&optimizer->best, &optimizer->mem);
 	printf("%s", (const C8*)s.ptr);
 }
 

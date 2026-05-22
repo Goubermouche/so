@@ -169,11 +169,11 @@ I32 main(I32 argc, C8** argv) {
 	instruction_db_load();
 
 	for(U32 run = 0; run < run_count; ++run) {
-		arena a;
+		Arena a;
 		Optimizer optimizer;
 		optimizer_make(&optimizer, &opt);
 		Program program;
-		program_parse(&program, &a, string(source, source_len));
+		program_parse(&program, &a, str_make(source, source_len));
 		optimizer_run(&optimizer, &program);
 	}
 

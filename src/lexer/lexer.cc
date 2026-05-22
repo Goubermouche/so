@@ -1,26 +1,26 @@
 #include "lexer/lexer.h"
 #include "cpu/cpu.cuh"
 
-string lexer_token_to_str(LexerToken tok) {
+Str lexer_token_to_str(LexerToken tok) {
 	switch(tok) {
-		case LexerToken_Unknown: return "unknown";
-		case LexerToken_Identifier: return "identifier";
-		case LexerToken_Number: return "number";
-		case LexerToken_Comma: return ",";
-		case LexerToken_LeftBracket: return "[";
-		case LexerToken_RightBracket: return "]";
-		case LexerToken_LeftBrace: return "(";
-		case LexerToken_RightBrace: return ")";
-		case LexerToken_Plus: return "+";
-		case LexerToken_Minus: return "-";
-		case LexerToken_Asterisk: return "*";
-		case LexerToken_DollarSign: return "$";
-		case LexerToken_Colon: return ":";
-		case LexerToken_Newline: return "newline";
-		case LexerToken_EndOfFile: return "eof";
+		case LexerToken_Unknown: return StrLit("unknown");
+		case LexerToken_Identifier: return StrLit("identifier");
+		case LexerToken_Number: return StrLit("number");
+		case LexerToken_Comma: return StrLit(",");
+		case LexerToken_LeftBracket: return StrLit("[");
+		case LexerToken_RightBracket: return StrLit("]");
+		case LexerToken_LeftBrace: return StrLit("(");
+		case LexerToken_RightBrace: return StrLit(")");
+		case LexerToken_Plus: return StrLit("+");
+		case LexerToken_Minus: return StrLit("-");
+		case LexerToken_Asterisk: return StrLit("*");
+		case LexerToken_DollarSign: return StrLit("$");
+		case LexerToken_Colon: return StrLit(":");
+		case LexerToken_Newline: return StrLit("newline");
+		case LexerToken_EndOfFile: return StrLit("eof");
 		default:
-			if(lexer_token_is_reg(tok)) { return reg_name(lexer_token_to_reg_index(tok)); }
-			return "?";
+			if(lexer_token_is_reg(tok)) { return str_make_from_cstr(reg_name(lexer_token_to_reg_index(tok))); }
+			return StrLit("?");
 	}
 }
 
@@ -33,7 +33,7 @@ U64 lexer_token_to_reg_index(LexerToken tok) {
 	return (U64)tok - (U64)LexerToken_RegX0;
 }
 
-I32 lexer_make(Lexer* lexer, string source) {
+I32 lexer_make(Lexer* lexer, Str source) {
 	lexer->index = 0;
 	lexer->source = source;
 	lexer->current_char = 0;
@@ -81,7 +81,7 @@ LexerToken lexer_next_tok(Lexer* lexer) {
 
 C8 lexer_next_char(Lexer* lexer) {
 	if(lexer_is_at_end(lexer)) { return lexer->current_char = EOF; }
-	return lexer->current_char = (C8)lexer->source[lexer->index++];
+	return lexer->current_char = (C8)lexer->source.ptr[lexer->index++];
 }
 
 B32 lexer_is_at_end(Lexer* lexer) { return lexer->index >= lexer->source.size; }
@@ -103,14 +103,14 @@ LexerToken lexer_next_tok_identifier(Lexer* lexer) {
 	}
 
 	const U64 end = lexer->index - 1;
-	lexer->curr_string = string(lexer->source.ptr + start, end - start);
+	lexer->curr_string = str_make(lexer->source.ptr + start, end - start);
 
 	const auto LexerToken = lexer_str_to_tok(lexer->curr_string);
 
 	if(LexerToken != LexerToken_Unknown) { return lexer->curr = LexerToken; }
 
 	// numerical literal
-	if(lexer->curr_string.size > 0 && isdigit(lexer->curr_string[0])) {
+	if(lexer->curr_string.size > 0 && isdigit(lexer->curr_string.ptr[0])) {
 		return lexer_str_to_num_tok(lexer, lexer->curr_string);
 	}
 
@@ -134,12 +134,12 @@ LexerToken lexer_next_tok_char(Lexer* lexer) {
 	return LexerToken_Unknown;
 }
 
-LexerToken lexer_str_to_tok(string string) {
+LexerToken lexer_str_to_tok(Str str) {
 	// numeric register (x1, x2,...)
-	if(string.size > 1 && string[0] == 'x') {
+	if(str.size > 1 && str.ptr[0] == 'x') {
 		C8 buf[16] = {0};
-		const U64 n = string.size < 15 ? string.size : 15;
-		memcpy(buf, string.ptr, n);
+		const U64 n = str.size < 15 ? str.size : 15;
+		memcpy(buf, str.ptr, n);
 		buf[n] = 0;
 
 		C8* end;
@@ -170,23 +170,23 @@ LexerToken lexer_str_to_tok(string string) {
 
 	static const U64 abi_size = sizeof(abi_map) / sizeof(abi_map[0]);
 	for(size_t i = 0; i < abi_size; ++i) {
-		if(string == abi_map[i].name) return abi_map[i].tok;
+		if(str_match_cstr(str, abi_map[i].name)) return abi_map[i].tok;
 	}
 
 	return LexerToken_Unknown;
 }
 
-LexerToken lexer_str_to_num_tok(Lexer* lexer, string string) {
+LexerToken lexer_str_to_num_tok(Lexer* lexer, Str Str) {
 	I32 base = 10;
 	C8 buf[64];
-	Assert(string.size < sizeof(buf), "numeric literal too long ('%.*s')\n", (int)string.size,
-				 (const C8*)string.ptr);
-	memcpy(buf, string.ptr, string.size);
-	if(string.size >= sizeof(buf)) __builtin_unreachable();
-	buf[string.size] = 0;
+	Assert(Str.size < sizeof(buf), "numeric literal too long ('%.*s')\n", (int)Str.size,
+				 (const C8*)Str.ptr);
+	memcpy(buf, Str.ptr, Str.size);
+	if(Str.size >= sizeof(buf)) __builtin_unreachable();
+	buf[Str.size] = 0;
 	C8* data = buf;
 
-	if(string.size > 1 && buf[0] == '0') {
+	if(Str.size > 1 && buf[0] == '0') {
 		switch(buf[1]) {
 			case 'x':
 				base = 16;
