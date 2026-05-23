@@ -1,3 +1,4 @@
+# sltu x12, x0, x1
 sltu x5, x0, x1
 sltu x6, x0, x5
 sltu x7, x0, x6

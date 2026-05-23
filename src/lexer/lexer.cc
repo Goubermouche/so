@@ -19,7 +19,9 @@ Str lexer_token_to_str(LexerToken tok) {
 		case LexerToken_Newline: return StrLit("newline");
 		case LexerToken_EndOfFile: return StrLit("eof");
 		default:
-			if(lexer_token_is_reg(tok)) { return str_make_from_cstr(reg_name(lexer_token_to_reg_index(tok))); }
+			if(lexer_token_is_reg(tok)) {
+				return str_make_from_cstr(reg_name(lexer_token_to_reg_index(tok)));
+			}
 			return StrLit("?");
 	}
 }
@@ -80,7 +82,10 @@ LexerToken lexer_next_tok(Lexer* lexer) {
 }
 
 C8 lexer_next_char(Lexer* lexer) {
-	if(lexer_is_at_end(lexer)) { return lexer->current_char = EOF; }
+	if(lexer_is_at_end(lexer)) {
+		if(lexer->current_char != EOF) lexer->index++;
+		return lexer->current_char = EOF;
+	}
 	return lexer->current_char = (C8)lexer->source.ptr[lexer->index++];
 }
 
