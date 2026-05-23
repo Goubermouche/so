@@ -21,7 +21,7 @@ SMT_Result smt_equiv(const Program& a, const Program& b, U64 live_outs) {
 
 	// init Z3
 	Z3_config cfg = Z3_mk_config();
-	Z3_context ctx = Z3_mk_context_rc(cfg);
+	Z3_context ctx = Z3_mk_context(cfg);
 	Z3_del_config(cfg);
 	Z3_set_error_handler(ctx, z3_error_cb);
 	g_err_set = false;
