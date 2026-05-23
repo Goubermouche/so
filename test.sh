@@ -28,9 +28,9 @@ fi
 PROFILE_RUNS=10
 
 if [ -t 1 ]; then
-	C_PASS=$'\033[32m'; C_FAIL=$'\033[31m'; C_RST=$'\033[0m'
+	C_PASS=$'\033[32m'; C_FAIL=$'\033[31m'; C_SKIP=$'\033[33m'; C_RST=$'\033[0m'
 else
-	C_PASS=''; C_FAIL=''; C_RST=''
+	C_PASS=''; C_FAIL=''; C_SKIP=''; C_RST=''
 fi
 
 fmt_ns() {
@@ -67,6 +67,20 @@ extract_expected() {
 	' "$1"
 }
 
+has_skip_directive() {
+	awk '
+		/^[[:space:]]*#/ {
+			line = $0
+			sub(/^[[:space:]]*#[[:space:]]?/, "", line)
+			if (line ~ /^[[:space:]]*skip([[:space:]]|$)/) { found = 1; exit }
+			next
+		}
+		/^[[:space:]]*$/ { next }
+		{ exit }
+		END { exit !found }
+	' "$1"
+}
+
 extract_actual() {
 	awk '
 		/^done: optimization found/ { in_block = 1; next }
@@ -78,6 +92,7 @@ extract_actual() {
 total=0
 passed=0
 failed=0
+skipped=0
 total_ns=0
 failed_names=()
 
@@ -105,9 +120,18 @@ for test in "${tests[@]}"; do
 	total=$((total + 1))
 	name=$(basename "$test")
 
+	if has_skip_directive "$test"; then
+		printf '%sSKIP%s %-*s\n' \
+			"$C_SKIP" "$C_RST" "$max_name_len" "$name"
+		skipped=$((skipped + 1))
+		continue
+	fi
+
 	expected=$(extract_expected "$test" | normalize)
 	if [ -z "$expected" ]; then
-		printf 'SKIP %-*s  (no expected output)\n' "$max_name_len" "$name"
+		printf '%sSKIP%s %-*s  (no expected output)\n' \
+			"$C_SKIP" "$C_RST" "$max_name_len" "$name"
+		skipped=$((skipped + 1))
 		continue
 	fi
 
@@ -175,8 +199,12 @@ done
 total_fmt=$(fmt_ns "$total_ns")
 
 echo
-printf 'tests: %d passed: %s%d%s failed: %s%d%s time: %s\n' \
-	"$total" "$C_PASS" "$passed" "$C_RST" "$C_FAIL" "$failed" "$C_RST" "$total_fmt"
+printf 'tests: %d passed: %s%d%s failed: %s%d%s skipped: %s%d%s time: %s\n' \
+	"$total" \
+	"$C_PASS" "$passed" "$C_RST" \
+	"$C_FAIL" "$failed" "$C_RST" \
+	"$C_SKIP" "$skipped" "$C_RST" \
+	"$total_fmt"
 
 if [ "$failed" -gt 0 ]; then
 	echo "failed tests:"

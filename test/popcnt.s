@@ -1,3 +1,4 @@
+# skip
 srli x5, x1, 1
 andi x5, x5, 0x55
 sub  x6, x1, x5
