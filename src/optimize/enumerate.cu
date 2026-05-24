@@ -12,13 +12,40 @@ void enum_make_opcode_pool(EnumOpcodePool* pool, U32 ext_mask) {
 	}
 }
 
-void enum_make_imm_pool(EnumImmPool* pool) {
-	// TODO: add imms from programm etc.
+void enum_make_imm_pool(EnumImmPool* pool, const Program* prog) {
 	*pool = {};
 
+	// base
 	for(I64 v = -8; v <= 8; ++v) { pool->vals[pool->n++] = v; }
-	const I64 extra[] = {16, 32, 63, 64, 0xFF, 0xFFFF};
-	for(I64 v : extra) { pool->vals[pool->n++] = v; }
+
+	// extra
+	const I64 extra[] = {
+		9, 10, 12, 15, 24, 31, 100, 1000, 16, 32, 63, 64, 0xFF, 0xFFFF,
+	};
+	for(I64 v : extra) {
+		if(pool->n >= EnumImmPoolSize) { break; }
+		pool->vals[pool->n++] = v;
+	}
+
+	// program immediates
+	if(prog) {
+		for(U32 i = 0; i < prog->size; ++i) {
+			const Instruction& ins = prog->instructions[i];
+			const InstructionInfo* info = &instruction_db_host.row[ins.op];
+			for(U32 k = 0; k < 4; ++k) {
+				if(info->operands[k] != InstructionOperandType_Imm) { continue; }
+				const I64 v = (I64)ins.operands[k].imm;
+				B32 dup = false;
+				for(U32 j = 0; j < pool->n; ++j) {
+					if(pool->vals[j] == v) {
+						dup = true;
+						break;
+					}
+				}
+				if(!dup && pool->n < EnumImmPoolSize) { pool->vals[pool->n++] = v; }
+			}
+		}
+	}
 }
 
 void enum_make_meta_host(const EnumOpcodePool* pool, EnumMeta* out, U32* out_n) {
@@ -232,7 +259,7 @@ __global__ void opt_count_kernel(const EnumState* __restrict__ src_front, U32 n_
 }
 
 __global__ void opt_emit_kernel(const EnumState* __restrict__ src_front, U32 n_src,
-																const U64* __restrict__ d_offsets, EnumLayer e,
+																const U64* __restrict__ d_offsets, U64 base_adjust, EnumLayer e,
 																EnumState* __restrict__ dst_states,
 																EnumProgram* __restrict__ dst_cands, U64 cap_states,
 																U64 cap_cands) {
@@ -240,16 +267,16 @@ __global__ void opt_emit_kernel(const EnumState* __restrict__ src_front, U32 n_s
 	if(tid >= n_src) { return; }
 
 	const EnumState src = src_front[tid];
-	const U64 base = d_offsets[tid];
+	const U64 base = d_offsets[tid] - base_adjust;
 	opt_expand_one<true>(&e, &src, dst_states, dst_cands, base, cap_states, cap_cands);
 }
 
 I32 enum_make(Enum* e, U64 batch_size) {
 	*e = {};
 	dmalloc(&e->d_meta, (U64)InstructionOpcode_Count * sizeof(EnumMeta));
-	dmalloc(&e->d_imms, (U64)64 * sizeof(I64));
+	dmalloc(&e->d_imms, (U64)EnumImmPoolSize * sizeof(I64));
 	e->n_meta = 0;
-	e->n_imms_cap = 64;
+	e->n_imms_cap = EnumImmPoolSize;
 	U64 capacity = Max(1024, batch_size);
 
 	{
@@ -294,6 +321,11 @@ void enum_free(Enum* e) {
 void enum_run(Enum* e, EnumOptions* opt) {
 	e->out_d_cands = (EnumProgram*)e->d_out;
 	e->out_n_cands = 0;
+	e->last_layer_ready = false;
+	e->d_last_front = 0;
+	e->last_layer_n_front = 0;
+	e->last_layer_cursor = 0;
+	e->last_layer_cap = 0;
 	if(opt->cap == 0 || opt->prog_len == 0) { return; }
 
 	// meta host
@@ -315,7 +347,6 @@ void enum_run(Enum* e, EnumOptions* opt) {
 	EnumState* d_front_b = (EnumState*)e->d_front_b;
 	U32* d_counts = (U32*)e->d_counts;
 	U64* d_offsets = (U64*)e->d_offsets;
-	EnumProgram* d_out = (EnumProgram*)e->d_out;
 	void* d_scan_tmp = e->d_scan_tmp;
 	U64 scan_tmp_bytes = e->scan_tmp_bytes;
 
@@ -341,9 +372,7 @@ void enum_run(Enum* e, EnumOptions* opt) {
 		}
 	}
 
-	U64 emitted_cands = 0;
-
-	// expand candidate frontier
+	// expand upper layers, stop when we reach the last layer (layer == 0)
 	for(I32 layer = (I32)opt->prog_len - 1; layer >= 0; --layer) {
 		if(n_front == 0) { break; }
 		U64 src_avail;
@@ -367,6 +396,29 @@ void enum_run(Enum* e, EnumOptions* opt) {
 		lctx.max_scratch = opt->max_scratch;
 		lctx.is_last_layer = (layer == 0);
 
+		// at the last layer, don't emit here. count the entire last-layer
+		// frontier once (so enum_emit_batch can binary-search the cached
+		// prefix-sum across all chunks) and stash everything for paginated
+		// emission.
+		if(lctx.is_last_layer) {
+			if(n_front > 0) {
+				const U32 threads_c = 256;
+				const U32 blocks_c = (U32)((n_front + threads_c - 1) / threads_c);
+				opt_count_kernel<<<blocks_c, threads_c>>>(d_front_a, (U32)n_front, lctx, d_counts);
+				check_cuda(cudaGetLastError(), "enum count kernel (last layer)");
+				device_exclusive_sum(d_scan_tmp, &scan_tmp_bytes, d_counts, d_offsets, (I32)n_front);
+				// cudaMemcpy in enum_emit_batch will implicitly sync these.
+			}
+
+			e->last_layer_ready = true;
+			e->d_last_front = d_front_a;
+			e->last_layer_n_front = n_front;
+			e->last_layer_cursor = 0;
+			e->last_layer_cap = capacity;
+			e->last_layer_ctx = lctx;
+			break;
+		}
+
 		const U32 threads = 256;
 		const U32 blocks = (U32)((n_front + threads - 1) / threads);
 
@@ -383,33 +435,100 @@ void enum_run(Enum* e, EnumOptions* opt) {
 		const U64 total = last_off + (U64)last_cnt;
 
 		if(total > 0) {
-			const U64 cap_states = lctx.is_last_layer ? 0 : capacity;
-			const U64 cap_cands = lctx.is_last_layer ? (capacity - emitted_cands) : 0;
+			const U64 cap_states = capacity;
 
-			EnumState* dst_states = lctx.is_last_layer ? 0 : d_front_b;
-			EnumProgram* dst_cands = 0;
-			if(lctx.is_last_layer) { dst_cands = d_out + emitted_cands; }
-
-			// emit candidates
-			opt_emit_kernel<<<blocks, threads>>>(d_front_a, (U32)n_front, d_offsets, lctx, dst_states,
-																					 dst_cands, cap_states, cap_cands);
+			// emit next-layer frontier into d_front_b
+			opt_emit_kernel<<<blocks, threads>>>(d_front_a, (U32)n_front, d_offsets, 0, lctx, d_front_b,
+																					 0, cap_states, 0);
 			check_cuda(cudaGetLastError(), "enum emit kernel");
 		}
 
-		if(lctx.is_last_layer) {
-			const U64 remaining = capacity - emitted_cands;
-			const U64 written = total < remaining ? total : remaining;
-			emitted_cands += written;
-			n_front = 0;
+		n_front = total < capacity ? total : capacity;
+		EnumState* tmp = d_front_a;
+		d_front_a = d_front_b;
+		d_front_b = tmp;
+	}
+}
+
+U64 enum_find_chunk_fit(U64* d_offsets, U64 cursor, U64 n_front, U64 total, U64 cap) {
+	if(cursor >= n_front) { return 0; }
+
+	// read offsets[cursor] (= base for the chunk)
+	U64 base_off = 0;
+	if(cursor > 0) { dtoh_memcpy(&base_off, d_offsets + cursor, sizeof(U64)); }
+
+	const U64 tail_total = total - base_off;
+	const U64 remaining = n_front - cursor;
+	if(tail_total <= cap) { return remaining; }
+
+	U64 lo = 0;
+	U64 hi = remaining;
+	while(lo + 1 < hi) {
+		const U64 mid = lo + (hi - lo) / 2;
+		U64 off = 0;
+		const U64 absolute_idx = cursor + mid;
+		if(absolute_idx < n_front) {
+			dtoh_memcpy(&off, d_offsets + absolute_idx, sizeof(U64));
 		} else {
-			n_front = total < capacity ? total : capacity;
-			EnumState* tmp = d_front_a;
-			d_front_a = d_front_b;
-			d_front_b = tmp;
+			off = total;
+		}
+		if(off - base_off <= cap) {
+			lo = mid;
+		} else {
+			hi = mid;
 		}
 	}
+	return lo;
+}
 
-	if(emitted_cands > 0) { check_cuda(cudaDeviceSynchronize(), "enum sync"); }
+U64 enum_emit_batch(Enum* e) {
+	e->out_n_cands = 0;
+	e->out_d_cands = (EnumProgram*)e->d_out;
+
+	if(!e->last_layer_ready) { return 0; }
+	if(e->last_layer_cursor >= e->last_layer_n_front) { return 0; }
+
+	EnumState* d_last_front = (EnumState*)e->d_last_front;
+	U32* d_counts = (U32*)e->d_counts;
+	U64* d_offsets = (U64*)e->d_offsets;
+	EnumProgram* d_out = (EnumProgram*)e->d_out;
+	const U64 cap = e->last_layer_cap;
+	const EnumLayer lctx = e->last_layer_ctx;
+	const U64 cursor = e->last_layer_cursor;
+	const U64 n_front = e->last_layer_n_front;
+
+	U64 last_off = 0;
+	U32 last_cnt = 0;
+	dtoh_memcpy(&last_off, d_offsets + (n_front - 1), sizeof(U64));
+	dtoh_memcpy(&last_cnt, d_counts + (n_front - 1), sizeof(U32));
+	const U64 total = last_off + (U64)last_cnt;
+
+	U64 k = enum_find_chunk_fit(d_offsets, cursor, n_front, total, cap);
+	B32 forced_truncate = false;
+	if(k == 0) {
+		k = 1;
+		forced_truncate = true;
+	}
+
+	// determine how many candidates the chunk will emit
+	U64 base_off = 0;
+	if(cursor > 0) { dtoh_memcpy(&base_off, d_offsets + cursor, sizeof(U64)); }
+	U64 end_off = total;
+	if(cursor + k < n_front) { dtoh_memcpy(&end_off, d_offsets + (cursor + k), sizeof(U64)); }
+	U64 emitted = end_off - base_off;
+	if(forced_truncate && emitted > cap) { emitted = cap; }
+
+	if(emitted > 0) {
+		const U32 threads = 256;
+		const U32 emit_blocks = (U32)((k + threads - 1) / threads);
+		opt_emit_kernel<<<emit_blocks, threads>>>(d_last_front + cursor, (U32)k, d_offsets + cursor,
+																							base_off, lctx, 0, d_out, 0, cap);
+		check_cuda(cudaGetLastError(), "enum emit kernel (batch)");
+		check_cuda(cudaDeviceSynchronize(), "enum emit sync");
+	}
+
+	e->last_layer_cursor += k;
 	e->out_d_cands = d_out;
-	e->out_n_cands = emitted_cands;
+	e->out_n_cands = emitted;
+	return emitted;
 }

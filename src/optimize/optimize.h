@@ -44,6 +44,7 @@ void optimizer_free(Optimizer* optimizer);
 
 I32 optimizer_run(Optimizer* optimizer, Program* Program);
 B32 optimizer_run_length(Optimizer* optimizer, U32 len);
+I32 optimizer_run_iter(Optimizer* optimizer, EnumOptions* cfg, U32 len, U32 iter);
 B32 optimizer_filter_batch(Optimizer* optimizer, EnumProgram* p, U64 p_cnt, U32 len);
 void optimizer_init_tests(Optimizer* optimizer);
 

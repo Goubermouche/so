@@ -76,6 +76,40 @@ I32 optimizer_run(Optimizer* optimizer, Program* program) {
 	return 0;
 }
 
+I32 optimizer_run_iter(Optimizer* optimizer, EnumOptions* cfg, U32 len, U32 iter) {
+	const U32 prev_cex = optimizer->counterexample_count;
+
+	// generate candidates
+	const F64 t_upper = get_time_ms();
+	enum_run(&optimizer->enumerate, cfg);
+	optimizer->ms_enum += get_time_ms() - t_upper;
+
+	// pull and filter chunks until the saved last-layer frontier is exhausted,
+	// or a solution / new counterexample is found
+	U64 total_emitted = 0;
+	for(;;) {
+		const F64 t_chunk = get_time_ms();
+		U64 emitted = enum_emit_batch(&optimizer->enumerate);
+		optimizer->ms_enum += get_time_ms() - t_chunk;
+
+		if(emitted == 0) { break; }
+		total_emitted += emitted;
+
+		EnumProgram* p = optimizer->enumerate.out_d_cands;
+		B32 found = optimizer_filter_batch(optimizer, p, emitted, len);
+		if(found) {
+			printf("    iter %u (%.2fM cand)\n", iter + 1, (F64)total_emitted / 1e6);
+			return 1;
+		}
+
+		// if a new cex was added, abort this iter so the next one re-enumerates with the tighter filter
+		if(optimizer->counterexample_count != prev_cex) { break; }
+	}
+
+	printf("    iter %u (%.2fM cand)\n", iter + 1, (F64)total_emitted / 1e6);
+	return optimizer->counterexample_count != prev_cex ? 0 : -1;
+}
+
 B32 optimizer_run_length(Optimizer* optimizer, U32 len) {
 	U32 effective_mask = optimizer->opt->ext_mask | ExtRV32I;
 	if(effective_mask & ExtRV64M) effective_mask |= ExtRV32M;
@@ -83,17 +117,14 @@ B32 optimizer_run_length(Optimizer* optimizer, U32 len) {
 	EnumOpcodePool opcodes;
 	EnumImmPool immediates;
 	enum_make_opcode_pool(&opcodes, effective_mask);
-	enum_make_imm_pool(&immediates);
+	enum_make_imm_pool(&immediates, optimizer->prog);
 
 	U32 max_scratch = Min(32, 5 + len);
-	U32 iter = 0;
 
-	// CEGIS main loop for instructions of length 'len', iterates until we either
-	// find a satisfactory program (SMT_State proven equivalence), or until we don't
-	// find any new counterexammples
-	while(iter < optimizer->opt->max_cegis_iters) {
-		const U32 prev_counterexample_count = optimizer->counterexample_count;
-		const F64 t0 = get_time_ms();
+	// CEGIS main loop for instructions of length 'len'. iterates until we
+	// either find a satisfactory program (SMT-proven equivalence), or until
+	// we don't find any new counterexamples in a full pass.
+	for(U32 iter = 0; iter < optimizer->opt->max_cegis_iters; ++iter) {
 		EnumOptions cfg;
 		cfg.pool = &opcodes;
 		cfg.imms = &immediates;
@@ -102,23 +133,10 @@ B32 optimizer_run_length(Optimizer* optimizer, U32 len) {
 		cfg.prog_len = len;
 		cfg.max_scratch = max_scratch;
 		cfg.cap = optimizer->opt->batch_size;
-		EnumProgram* p = 0;
-		U64 p_cnt = 0;
 
-		// generate candidates
-		enum_run(&optimizer->enumerate, &cfg);
-		p = optimizer->enumerate.out_d_cands;
-		p_cnt = optimizer->enumerate.out_n_cands;
-		optimizer->ms_enum += get_time_ms() - t0;
-		printf("    iter %u (%.2fM cand)\n", iter + 1, (F64)p_cnt / 1e6);
-
-		if(p_cnt == 0) { return false; }
-		// filter candidates,
-		B32 found_solution = optimizer_filter_batch(optimizer, p, p_cnt, len);
-		if(found_solution) { return true; }
-		// exit if we run out of new counterexamples
-		if(optimizer->counterexample_count == prev_counterexample_count) { return false; }
-		++iter;
+		const I32 result = optimizer_run_iter(optimizer, &cfg, len, iter);
+		if(result == 1) { return true; }
+		if(result == -1) { return false; } // no new cex -> give up at this length
 	}
 
 	printf("    iter limit hit (len: %u)\n", len);
@@ -127,7 +145,6 @@ B32 optimizer_run_length(Optimizer* optimizer, U32 len) {
 
 B32 optimizer_filter_batch(Optimizer* optimizer, EnumProgram* p, U64 p_cnt, U32 len) {
 	if(p_cnt == 0) { return false; }
-	Arena* scratch = arena_make(0);
 	FilterOptions cfg;
 	cfg.live_mask = optimizer->live_out;
 	cfg.prog_len = len;
@@ -135,12 +152,12 @@ B32 optimizer_filter_batch(Optimizer* optimizer, EnumProgram* p, U64 p_cnt, U32 
 	cfg.n_candidates = p_cnt;
 	cfg.test_in = optimizer->test_in;
 	cfg.target_out = optimizer->target_out;
-	U8* pass_counts = ArenaPush(scratch, U8, p_cnt);
 
 	// run mass filter - remove the majority of candidate programs by verifying
 	// their correctness against a set of random and counterexample tests
+	U8* pass_counts = 0;
 	F64 t0_filter = get_time_ms();
-	filter_run(&optimizer->filter, &cfg, pass_counts);
+	filter_run(&optimizer->filter, &cfg, &pass_counts);
 	optimizer->ms_filter += get_time_ms() - t0_filter;
 	optimizer->total_candidates += p_cnt;
 	optimizer->filter_passes++;
@@ -166,17 +183,18 @@ B32 optimizer_filter_batch(Optimizer* optimizer, EnumProgram* p, U64 p_cnt, U32 
 				optimizer->best = {dst, len};
 				return true;
 			} else if(res.type == SMT_ResultType_COUNTEREXAMPLE) {
-				// add the counterexample (round robin), then abort this batch
+				// add the counterexample (round robin), then abort this batch.
+				// mark tests dirty so the next filter_run re-uploads them
 				const U32 slot = 16 + (optimizer->counterexample_count % 16);
 				optimizer->counterexample_count++;
 				optimizer->test_in[slot] = res.counterexample;
 				optimizer->target_out[slot] = filter_run_host(optimizer->prog, &res.counterexample);
+				filter_mark_tests_dirty(&optimizer->filter);
 				return false;
 			}
 		}
 	}
 
-	arena_free(scratch);
 	return false;
 }
 
@@ -255,4 +273,6 @@ void optimizer_init_tests(Optimizer* optimizer) {
 		optimizer->test_in[t] = in;
 		optimizer->target_out[t] = filter_run_host(optimizer->prog, &in);
 	}
+
+	filter_mark_tests_dirty(&optimizer->filter);
 }

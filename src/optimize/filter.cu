@@ -3,11 +3,8 @@
 __global__ void opt_filter_kernel(const Instruction* __restrict__ cands,
 																	const CpuState* __restrict__ test_in,
 																	const CpuState* __restrict__ target_out,
-																	U8* __restrict__ pass_count, U64 n_candidates,
-																	U64 live_mask, U32 prog_len) {
-	// go through candidate programs and run 32 quick tests to determine if a
-	// given candidate COULD be equivalent to the reference Program, one warp
-	// runs one candidate (16 lanes => two passes for 32 tests)
+																	U8* __restrict__ pass_count, U64 n_candidates, U64 live_mask,
+																	U32 prog_len) {
 	const U32 lane = threadIdx.x & 31;
 	const U32 warp_local = threadIdx.x >> 5;
 	const U64 cand_id = (U64)blockIdx.x * FilterWarpsPerBlock + warp_local;
@@ -67,7 +64,7 @@ __global__ void opt_filter_kernel(const Instruction* __restrict__ cands,
 		if(__any_sync(0xFFFFFFFFu, thread_failed)) { break; }
 	}
 
-	// TODO: maybe there is a smarter scheme for determining a pass...
+// TODO: maybe there is a smarter scheme for determining a pass...
 #pragma unroll
 	for(int off = 16; off > 0; off >>= 1) {
 		// warp-wide reduce to get pass count
@@ -84,6 +81,10 @@ I32 filter_make(Filter* filter, U64 max_chunk_cands) {
 	filter->d_test_in = 0;
 	filter->d_target_out = 0;
 	filter->d_pass_count = 0;
+	filter->h_pass_count = 0;
+	filter->h_pass_count_cap = 0;
+	filter->tests_dirty = true;
+
 	I32 dev = 0;
 
 	if(cudaGetDevice(&dev) != cudaSuccess) { return 1; }
@@ -111,10 +112,7 @@ I32 filter_make(Filter* filter, U64 max_chunk_cands) {
 	if(chunk < ideal_lower) { chunk = ideal_lower; }
 	if(chunk < 1024) { chunk = 1024; }
 
-	// cap the chunk size if max_chunk_cands is set
-	if(max_chunk_cands != 0 && max_chunk_cands < chunk) {
-		chunk = max_chunk_cands;
-	}
+	if(max_chunk_cands != 0 && max_chunk_cands < chunk) { chunk = max_chunk_cands; }
 
 	// align to warp block boundaries
 	const U64 padded_chunk = chunk + FilterWarpsPerBlock - 1;
@@ -129,6 +127,14 @@ I32 filter_make(Filter* filter, U64 max_chunk_cands) {
 	dmalloc(&filter->d_test_in, FilterTestCount * sizeof(CpuState));
 	dmalloc(&filter->d_target_out, FilterTestCount * sizeof(CpuState));
 	dmalloc(&filter->d_pass_count, filter->max_chunk_cands * sizeof(U8));
+
+	// pinned host buffer for pass_count copyback, reused across all chunks
+	filter->h_pass_count_cap = filter->max_chunk_cands;
+	if(cudaMallocHost((void**)&filter->h_pass_count, filter->h_pass_count_cap * sizeof(U8)) !=
+		 cudaSuccess) {
+		filter->h_pass_count = (U8*)malloc(filter->h_pass_count_cap * sizeof(U8));
+		if(!filter->h_pass_count) { return 5; }
+	}
 
 	const U64 mask_bytes = filter->max_chunk_cands * sizeof(U32) * 2;
 	const U64 used_mem = cands_bytes + fixed_mem_bytes + mask_bytes;
@@ -145,15 +151,24 @@ void filter_free(Filter* filter) {
 	if(filter->d_test_in) cudaFree(filter->d_test_in);
 	if(filter->d_target_out) cudaFree(filter->d_target_out);
 	if(filter->d_pass_count) cudaFree(filter->d_pass_count);
+	if(filter->h_pass_count) {
+		if(cudaFreeHost(filter->h_pass_count) != cudaSuccess) { free(filter->h_pass_count); }
+	}
 }
 
-void filter_run(Filter* filter, FilterOptions* opt, U8* pass_counts) {
-	if(opt->candidates == 0) { return; }
-	const U64 test_size = FilterTestCount * sizeof(CpuState);
+void filter_mark_tests_dirty(Filter* filter) { filter->tests_dirty = true; }
 
-	// upload test vectors once
-	htod_memcpy(filter->d_test_in, opt->test_in, test_size);
-	htod_memcpy(filter->d_target_out, opt->target_out, test_size);
+void filter_run(Filter* filter, FilterOptions* opt, U8** out_pass_counts) {
+	*out_pass_counts = filter->h_pass_count;
+	if(opt->candidates == 0 || opt->n_candidates == 0) { return; }
+
+	if(filter->tests_dirty) {
+		const U64 test_size = FilterTestCount * sizeof(CpuState);
+		htod_memcpy(filter->d_test_in, opt->test_in, test_size);
+		htod_memcpy(filter->d_target_out, opt->target_out, test_size);
+		filter->tests_dirty = false;
+	}
+
 	U64 done = 0;
 
 	// upload candidates as chunks so that we can process larger candidate sets
@@ -175,14 +190,10 @@ void filter_run(Filter* filter, FilterOptions* opt, U8* pass_counts) {
 
 		// run chunk
 		opt_filter_kernel<<<grid, block>>>(
-			d_chunk_cands, (const CpuState*)filter->d_test_in,
-			(const CpuState*)filter->d_target_out, (U8*)filter->d_pass_count,
-			this_chunk, opt->live_mask, opt->prog_len);
+			d_chunk_cands, (const CpuState*)filter->d_test_in, (const CpuState*)filter->d_target_out,
+			(U8*)filter->d_pass_count, this_chunk, opt->live_mask, opt->prog_len);
 		check_cuda(cudaGetLastError(), "kernel launch");
-		check_cuda(cudaDeviceSynchronize(), "kernel sync");
-
-		// copy pass counts back to host
-		dtoh_memcpy(pass_counts + done, filter->d_pass_count, this_chunk * sizeof(U8));
+		dtoh_memcpy(filter->h_pass_count + done, filter->d_pass_count, this_chunk * sizeof(U8));
 		done += this_chunk;
 	}
 }

@@ -9,7 +9,7 @@
 
 #define FilterTestCount 32
 #define FilterWarpsPerBlock 4
-#define FilterThreadsPerBlock FilterWarpsPerBlock * 32
+#define FilterThreadsPerBlock (FilterWarpsPerBlock * 32)
 
 typedef struct Filter {
 	U64 max_chunk_cands;
@@ -18,6 +18,10 @@ typedef struct Filter {
 	void* d_test_in;		// reference inputs
 	void* d_target_out; // reference outputs
 	void* d_pass_count; // per-candidate pass counts
+	// host
+	U8* h_pass_count;
+	U64 h_pass_count_cap;
+	B32 tests_dirty;
 } Filter;
 
 typedef struct FilterOptions {
@@ -25,8 +29,8 @@ typedef struct FilterOptions {
 	U32 prog_len;
 	const Instruction* candidates;
 	U64 n_candidates;
-	const CpuState* test_in;		 // reference inputs
-	const CpuState* target_out; // reference outputs
+	const CpuState* test_in;
+	const CpuState* target_out;
 } FilterOptions;
 
 typedef struct FilterSharedBlock {
@@ -35,7 +39,8 @@ typedef struct FilterSharedBlock {
 
 I32  filter_make(Filter* filter, U64 max_chunk_cands);
 void filter_free(Filter* filter);
-void filter_run(Filter* filter, FilterOptions* opt, U8* pass_counts);
+void filter_mark_tests_dirty(Filter* filter);
+void filter_run(Filter* filter, FilterOptions* opt, U8** out_pass_counts);
 
 HostDevice void filter_run_lane(U64 regs[32], const Instruction* prog, U32 prog_len) {
 	regs[0] = 0;

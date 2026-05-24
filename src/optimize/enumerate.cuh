@@ -1,7 +1,7 @@
 #ifndef OPT_ENUMERATE_CUH
 #define OPT_ENUMERATE_CUH
 
-#include "extensions/database.cuh"
+#include "cpu/program.h"
 
 #define EnumImmPoolSize 64
 
@@ -77,6 +77,13 @@ typedef struct Enum {
 	void* d_out;
 	void* d_scan_tmp;
 	U64 scan_tmp_bytes;
+	// last layer
+	B32 last_layer_ready;
+	void* d_last_front;
+	U64 last_layer_n_front;
+	U64 last_layer_cursor;
+	U64 last_layer_cap;
+	EnumLayer last_layer_ctx;
 	// output
 	EnumProgram* out_d_cands;
 	U64 out_n_cands;
@@ -84,10 +91,20 @@ typedef struct Enum {
 
 I32  enum_make(Enum* e, U64 batch_size);
 void enum_free(Enum* e);
+
+// run the upper layers of the backward search, on return, the last-layer
+// frontier is staged inside e; call enum_emit_batch repeatedly to pull
+// chunks of candidates until it returns 0
 void enum_run(Enum* e, EnumOptions* opt);
+
+// emit the next chunk of last-layer candidates, returns the number emitted
+// (also written to e->out_n_cands, with e->out_d_cands pointing to them),
+// returns 0 when the saved last-layer frontier is exhausted
+U64 enum_emit_batch(Enum* e);
+U64 enum_find_chunk_fit(U64* d_offsets, U64 cursor, U64 n_front, U64 total, U64 cap);
 
 void enum_make_meta_host(const EnumOpcodePool* pool, EnumMeta* out, U32* out_n);
 void enum_make_opcode_pool(EnumOpcodePool* pool, U32 ext_mask);
-void enum_make_imm_pool(EnumImmPool* pool);
+void enum_make_imm_pool(EnumImmPool* pool, const Program* prog);
 
 #endif // OPT_ENUMERATE_CUH
