@@ -1,3 +1,4 @@
+# > -e rv32i,rv32m
 # addi x6, x0, 10
 # add  x5, x1, x2
 # mul  x9, x5, x6

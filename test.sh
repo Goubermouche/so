@@ -61,7 +61,14 @@ normalize() {
 
 extract_expected() {
 	awk '
-		/^[[:space:]]*#/ { sub(/^[[:space:]]*#[[:space:]]?/, ""); print; next }
+		/^[[:space:]]*#/ {
+			line = $0
+			sub(/^[[:space:]]*#[[:space:]]?/, "", line)
+			# Ignore skip directives and custom command directives (>)
+			if (line ~ /^[[:space:]]*skip([[:space:]]|$)/ || line ~ /^>/) { next }
+			print line
+			next
+		}
 		/^[[:space:]]*$/ { next }
 		{ exit }
 	' "$1"
@@ -78,6 +85,23 @@ has_skip_directive() {
 		/^[[:space:]]*$/ { next }
 		{ exit }
 		END { exit !found }
+	' "$1"
+}
+
+extract_command() {
+	awk '
+		/^[[:space:]]*#/ {
+			line = $0
+			sub(/^[[:space:]]*#[[:space:]]?/, "", line)
+			if (line ~ /^>/) {
+				sub(/^>[[:space:]]*/, "", line)
+				print line
+				exit
+			}
+			next
+		}
+		/^[[:space:]]*$/ { next }
+		{ exit }
 	' "$1"
 }
 
@@ -134,6 +158,8 @@ for test in "${tests[@]}"; do
 		skipped=$((skipped + 1))
 		continue
 	fi
+	
+	custom_cmd=$(extract_command "$test")
 
 	# determine how many runs and what to do with them
 	runs=1
@@ -146,7 +172,13 @@ for test in "${tests[@]}"; do
 
 	for ((r = 0; r < runs; ++r)); do
 		t0=$(now_ns)
-		last_output=$("$EXE" "$test" 2>/dev/null)
+		
+		if [ -n "$custom_cmd" ]; then
+			last_output=$("$EXE" $custom_cmd "$test" 2>/dev/null)
+		else
+			last_output=$("$EXE" "$test" 2>/dev/null)
+		fi
+		
 		last_rc=$?
 		t1=$(now_ns)
 		test_total_ns=$((test_total_ns + (t1 - t0)))
