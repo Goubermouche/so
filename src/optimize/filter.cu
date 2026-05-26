@@ -1,78 +1,329 @@
 #include "optimize/filter.cuh"
 
-__global__ void opt_filter_kernel(const Instruction* __restrict__ cands,
-																	const CpuState* __restrict__ test_in,
-																	const CpuState* __restrict__ target_out,
-																	U8* __restrict__ pass_count, U64 n_candidates, U64 live_mask,
-																	U32 prog_len) {
-	const U32 lane = threadIdx.x & 31;
-	const U32 warp_local = threadIdx.x >> 5;
-	const U64 cand_id = (U64)blockIdx.x * FilterWarpsPerBlock + warp_local;
-	if(cand_id >= n_candidates) { return; }
+static __constant__ U8 c_slot_idx[32];
+static __constant__ U8 c_unpack[FilterMaxActiveRegs];
 
-	// init shared candidate block
-	__shared__ FilterSharedBlock shared;
-	if(lane < MaxProgramLen) {
-		shared.progs[warp_local][lane] = cands[cand_id * MaxProgramLen + lane];
+static U8 h_slot_idx[32];
+static U8 h_unpack[FilterMaxActiveRegs];
+static U64 h_last_active_mask = 0;
+
+U32 filter_upload_slot_idx(U64 active_mask) {
+	active_mask |= 1ull;
+	if(active_mask == h_last_active_mask) {
+		U32 k = 0;
+		for(U32 r = 0; r < 32; ++r) {
+			if(active_mask & (1ull << r)) ++k;
+		}
+		return k;
+	}
+	for(U32 r = 0; r < 32; ++r) { h_slot_idx[r] = 0xFF; }
+	for(U32 s = 0; s < FilterMaxActiveRegs; ++s) { h_unpack[s] = 0; }
+	h_slot_idx[0] = 0;
+	h_unpack[0] = 0;
+	U32 k = 1;
+	for(U32 r = 1; r < 32; ++r) {
+		if(!(active_mask & (1ull << r))) continue;
+		if(k >= FilterMaxActiveRegs) return 0;
+		h_slot_idx[r] = (U8)k;
+		h_unpack[k] = (U8)r;
+		++k;
+	}
+	U8 device_slot_idx[32];
+	for(U32 r = 0; r < 32; ++r) {
+		device_slot_idx[r] = (h_slot_idx[r] == 0xFF) ? (U8)0 : h_slot_idx[r];
+	}
+	cudaMemcpyToSymbol(c_slot_idx, device_slot_idx, sizeof(device_slot_idx));
+	cudaMemcpyToSymbol(c_unpack, h_unpack, sizeof(h_unpack));
+	h_last_active_mask = active_mask;
+	return k;
+}
+
+U64 filter_pack_mask(U64 raw_mask) {
+	U64 out = 0;
+	for(U32 r = 0; r < 32; ++r) {
+		if(!(raw_mask & (1ull << r))) continue;
+		const U8 s = h_slot_idx[r];
+		if(s == 0xFF) continue;
+		out |= 1ull << s;
+	}
+	return out;
+}
+
+// TODO: unify w tester/cleanup
+typedef struct __align__(16) DecodedInst {
+	U32 op;
+	U8 rd;
+	U8 rs1;
+	U8 rs2;
+	U8 _pad;
+	U64 imm;
+} DecodedInst;
+
+static __constant__ U16 c_decode_info[InstructionOpcode_Count];
+static U16 h_decode_info[InstructionOpcode_Count];
+static B32 h_decode_info_initialised = false;
+
+void filter_init_decode_info() {
+	if(h_decode_info_initialised) return;
+	for(U32 op = 0; op < (U32)InstructionOpcode_Count; ++op) {
+		const InstructionInfo* info = &instruction_db_host.row[op];
+		U32 reg_mask = 0;
+		if(info->dst_slot >= 0) reg_mask |= 1u << (U32)info->dst_slot;
+		if(info->src_slot >= 0) reg_mask |= 1u << (U32)info->src_slot;
+		if(info->src2_slot >= 0) reg_mask |= 1u << (U32)info->src2_slot;
+		U32 imm_slot = 0xF;
+		for(U32 k = 0; k < 4; ++k) {
+			if(info->operands[k] == InstructionOperandType_Imm) {
+				imm_slot = k;
+				break;
+			}
+		}
+		h_decode_info[op] = (U16)((reg_mask & 0xF) | (imm_slot << 8));
+	}
+	cudaMemcpyToSymbol(c_decode_info, h_decode_info, sizeof(h_decode_info));
+	h_decode_info_initialised = true;
+}
+
+__device__ __forceinline__ DecodedInst filter_decode_one(const Instruction& in) {
+	DecodedInst d;
+	const U32 op = (U32)in.op;
+	d.op = op;
+	d._pad = 0;
+	if(op == (U32)InstructionOpcode_Nop || op >= (U32)InstructionOpcode_Count) {
+		d.rd = 0;
+		d.rs1 = 0;
+		d.rs2 = 0;
+		d.imm = 0;
+		return d;
+	}
+	const U32 info = (U32)c_decode_info[op];
+	const U32 reg_mask = info & 0xF;
+	const U32 imm_slot = (info >> 8) & 0xF;
+	d.rd = c_slot_idx[(U32)in.operands[0].reg & 31];
+	d.rs1 = (reg_mask & 0x2) ? c_slot_idx[(U32)in.operands[1].reg & 31] : (U8)0;
+	d.rs2 = (reg_mask & 0x4) ? c_slot_idx[(U32)in.operands[2].reg & 31] : (U8)0;
+	d.imm = (imm_slot < 4) ? in.operands[imm_slot].imm : (U64)0;
+	return d;
+}
+
+__device__ __forceinline__ void sim_step(U64* regs, const DecodedInst* d) {
+	const U32 op = d->op;
+	const U32 rd = (U32)d->rd;
+	const U64 a = regs[(U32)d->rs1];
+	const U64 b = regs[(U32)d->rs2];
+	const U64 imm = d->imm;
+
+	// TODO: extensions
+	U64 v;
+	switch(op) {
+		case InstructionOpcode_Add: v = a + b; break;
+		case InstructionOpcode_Sub: v = a - b; break;
+		case InstructionOpcode_Sll: v = a << (b & 0x3F); break;
+		case InstructionOpcode_Slt: v = ((I64)a < (I64)b) ? 1ull : 0ull; break;
+		case InstructionOpcode_Sltu: v = (a < b) ? 1ull : 0ull; break;
+		case InstructionOpcode_Xor: v = a ^ b; break;
+		case InstructionOpcode_Srl: v = a >> (b & 0x3F); break;
+		case InstructionOpcode_Sra: v = (U64)((I64)a >> (b & 0x3F)); break;
+		case InstructionOpcode_Or: v = a | b; break;
+		case InstructionOpcode_And: v = a & b; break;
+		case InstructionOpcode_Addi: v = a + imm; break;
+		case InstructionOpcode_Slti: v = ((I64)a < (I64)imm) ? 1ull : 0ull; break;
+		case InstructionOpcode_Sltiu: v = (a < imm) ? 1ull : 0ull; break;
+		case InstructionOpcode_Xori: v = a ^ imm; break;
+		case InstructionOpcode_Ori: v = a | imm; break;
+		case InstructionOpcode_Andi: v = a & imm; break;
+		case InstructionOpcode_Slli: v = a << (imm & 0x3F); break;
+		case InstructionOpcode_Srli: v = a >> (imm & 0x3F); break;
+		case InstructionOpcode_Srai: v = (U64)((I64)a >> (imm & 0x3F)); break;
+		case InstructionOpcode_Lui: v = (U64)(I64)(I32)((U32)imm << 12); break;
+		case InstructionOpcode_Addiw: v = (U64)(I64)(I32)((U32)a + (U32)imm); break;
+		case InstructionOpcode_Slliw: v = (U64)(I64)(I32)((U32)a << (imm & 0x1F)); break;
+		case InstructionOpcode_Srliw: v = (U64)(I64)(I32)((U32)a >> (imm & 0x1F)); break;
+		case InstructionOpcode_Sraiw: v = (U64)(I64)((I32)a >> (imm & 0x1F)); break;
+		case InstructionOpcode_Addw: v = (U64)(I64)(I32)((U32)a + (U32)b); break;
+		case InstructionOpcode_Subw: v = (U64)(I64)(I32)((U32)a - (U32)b); break;
+		case InstructionOpcode_Sllw: v = (U64)(I64)(I32)((U32)a << (b & 0x1F)); break;
+		case InstructionOpcode_Srlw: v = (U64)(I64)(I32)((U32)a >> (b & 0x1F)); break;
+		case InstructionOpcode_Sraw: v = (U64)(I64)((I32)a >> (b & 0x1F)); break;
+		case InstructionOpcode_Mul: v = a * b; break;
+		case InstructionOpcode_Mulh: {
+			const __int128 sa = (__int128)(I64)a;
+			const __int128 sb = (__int128)(I64)b;
+			v = (U64)(I64)((sa * sb) >> 64);
+		} break;
+		case InstructionOpcode_Mulhsu: {
+			const __int128 sa = (__int128)(I64)a;
+			const __int128 ub = (__int128)(unsigned __int128)b;
+			v = (U64)(I64)((sa * ub) >> 64);
+		} break;
+		case InstructionOpcode_Mulhu: {
+			const unsigned __int128 ua = (unsigned __int128)a;
+			const unsigned __int128 ub = (unsigned __int128)b;
+			v = (U64)((ua * ub) >> 64);
+		} break;
+		case InstructionOpcode_Div: {
+			const I64 sa = (I64)a;
+			const I64 sb = (I64)b;
+			I64 q;
+			if(sb == 0)
+				q = -1;
+			else if(sa == (I64)0x8000000000000000ULL && sb == -1)
+				q = sa;
+			else
+				q = sa / sb;
+			v = (U64)q;
+		} break;
+		case InstructionOpcode_Divu: v = (b == 0) ? (U64)-1 : (a / b); break;
+		case InstructionOpcode_Rem: {
+			const I64 sa = (I64)a;
+			const I64 sb = (I64)b;
+			I64 r;
+			if(sb == 0)
+				r = sa;
+			else if(sa == (I64)0x8000000000000000ULL && sb == -1)
+				r = 0;
+			else
+				r = sa % sb;
+			v = (U64)r;
+		} break;
+		case InstructionOpcode_Remu: v = (b == 0) ? a : (a % b); break;
+		case InstructionOpcode_Mulw: {
+			const I32 r = (I32)a * (I32)b;
+			v = (U64)(I64)r;
+		} break;
+		case InstructionOpcode_Divw: {
+			const I32 sa = (I32)a;
+			const I32 sb = (I32)b;
+			I32 r;
+			if(sb == 0)
+				r = -1;
+			else if(sa == (I32)0x80000000 && sb == -1)
+				r = sa;
+			else
+				r = sa / sb;
+			v = (U64)(I64)r;
+		} break;
+		case InstructionOpcode_Divuw: {
+			const U32 ua = (U32)a;
+			const U32 ub = (U32)b;
+			v = (U64)(I64)(I32)(ub == 0 ? (U32)-1 : ua / ub);
+		} break;
+		case InstructionOpcode_Remw: {
+			const I32 sa = (I32)a;
+			const I32 sb = (I32)b;
+			I32 r;
+			if(sb == 0)
+				r = sa;
+			else if(sa == (I32)0x80000000 && sb == -1)
+				r = 0;
+			else
+				r = sa % sb;
+			v = (U64)(I64)r;
+		} break;
+		case InstructionOpcode_Remuw: {
+			const U32 ua = (U32)a;
+			const U32 ub = (U32)b;
+			v = (U64)(I64)(I32)(ub == 0 ? ua : ua % ub);
+		} break;
+		default: return;
 	}
 
-	__syncwarp();
+	if(rd != 0) regs[rd] = v;
+}
 
-	const Instruction* prog = shared.progs[warp_local];
-	U32 pass_local = 0;
+extern __shared__ U8 g_smem[];
 
-	// phase 0: lanes 0-15 evaluate tests 0-15
-	// phase 1: lanes 16-31 evaluate tests 16-31
+__global__ __launch_bounds__(FilterSimThreadsPerBlock, 8) void opt_filter_kernel(
+	const Instruction* __restrict__ raw_soa,
+	U64 stride,
+	U8* __restrict__ pass_count,
+	U64 n_candidates,
+	U64 packed_live_mask,
+	U32 prog_len,
+	U32 active_count,
+	const CpuState* __restrict__ test_in,
+	const CpuState* __restrict__ target_out
+) {
+	const U32 tid = threadIdx.x;
+	const U64 cand_id = (U64)blockIdx.x * FilterSimThreadsPerBlock + tid;
+
+	U64* s_test_in = (U64*)g_smem;
+	U64* s_target_out = s_test_in + (size_t)FilterTestCount * active_count;
+
+	// load packed
+	{
+		const U32 total = FilterTestCount * active_count;
+		for(U32 i = tid; i < total; i += FilterSimThreadsPerBlock) {
+			const U32 t = i / active_count;
+			const U32 ps = i % active_count;
+			const U32 raw_r = (U32)c_unpack[ps];
+			s_test_in[(size_t)t * active_count + ps] = test_in[t].regs[raw_r];
+			s_target_out[(size_t)t * active_count + ps] = target_out[t].regs[raw_r];
+		}
+	}
+	__syncthreads();
+
+	// load decoded
+	DecodedInst prog[MaxProgramLen];
+	{
 #pragma unroll
-	for(U32 phase = 0; phase < 2; ++phase) {
-		const U32 phase_start = phase * 16;
-		const U32 phase_end = phase_start + 16;
-		const B32 in_phase = (lane >= phase_start) && (lane < phase_end);
-		const B32 in_bounds = (lane < FilterTestCount);
-		const B32 is_active = in_phase && in_bounds;
-		B32 thread_failed = false;
-
-		if(is_active) {
-			U64 regs[32];
+		for(U32 k = 0; k < MaxProgramLen; ++k) {
+			Instruction raw;
+			if(cand_id < n_candidates && k < prog_len) {
+				raw = raw_soa[(U64)k * stride + cand_id];
+			} else {
+				raw.op = InstructionOpcode_Nop;
+// compare our results to the reference
 #pragma unroll
-			// populate our registers with the test inputs
-			for(U32 i = 0; i < 32; ++i) { regs[i] = test_in[lane].regs[i]; }
-			// run test
-			filter_run_lane(regs, prog, prog_len);
+				for(U32 j = 0; j < 4; ++j) { raw.operands[j].imm = 0; }
+			}
+			prog[k] = filter_decode_one(raw);
+		}
+	}
 
-			B32 ok = true;
-			U64 m = live_mask;
-			// compare our results to the reference
+	if(cand_id >= n_candidates) return;
+
+	// run tests
+	U32 pass_mask = 0;
+	B32 lane_alive = true;
+
+	for(U32 t = 0; t < FilterTestCount; ++t) {
+		B32 ok = false;
+		if(lane_alive) {
+			U64 regs[FilterMaxActiveRegs];
+
+			for(U32 i = 0; i < active_count; ++i) { regs[i] = s_test_in[(size_t)t * active_count + i]; }
+			regs[0] = 0;
+
+			for(U32 i = 0; i < prog_len; ++i) { sim_step(regs, &prog[i]); }
+
+			// compare against broadcast
+			ok = true;
+			U64 m = packed_live_mask;
 			while(m) {
 				const U32 r = __ffsll((long long)m) - 1;
 				m &= m - 1;
-				if(regs[r] != target_out[lane].regs[r]) {
-					// mismatch => failed test
+				const U64 expected = s_target_out[(size_t)t * active_count + r];
+				if(regs[r] != expected) {
 					ok = false;
 					break;
 				}
 			}
-
-			if(ok) {
-				++pass_local;
-			} else {
-				thread_failed = true;
-			}
 		}
 
-		// early out in phase 0
-		if(__any_sync(0xFFFFFFFFu, thread_failed)) { break; }
-	}
+		if(ok) {
+			pass_mask |= (1u << t);
+		} else {
+			lane_alive = false;
+		}
 
-// TODO: maybe there is a smarter scheme for determining a pass...
-#pragma unroll
-	for(int off = 16; off > 0; off >>= 1) {
-		// warp-wide reduce to get pass count
-		pass_local += __shfl_xor_sync(0xFFFFFFFFu, pass_local, off);
+		// if every lane has failed, break
+		if(!__any_sync(0xFFFFFFFFu, lane_alive)) break;
 	}
 
 	// pass results
-	if(lane == 0) { pass_count[cand_id] = pass_local; }
+	const B32 all_passed = (pass_mask == 0xFFFFFFFFu);
+	pass_count[cand_id] = all_passed ? (U8)FilterTestCount : (U8)0;
 }
 
 I32 filter_make(Filter* filter, U64 max_chunk_cands) {
@@ -85,44 +336,38 @@ I32 filter_make(Filter* filter, U64 max_chunk_cands) {
 	filter->h_pass_count_cap = 0;
 	filter->tests_dirty = true;
 
+	filter_init_decode_info();
+
 	I32 dev = 0;
-
-	if(cudaGetDevice(&dev) != cudaSuccess) { return 1; }
+	if(cudaGetDevice(&dev) != cudaSuccess) return 1;
 	cudaDeviceProp p;
-	if(cudaGetDeviceProperties(&p, dev) != cudaSuccess) { return 2; }
-	U64 free_mem = 0;
-	U64 total_mem = 0;
-	if(cudaMemGetInfo(&free_mem, &total_mem) != cudaSuccess) { return 3; }
-	U64 usable_mem = (U64)((F64)free_mem * 0.30);
+	if(cudaGetDeviceProperties(&p, dev) != cudaSuccess) return 2;
 
+	U64 free_mem = 0, total_mem = 0;
+	if(cudaMemGetInfo(&free_mem, &total_mem) != cudaSuccess) return 3;
+	U64 usable_mem = (U64)((F64)free_mem * 0.30);
 	const U64 fixed_mem_bytes = 2ull * FilterTestCount * sizeof(CpuState);
 	if(usable_mem <= fixed_mem_bytes) {
 		fprintf(stderr, "error: insufficient VRAM for fixed buffers\n");
 		return 4;
 	}
-
 	usable_mem -= fixed_mem_bytes;
-	const U64 per_cand_bytes = (U64)MaxProgramLen * sizeof(Instruction);
-	const U64 cand_footprint_bytes = per_cand_bytes + sizeof(U32) + sizeof(U32);
-	U64 chunk = usable_mem / cand_footprint_bytes;
-	const U64 processor_count = p.multiProcessorCount;
-	const U64 threads_per_processor = p.maxThreadsPerMultiProcessor;
-	const U64 hw_warps = processor_count * threads_per_processor / 32ull;
+
+	const U64 per_cand = (U64)MaxProgramLen * sizeof(Instruction) + sizeof(U8) + 2 * sizeof(U32);
+	U64 chunk = usable_mem / per_cand;
+	const U64 hw_warps = (U64)p.multiProcessorCount * p.maxThreadsPerMultiProcessor / 32ull;
 	const U64 ideal_lower = hw_warps * 8ull;
-	if(chunk < ideal_lower) { chunk = ideal_lower; }
-	if(chunk < 1024) { chunk = 1024; }
-
-	if(max_chunk_cands != 0 && max_chunk_cands < chunk) { chunk = max_chunk_cands; }
-
+	if(chunk < ideal_lower) chunk = ideal_lower;
+	if(chunk < 1024) chunk = 1024;
+	if(max_chunk_cands != 0 && max_chunk_cands < chunk) chunk = max_chunk_cands;
+	const U64 cpb = FilterCandsPerBlock;
 	// align to warp block boundaries
-	const U64 padded_chunk = chunk + FilterWarpsPerBlock - 1;
-	const U64 num_blocks = padded_chunk / FilterWarpsPerBlock;
-	chunk = num_blocks * FilterWarpsPerBlock;
-
+	const U64 padded_chunk = chunk + cpb - 1;
+	chunk = (padded_chunk / cpb) * cpb;
 	filter->max_chunk_cands = chunk;
 
 	// allocate persistent buffers
-	const U64 cands_bytes = filter->max_chunk_cands * per_cand_bytes;
+	const U64 cands_bytes = filter->max_chunk_cands * (U64)MaxProgramLen * sizeof(Instruction);
 	dmalloc(&filter->d_cands, cands_bytes);
 	dmalloc(&filter->d_test_in, FilterTestCount * sizeof(CpuState));
 	dmalloc(&filter->d_target_out, FilterTestCount * sizeof(CpuState));
@@ -133,7 +378,7 @@ I32 filter_make(Filter* filter, U64 max_chunk_cands) {
 	if(cudaMallocHost((void**)&filter->h_pass_count, filter->h_pass_count_cap * sizeof(U8)) !=
 		 cudaSuccess) {
 		filter->h_pass_count = (U8*)malloc(filter->h_pass_count_cap * sizeof(U8));
-		if(!filter->h_pass_count) { return 5; }
+		if(!filter->h_pass_count) return 5;
 	}
 
 	const U64 mask_bytes = filter->max_chunk_cands * sizeof(U32) * 2;
@@ -152,7 +397,7 @@ void filter_free(Filter* filter) {
 	if(filter->d_target_out) cudaFree(filter->d_target_out);
 	if(filter->d_pass_count) cudaFree(filter->d_pass_count);
 	if(filter->h_pass_count) {
-		if(cudaFreeHost(filter->h_pass_count) != cudaSuccess) { free(filter->h_pass_count); }
+		if(cudaFreeHost(filter->h_pass_count) != cudaSuccess) free(filter->h_pass_count);
 	}
 }
 
@@ -160,7 +405,19 @@ void filter_mark_tests_dirty(Filter* filter) { filter->tests_dirty = true; }
 
 void filter_run(Filter* filter, FilterOptions* opt, U8** out_pass_counts) {
 	*out_pass_counts = filter->h_pass_count;
-	if(opt->candidates == 0 || opt->n_candidates == 0) { return; }
+	if(opt->candidates == 0 || opt->n_candidates == 0) return;
+
+	const U32 active_count = filter_upload_slot_idx(opt->active_mask);
+	if(active_count == 0 || active_count > FilterMaxActiveRegs) {
+		fprintf(
+			stderr,
+			"error: active register set exceeds FilterMaxActiveRegs=%d (got %u)\n",
+			FilterMaxActiveRegs,
+			active_count
+		);
+		return;
+	}
+	const U64 packed_live_mask = filter_pack_mask(opt->live_mask);
 
 	if(filter->tests_dirty) {
 		const U64 test_size = FilterTestCount * sizeof(CpuState);
@@ -169,30 +426,34 @@ void filter_run(Filter* filter, FilterOptions* opt, U8** out_pass_counts) {
 		filter->tests_dirty = false;
 	}
 
+	const U32 shmem_bytes = (U32)(2ull * FilterTestCount * active_count * sizeof(U64));
 	U64 done = 0;
 
 	// upload candidates as chunks so that we can process larger candidate sets
 	// without running out of device memory
 	while(done < opt->n_candidates) {
-		U64 this_chunk;
+		U64 this_chunk = (opt->n_candidates - done < filter->max_chunk_cands)
+											 ? (opt->n_candidates - done)
+											 : filter->max_chunk_cands;
+		const Instruction* d_chunk_cands = opt->candidates + done;
 
-		if((opt->n_candidates - done) < filter->max_chunk_cands) {
-			this_chunk = opt->n_candidates - done;
-		} else {
-			this_chunk = filter->max_chunk_cands;
-		}
-
-		const Instruction* d_chunk_cands = opt->candidates + done * MaxProgramLen;
-		const U32 total_warps = this_chunk + FilterWarpsPerBlock - 1;
-		const U32 n_blocks = (U32)(total_warps / FilterWarpsPerBlock);
+		const U32 n_blocks =
+			(U32)((this_chunk + FilterSimThreadsPerBlock - 1) / FilterSimThreadsPerBlock);
 		dim3 grid(n_blocks);
-		dim3 block(FilterThreadsPerBlock);
-
+		dim3 block(FilterSimThreadsPerBlock);
 		// run chunk
-		opt_filter_kernel<<<grid, block>>>(
-			d_chunk_cands, (const CpuState*)filter->d_test_in, (const CpuState*)filter->d_target_out,
-			(U8*)filter->d_pass_count, this_chunk, opt->live_mask, opt->prog_len);
-		check_cuda(cudaGetLastError(), "kernel launch");
+		opt_filter_kernel<<<grid, block, shmem_bytes>>>(
+			d_chunk_cands,
+			opt->stride,
+			(U8*)filter->d_pass_count,
+			this_chunk,
+			packed_live_mask,
+			opt->prog_len,
+			active_count,
+			(const CpuState*)filter->d_test_in,
+			(const CpuState*)filter->d_target_out
+		);
+		check_cuda(cudaGetLastError(), "filter kernel launch");
 		dtoh_memcpy(filter->h_pass_count + done, filter->d_pass_count, this_chunk * sizeof(U8));
 		done += this_chunk;
 	}

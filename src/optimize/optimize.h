@@ -26,6 +26,9 @@ typedef struct Optimizer {
 	CpuState test_in[FilterTestCount];
 	CpuState target_out[FilterTestCount];
 	U32 counterexample_count; // needed for the round robin test retire
+	// current pass context
+	U32 cur_max_scratch;
+	U64 cur_active_mask;
 	// output
 	Program best;
 	// stats
@@ -45,7 +48,7 @@ void optimizer_free(Optimizer* optimizer);
 I32 optimizer_run(Optimizer* optimizer, Program* Program);
 B32 optimizer_run_length(Optimizer* optimizer, U32 len);
 I32 optimizer_run_iter(Optimizer* optimizer, EnumOptions* cfg, U32 len, U32 iter);
-B32 optimizer_filter_batch(Optimizer* optimizer, EnumProgram* p, U64 p_cnt, U32 len);
+B32 optimizer_filter_batch(Optimizer* optimizer, Instruction* cand, U64 stride, U64 p_cnt, U32 len);
 void optimizer_init_tests(Optimizer* optimizer);
 
 void optimizer_log_startup(Optimizer* optimizer);

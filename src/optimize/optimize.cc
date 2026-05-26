@@ -23,6 +23,8 @@ I32 optimizer_make(Optimizer* optimizer, OptimizerOptions* opt) {
 	optimizer->ms_filter = 0.0;
 	optimizer->ms_smt = 0.0;
 	optimizer->ms_total = 0.0;
+	optimizer->cur_max_scratch = 0;
+	optimizer->cur_active_mask = 0;
 	optimizer->mem = arena_make(0);
 
 	if(filter_make(&optimizer->filter, optimizer->opt->batch_size)) {
@@ -95,8 +97,10 @@ I32 optimizer_run_iter(Optimizer* optimizer, EnumOptions* cfg, U32 len, U32 iter
 		if(emitted == 0) { break; }
 		total_emitted += emitted;
 
-		EnumProgram* p = optimizer->enumerate.out_d_cands;
-		B32 found = optimizer_filter_batch(optimizer, p, emitted, len);
+		// candidate buffer + per-row stride
+		Instruction* p = optimizer->enumerate.out_d_cands;
+		const U64 stride = optimizer->enumerate.out_cand_stride;
+		B32 found = optimizer_filter_batch(optimizer, p, stride, emitted, len);
 		if(found) {
 			printf("    iter %u (%.2fM cand)\n", iter + 1, (F64)total_emitted / 1e6);
 			return 1;
@@ -120,6 +124,17 @@ B32 optimizer_run_length(Optimizer* optimizer, U32 len) {
 	enum_make_imm_pool(&immediates, optimizer->prog);
 
 	U32 max_scratch = Min(32, 5 + len);
+	optimizer->cur_max_scratch = max_scratch;
+
+	// compute the conservative active-register set for this pass, the enumerator only emits programs
+	// that touch x0, registers 1..4 (low regs always considered as valid rd / scratch material), the
+	// scratch range r in [5, max_scratch), and any register in live_in / live_out. this is the upper
+	// bound on the regs the sim might see; the filter kernel uses it to size its packed reg file
+	U64 scratch_mask = 0;
+	const U32 hi = max_scratch < 32 ? max_scratch : 32;
+	for(U32 r = 5; r < hi; ++r) { scratch_mask |= 1ull << r; }
+	const U64 low_regs = 0x1Eull | 1ull; // bits 1..4 | x0
+	optimizer->cur_active_mask =  low_regs | scratch_mask | optimizer->live_in | optimizer->live_out;
 
 	// CEGIS main loop for instructions of length 'len'. iterates until we
 	// either find a satisfactory program (SMT-proven equivalence), or until
@@ -143,12 +158,15 @@ B32 optimizer_run_length(Optimizer* optimizer, U32 len) {
 	return false;
 }
 
-B32 optimizer_filter_batch(Optimizer* optimizer, EnumProgram* p, U64 p_cnt, U32 len) {
+B32 optimizer_filter_batch(Optimizer* optimizer, Instruction* cand, U64 stride, U64 p_cnt, U32 len) {
 	if(p_cnt == 0) { return false; }
 	FilterOptions cfg;
 	cfg.live_mask = optimizer->live_out;
+	cfg.live_in_mask = optimizer->live_in;
+	cfg.active_mask = optimizer->cur_active_mask;
 	cfg.prog_len = len;
-	cfg.candidates = (Instruction*)p;
+	cfg.candidates = cand;
+	cfg.stride = stride;
 	cfg.n_candidates = p_cnt;
 	cfg.test_in = optimizer->test_in;
 	cfg.target_out = optimizer->target_out;
@@ -166,9 +184,10 @@ B32 optimizer_filter_batch(Optimizer* optimizer, EnumProgram* p, U64 p_cnt, U32 
 	// via an SMT_State solver
 	for(U64 i = 0; i < p_cnt; ++i) {
 		if(pass_counts[i] == FilterTestCount) {
-			// pull the candidate instructions
+			// pull the candidate instructions, convert to contiguous buffer from soa
 			Instruction survivor_inst[MaxProgramLen];
-			dtoh_memcpy(survivor_inst, p + i, sizeof(EnumProgram));
+			for(U32 k = 0; k < MaxProgramLen; ++k)
+				dtoh_memcpy(&survivor_inst[k], cand + (U64)k * stride + i, sizeof(Instruction));
 			const F64 t0_smt = get_time_ms();
 			Program survivor = {survivor_inst, len};
 			// verify via an SMT_State solver

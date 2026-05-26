@@ -75,6 +75,7 @@ typedef struct Enum {
 	void* d_counts;
 	void* d_offsets;
 	void* d_out;
+	void* d_tuples; // last-layer phase-1 intermediate: U64 packed tuple per cand
 	void* d_scan_tmp;
 	U64 scan_tmp_bytes;
 	// last layer
@@ -84,8 +85,11 @@ typedef struct Enum {
 	U64 last_layer_cursor;
 	U64 last_layer_cap;
 	EnumLayer last_layer_ctx;
-	// output
-	EnumProgram* out_d_cands;
+	// output: slot-major SoA candidate buffer
+	// layout: out_d_cands[k * out_cand_stride + cand_idx] for the
+	// k-th instruction of candidate cand_idx (with k in [0, MaxProgramLen))
+	Instruction* out_d_cands;
+	U64 out_cand_stride;
 	U64 out_n_cands;
 } Enum;
 

@@ -8,8 +8,16 @@
 #include "extensions/rv64m/run.cuh"
 
 #define FilterTestCount 32
-#define FilterWarpsPerBlock 4
-#define FilterThreadsPerBlock (FilterWarpsPerBlock * 32)
+#define FilterWarpsPerBlock 8
+
+// maximum packed active-register count. The host computes the active mask per launch and packs raw
+// RISC-V indices (0..31) into a dense [0..K) range
+#define FilterMaxActiveRegs 24
+
+#define FilterCandsPerWarp 32
+#define FilterSimWarpsPerBlock 8
+#define FilterCandsPerBlock (FilterSimWarpsPerBlock * FilterCandsPerWarp)
+#define FilterSimThreadsPerBlock (FilterSimWarpsPerBlock * 32)
 
 typedef struct Filter {
 	U64 max_chunk_cands;
@@ -26,21 +34,24 @@ typedef struct Filter {
 
 typedef struct FilterOptions {
 	U64 live_mask;
+	U64 live_in_mask;
+	U64 active_mask;
 	U32 prog_len;
 	const Instruction* candidates;
+	U64 stride;
 	U64 n_candidates;
 	const CpuState* test_in;
 	const CpuState* target_out;
 } FilterOptions;
 
-typedef struct FilterSharedBlock {
-	Instruction progs[FilterWarpsPerBlock][MaxProgramLen];
-} FilterSharedBlock;
-
-I32  filter_make(Filter* filter, U64 max_chunk_cands);
+I32 filter_make(Filter* filter, U64 max_chunk_cands);
 void filter_free(Filter* filter);
 void filter_mark_tests_dirty(Filter* filter);
 void filter_run(Filter* filter, FilterOptions* opt, U8** out_pass_counts);
+
+U32 filter_upload_slot_idx(U64 active_mask);
+U64 filter_pack_mask(U64 raw_mask);
+void filter_init_decode_info();
 
 HostDevice void filter_run_lane(U64 regs[32], const Instruction* prog, U32 prog_len) {
 	regs[0] = 0;
