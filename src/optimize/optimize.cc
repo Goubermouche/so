@@ -25,6 +25,8 @@ I32 optimizer_make(Optimizer* optimizer, OptimizerOptions* opt) {
 	optimizer->ms_total = 0.0;
 	optimizer->cur_max_scratch = 0;
 	optimizer->cur_active_mask = 0;
+	optimizer->cur_n_meta = 0;
+	optimizer->cur_imms = {};
 	optimizer->mem = arena_make(0);
 
 	if(filter_make(&optimizer->filter, optimizer->opt->batch_size)) {
@@ -97,10 +99,7 @@ I32 optimizer_run_iter(Optimizer* optimizer, EnumOptions* cfg, U32 len, U32 iter
 		if(emitted == 0) { break; }
 		total_emitted += emitted;
 
-		// candidate buffer + per-row stride
-		Instruction* p = optimizer->enumerate.out_d_cands;
-		const U64 stride = optimizer->enumerate.out_cand_stride;
-		B32 found = optimizer_filter_batch(optimizer, p, stride, emitted, len);
+		B32 found = optimizer_filter_batch(optimizer, len);
 		if(found) {
 			printf("    iter %u (%.2fM cand)\n", iter + 1, (F64)total_emitted / 1e6);
 			return 1;
@@ -122,6 +121,9 @@ B32 optimizer_run_length(Optimizer* optimizer, U32 len) {
 	EnumImmPool immediates;
 	enum_make_opcode_pool(&opcodes, effective_mask);
 	enum_make_imm_pool(&immediates, optimizer->prog);
+	enum_make_meta_host(&opcodes, optimizer->cur_meta, &optimizer->cur_n_meta);
+	optimizer->cur_imms = immediates;
+	filter_upload_meta(optimizer->cur_meta, optimizer->cur_n_meta, immediates.vals, immediates.n);
 
 	U32 max_scratch = Min(32, 5 + len);
 	optimizer->cur_max_scratch = max_scratch;
@@ -158,15 +160,53 @@ B32 optimizer_run_length(Optimizer* optimizer, U32 len) {
 	return false;
 }
 
-B32 optimizer_filter_batch(Optimizer* optimizer, Instruction* cand, U64 stride, U64 p_cnt, U32 len) {
+void optimizer_reconstruct_survivor(Optimizer* optimizer, U64 i, U32 len, Instruction* out_inst) {
+	Enum* e = &optimizer->enumerate;
+
+	// fetch the tuple for this cand
+	U64 tuple = 0;
+	dtoh_memcpy(&tuple, (const U64*)e->d_tuples + i, sizeof(U64));
+	// decode
+	const U32 parent_local_id = (U32)(tuple & 0xFFFFFFFFull);
+	const U32 op_idx = (U32)((tuple >> 32) & 0xFFull);
+	const U32 rd = (U32)((tuple >> 40) & 0x1Full);
+	const U32 rs1 = (U32)((tuple >> 45) & 0x1Full);
+	const U32 rs2_or_imm_idx = (U32)((tuple >> 50) & 0xFFull);
+	const B32 is_imm = (B32)((tuple >> 58) & 0x1ull);
+
+	// pull parent code (slot-0 will be overwritten by the built instruction)
+	EnumStateCode parent_code;
+	const EnumStateCode* d_parent_code = (const EnumStateCode*)e->d_last_front_code + e->out_parent_base + parent_local_id;
+	dtoh_memcpy(&parent_code, d_parent_code, sizeof(EnumStateCode));
+
+	// build slot-0 instruction from the tuple + meta + imm pool (host copies)
+	const EnumMeta& m = optimizer->cur_meta[op_idx];
+	Instruction built;
+	built.op = (InstructionOpcode)m.op;
+	for(U32 k = 0; k < 4; ++k) { built.operands[k].imm = 0; }
+	built.operands[m.dst_slot].reg = (Reg)rd;
+	if(m.src_slot >= 0) { built.operands[m.src_slot].reg = (Reg)rs1; }
+	if(!is_imm && m.src2_slot >= 0) { built.operands[m.src2_slot].reg = (Reg)rs2_or_imm_idx; }
+	if(is_imm && m.imm_slot >= 0) {
+		built.operands[m.imm_slot].imm = (U64)optimizer->cur_imms.vals[rs2_or_imm_idx];
+	}
+
+	out_inst[0] = built;
+	for(U32 k = 1; k < len; ++k) { out_inst[k] = parent_code.code[k]; }
+}
+
+B32 optimizer_filter_batch(Optimizer* optimizer, U32 len) {
+	Enum* e = &optimizer->enumerate;
+	const U64 p_cnt = e->out_n_cands;
 	if(p_cnt == 0) { return false; }
+
 	FilterOptions cfg;
 	cfg.live_mask = optimizer->live_out;
 	cfg.live_in_mask = optimizer->live_in;
 	cfg.active_mask = optimizer->cur_active_mask;
 	cfg.prog_len = len;
-	cfg.candidates = cand;
-	cfg.stride = stride;
+	cfg.tuples = (const U64*)e->d_tuples;
+	cfg.parent_code = (const EnumStateCode*)e->d_last_front_code + e->out_parent_base;
 	cfg.n_candidates = p_cnt;
 	cfg.test_in = optimizer->test_in;
 	cfg.target_out = optimizer->target_out;
@@ -184,10 +224,8 @@ B32 optimizer_filter_batch(Optimizer* optimizer, Instruction* cand, U64 stride, 
 	// via an SMT_State solver
 	for(U64 i = 0; i < p_cnt; ++i) {
 		if(pass_counts[i] == FilterTestCount) {
-			// pull the candidate instructions, convert to contiguous buffer from soa
 			Instruction survivor_inst[MaxProgramLen];
-			for(U32 k = 0; k < MaxProgramLen; ++k)
-				dtoh_memcpy(&survivor_inst[k], cand + (U64)k * stride + i, sizeof(Instruction));
+			optimizer_reconstruct_survivor(optimizer, i, len, survivor_inst);
 			const F64 t0_smt = get_time_ms();
 			Program survivor = {survivor_inst, len};
 			// verify via an SMT_State solver

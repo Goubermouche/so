@@ -29,6 +29,9 @@ typedef struct Optimizer {
 	// current pass context
 	U32 cur_max_scratch;
 	U64 cur_active_mask;
+	EnumMeta cur_meta[EnumMaxMeta];
+	U32 cur_n_meta;
+	EnumImmPool cur_imms;
 	// output
 	Program best;
 	// stats
@@ -48,8 +51,9 @@ void optimizer_free(Optimizer* optimizer);
 I32 optimizer_run(Optimizer* optimizer, Program* Program);
 B32 optimizer_run_length(Optimizer* optimizer, U32 len);
 I32 optimizer_run_iter(Optimizer* optimizer, EnumOptions* cfg, U32 len, U32 iter);
-B32 optimizer_filter_batch(Optimizer* optimizer, Instruction* cand, U64 stride, U64 p_cnt, U32 len);
+B32 optimizer_filter_batch(Optimizer* optimizer, U32 len);
 void optimizer_init_tests(Optimizer* optimizer);
+void optimizer_reconstruct_survivor(Optimizer* optimizer, U64 i, U32 len, Instruction* out_inst);
 
 void optimizer_log_startup(Optimizer* optimizer);
 void optimizer_log_results(Optimizer* optimizer, B32 found);

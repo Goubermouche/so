@@ -4,6 +4,7 @@
 #include "cpu/program.h"
 
 #define EnumImmPoolSize 64
+#define EnumMaxMeta 256
 
 typedef struct EnumProgram {
 	Instruction code[MaxProgramLen];
@@ -31,19 +32,20 @@ typedef struct EnumMeta {
 } EnumMeta;
 
 // node in the backward-search frontier
-typedef struct EnumState {
-	Instruction code[MaxProgramLen];
+typedef struct EnumStateHeader {
 	U64 demanded;			// registers that must be produced by earlier layers
 	U64 used_scratch; // scratch regs already allocated by this branch
 	I32 idx;
 	U32 _pad;
-} EnumState;
+} EnumStateHeader;
+
+typedef struct EnumStateCode {
+	Instruction code[MaxProgramLen];
+} EnumStateCode;
 
 // layer constants passed to the kernels
 typedef struct EnumLayer {
-	const EnumMeta* meta;
 	U32 n_meta;
-	const I64* imms;
 	U32 n_imms;
 	U64 live_in_mask;
 	U64 live_out_mask;
@@ -51,7 +53,7 @@ typedef struct EnumLayer {
 	U64 src_avail; // regs readable as sources at this layer
 	U64 scratch_mask;
 	U32 max_scratch;
-	B32 is_last_layer; // last (bottom) layer emits EnumProgram, not EnumState
+	B32 is_last_layer; // last (bottom) layer emits tuples, not new states
 } EnumLayer;
 
 typedef struct EnumOptions {
@@ -65,35 +67,34 @@ typedef struct EnumOptions {
 } EnumOptions;
 
 typedef struct Enum {
-	void* d_meta;
 	U32 n_meta;
-	void* d_imms;
 	U32 n_imms_cap;
-	U64 capacity; // max simultaneous frontier / emitted-candidate slots
-	void* d_front_a;
-	void* d_front_b;
+	U32 n_imms;
+	U64 capacity; // max simultaneous frontier slots
+	void* d_front_a_hdr;
+	void* d_front_a_code;
+	void* d_front_b_hdr;
+	void* d_front_b_code;
 	void* d_counts;
 	void* d_offsets;
-	void* d_out;
-	void* d_tuples; // last-layer phase-1 intermediate: U64 packed tuple per cand
+	void* d_tuples; // last-layer packed (op, rd, rs1, rs2/imm, parent) U64 per cand
 	void* d_scan_tmp;
 	U64 scan_tmp_bytes;
 	// last layer
 	B32 last_layer_ready;
-	void* d_last_front;
+	void* d_last_front_hdr;	 // parent headers
+	void* d_last_front_code; // parent codes
 	U64 last_layer_n_front;
 	U64 last_layer_cursor;
 	U64 last_layer_cap;
 	EnumLayer last_layer_ctx;
-	// output: slot-major SoA candidate buffer
-	// layout: out_d_cands[k * out_cand_stride + cand_idx] for the
-	// k-th instruction of candidate cand_idx (with k in [0, MaxProgramLen))
-	Instruction* out_d_cands;
-	U64 out_cand_stride;
+	// output:
 	U64 out_n_cands;
+	U64 out_parent_base;		 // parent index offset for tuples in this chunk
+	U64 out_n_parents_chunk; // number of parents covered by this chunk
 } Enum;
 
-I32  enum_make(Enum* e, U64 batch_size);
+I32 enum_make(Enum* e, U64 batch_size);
 void enum_free(Enum* e);
 
 // run the upper layers of the backward search, on return, the last-layer
@@ -102,8 +103,7 @@ void enum_free(Enum* e);
 void enum_run(Enum* e, EnumOptions* opt);
 
 // emit the next chunk of last-layer candidates, returns the number emitted
-// (also written to e->out_n_cands, with e->out_d_cands pointing to them),
-// returns 0 when the saved last-layer frontier is exhausted
+// (also written to e->out_n_cands)
 U64 enum_emit_batch(Enum* e);
 U64 enum_find_chunk_fit(U64* d_offsets, U64 cursor, U64 n_front, U64 total, U64 cap);
 

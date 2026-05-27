@@ -6,6 +6,8 @@ static __constant__ U8 c_unpack[FilterMaxActiveRegs];
 static U8 h_slot_idx[32];
 static U8 h_unpack[FilterMaxActiveRegs];
 static U64 h_last_active_mask = 0;
+static __constant__ U16 cf_meta_op[EnumMaxMeta];
+static __constant__ I64 cf_imms[EnumImmPoolSize];
 
 U32 filter_upload_slot_idx(U64 active_mask) {
 	active_mask |= 1ull;
@@ -82,6 +84,13 @@ void filter_init_decode_info() {
 	}
 	cudaMemcpyToSymbol(c_decode_info, h_decode_info, sizeof(h_decode_info));
 	h_decode_info_initialised = true;
+}
+
+void filter_upload_meta(const EnumMeta* h_meta, U32 n_meta, const I64* h_imms, U32 n_imms) {
+	U16 ops_buf[EnumMaxMeta];
+	for(U32 i = 0; i < n_meta && i < EnumMaxMeta; ++i) { ops_buf[i] = h_meta[i].op; }
+	cudaMemcpyToSymbol(cf_meta_op, ops_buf, n_meta * sizeof(U16));
+	cudaMemcpyToSymbol(cf_imms, h_imms, n_imms * sizeof(I64));
 }
 
 __device__ __forceinline__ DecodedInst filter_decode_one(const Instruction& in) {
@@ -234,8 +243,8 @@ __device__ __forceinline__ void sim_step(U64* regs, const DecodedInst* d) {
 extern __shared__ U8 g_smem[];
 
 __global__ __launch_bounds__(FilterSimThreadsPerBlock, 8) void opt_filter_kernel(
-	const Instruction* __restrict__ raw_soa,
-	U64 stride,
+	const U64* __restrict__ tuples,
+	const EnumStateCode* __restrict__ parent_code,
 	U8* __restrict__ pass_count,
 	U64 n_candidates,
 	U64 packed_live_mask,
@@ -254,8 +263,15 @@ __global__ __launch_bounds__(FilterSimThreadsPerBlock, 8) void opt_filter_kernel
 	{
 		const U32 total = FilterTestCount * active_count;
 		for(U32 i = tid; i < total; i += FilterSimThreadsPerBlock) {
-			const U32 t = i / active_count;
-			const U32 ps = i % active_count;
+			// derive (t, ps)
+			U32 t, ps;
+			if(active_count != 0) {
+				t = i / active_count;
+				ps = i - t * active_count;
+			} else {
+				t = 0;
+				ps = 0;
+			}
 			const U32 raw_r = (U32)c_unpack[ps];
 			s_test_in[(size_t)t * active_count + ps] = test_in[t].regs[raw_r];
 			s_target_out[(size_t)t * active_count + ps] = target_out[t].regs[raw_r];
@@ -263,17 +279,53 @@ __global__ __launch_bounds__(FilterSimThreadsPerBlock, 8) void opt_filter_kernel
 	}
 	__syncthreads();
 
-	// load decoded
+	// decode tuple, fetch parent code, build slot-0 DecodedInst, decode rest
 	DecodedInst prog[MaxProgramLen];
 	{
+		U64 t = 0;
+		U32 parent_local_id = 0;
+		U32 op_idx = 0;
+		U32 rd_raw = 0;
+		U32 rs1_raw = 0;
+		U32 rs2_or_imm_idx = 0;
+		B32 is_imm = false;
+		if(cand_id < n_candidates) {
+			t = tuples[cand_id];
+			parent_local_id = (U32)(t & 0xFFFFFFFFull);
+			op_idx = (U32)((t >> 32) & 0xFFull);
+			rd_raw = (U32)((t >> 40) & 0x1Full);
+			rs1_raw = (U32)((t >> 45) & 0x1Full);
+			rs2_or_imm_idx = (U32)((t >> 50) & 0xFFull);
+			is_imm = (B32)((t >> 58) & 0x1ull);
+		}
+
+		// slot 0: build decoded directly
+		const U32 op = (cand_id < n_candidates) ? (U32)cf_meta_op[op_idx] : (U32)InstructionOpcode_Nop;
+		DecodedInst built;
+		built.op = op;
+		built._pad = 0;
+		built.rd = c_slot_idx[rd_raw & 31];
+		if(is_imm) {
+			built.rs1 = c_slot_idx[rs1_raw & 31];
+			built.rs2 = 0;
+			built.imm = (U64)cf_imms[rs2_or_imm_idx];
+		} else {
+			built.rs1 = c_slot_idx[rs1_raw & 31];
+			built.rs2 = c_slot_idx[rs2_or_imm_idx & 31];
+			built.imm = 0;
+		}
+		prog[0] = built;
+
+		// slots 1..prog_len-1: pull from parent code via the cache
+		// slots >= prog_len: NOP
 #pragma unroll
-		for(U32 k = 0; k < MaxProgramLen; ++k) {
+		for(U32 k = 1; k < MaxProgramLen; ++k) {
 			Instruction raw;
 			if(cand_id < n_candidates && k < prog_len) {
-				raw = raw_soa[(U64)k * stride + cand_id];
+				raw = parent_code[parent_local_id].code[k];
 			} else {
 				raw.op = InstructionOpcode_Nop;
-// compare our results to the reference
+				// compare our results to the reference
 #pragma unroll
 				for(U32 j = 0; j < 4; ++j) { raw.operands[j].imm = 0; }
 			}
@@ -328,7 +380,6 @@ __global__ __launch_bounds__(FilterSimThreadsPerBlock, 8) void opt_filter_kernel
 
 I32 filter_make(Filter* filter, U64 max_chunk_cands) {
 	filter->max_chunk_cands = 0;
-	filter->d_cands = 0;
 	filter->d_test_in = 0;
 	filter->d_target_out = 0;
 	filter->d_pass_count = 0;
@@ -353,7 +404,7 @@ I32 filter_make(Filter* filter, U64 max_chunk_cands) {
 	}
 	usable_mem -= fixed_mem_bytes;
 
-	const U64 per_cand = (U64)MaxProgramLen * sizeof(Instruction) + sizeof(U8) + 2 * sizeof(U32);
+	const U64 per_cand = sizeof(U8) + 2 * sizeof(U32);
 	U64 chunk = usable_mem / per_cand;
 	const U64 hw_warps = (U64)p.multiProcessorCount * p.maxThreadsPerMultiProcessor / 32ull;
 	const U64 ideal_lower = hw_warps * 8ull;
@@ -367,8 +418,6 @@ I32 filter_make(Filter* filter, U64 max_chunk_cands) {
 	filter->max_chunk_cands = chunk;
 
 	// allocate persistent buffers
-	const U64 cands_bytes = filter->max_chunk_cands * (U64)MaxProgramLen * sizeof(Instruction);
-	dmalloc(&filter->d_cands, cands_bytes);
 	dmalloc(&filter->d_test_in, FilterTestCount * sizeof(CpuState));
 	dmalloc(&filter->d_target_out, FilterTestCount * sizeof(CpuState));
 	dmalloc(&filter->d_pass_count, filter->max_chunk_cands * sizeof(U8));
@@ -381,8 +430,7 @@ I32 filter_make(Filter* filter, U64 max_chunk_cands) {
 		if(!filter->h_pass_count) return 5;
 	}
 
-	const U64 mask_bytes = filter->max_chunk_cands * sizeof(U32) * 2;
-	const U64 used_mem = cands_bytes + fixed_mem_bytes + mask_bytes;
+	const U64 used_mem = fixed_mem_bytes + filter->max_chunk_cands * sizeof(U8);
 
 	printf("filter:\n");
 	printf("  chunk size: %zu cands\n", filter->max_chunk_cands);
@@ -392,7 +440,6 @@ I32 filter_make(Filter* filter, U64 max_chunk_cands) {
 }
 
 void filter_free(Filter* filter) {
-	if(filter->d_cands) cudaFree(filter->d_cands);
 	if(filter->d_test_in) cudaFree(filter->d_test_in);
 	if(filter->d_target_out) cudaFree(filter->d_target_out);
 	if(filter->d_pass_count) cudaFree(filter->d_pass_count);
@@ -405,7 +452,7 @@ void filter_mark_tests_dirty(Filter* filter) { filter->tests_dirty = true; }
 
 void filter_run(Filter* filter, FilterOptions* opt, U8** out_pass_counts) {
 	*out_pass_counts = filter->h_pass_count;
-	if(opt->candidates == 0 || opt->n_candidates == 0) return;
+	if(opt->tuples == 0 || opt->n_candidates == 0) return;
 
 	const U32 active_count = filter_upload_slot_idx(opt->active_mask);
 	if(active_count == 0 || active_count > FilterMaxActiveRegs) {
@@ -429,22 +476,18 @@ void filter_run(Filter* filter, FilterOptions* opt, U8** out_pass_counts) {
 	const U32 shmem_bytes = (U32)(2ull * FilterTestCount * active_count * sizeof(U64));
 	U64 done = 0;
 
-	// upload candidates as chunks so that we can process larger candidate sets
-	// without running out of device memory
 	while(done < opt->n_candidates) {
 		U64 this_chunk = (opt->n_candidates - done < filter->max_chunk_cands)
 											 ? (opt->n_candidates - done)
 											 : filter->max_chunk_cands;
-		const Instruction* d_chunk_cands = opt->candidates + done;
 
 		const U32 n_blocks =
 			(U32)((this_chunk + FilterSimThreadsPerBlock - 1) / FilterSimThreadsPerBlock);
 		dim3 grid(n_blocks);
 		dim3 block(FilterSimThreadsPerBlock);
-		// run chunk
 		opt_filter_kernel<<<grid, block, shmem_bytes>>>(
-			d_chunk_cands,
-			opt->stride,
+			opt->tuples + done,
+			opt->parent_code,
 			(U8*)filter->d_pass_count,
 			this_chunk,
 			packed_live_mask,

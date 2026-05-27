@@ -6,6 +6,7 @@
 #include "extensions/rv32m/run.cuh"
 #include "extensions/rv64i/run.cuh"
 #include "extensions/rv64m/run.cuh"
+#include "optimize/enumerate.cuh"
 
 #define FilterTestCount 32
 #define FilterWarpsPerBlock 8
@@ -22,7 +23,6 @@
 typedef struct Filter {
 	U64 max_chunk_cands;
 	// device
-	void* d_cands;
 	void* d_test_in;		// reference inputs
 	void* d_target_out; // reference outputs
 	void* d_pass_count; // per-candidate pass counts
@@ -37,8 +37,8 @@ typedef struct FilterOptions {
 	U64 live_in_mask;
 	U64 active_mask;
 	U32 prog_len;
-	const Instruction* candidates;
-	U64 stride;
+	const U64* tuples;                // per-cand U64 (parent_local_id, op, rd, rs1, rs2/imm, is_imm)
+	const EnumStateCode* parent_code; // indexed by parent_local_id
 	U64 n_candidates;
 	const CpuState* test_in;
 	const CpuState* target_out;
@@ -52,6 +52,7 @@ void filter_run(Filter* filter, FilterOptions* opt, U8** out_pass_counts);
 U32 filter_upload_slot_idx(U64 active_mask);
 U64 filter_pack_mask(U64 raw_mask);
 void filter_init_decode_info();
+void filter_upload_meta(const EnumMeta* h_meta, U32 n_meta, const I64* h_imms, U32 n_imms);
 
 HostDevice void filter_run_lane(U64 regs[32], const Instruction* prog, U32 prog_len) {
 	regs[0] = 0;
