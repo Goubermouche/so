@@ -51,18 +51,13 @@ U64 filter_pack_mask(U64 raw_mask) {
 	return out;
 }
 
-// TODO: unify w tester/cleanup
-typedef struct __align__(16) DecodedInst {
-	U32 op;
-	U8 rd;
-	U8 rs1;
-	U8 rs2;
-	U8 _pad;
-	U64 imm;
-} DecodedInst;
-
 static __constant__ U16 c_decode_info[InstructionOpcode_Count];
 static U16 h_decode_info[InstructionOpcode_Count];
+
+// 0 = cheap, 1 = mul, 2 = div
+static __constant__ U8 c_op_class[InstructionOpcode_Count];
+static U8 h_op_class[InstructionOpcode_Count];
+
 static B32 h_decode_info_initialised = false;
 
 void filter_init_decode_info() {
@@ -81,8 +76,29 @@ void filter_init_decode_info() {
 			}
 		}
 		h_decode_info[op] = (U16)((reg_mask & 0xF) | (imm_slot << 8));
+
+		U8 cls = 0;
+		switch(op) {
+			case InstructionOpcode_Mul:
+			case InstructionOpcode_Mulh:
+			case InstructionOpcode_Mulhsu:
+			case InstructionOpcode_Mulhu:
+			case InstructionOpcode_Mulw: cls = 1; break;
+			case InstructionOpcode_Div:
+			case InstructionOpcode_Divu:
+			case InstructionOpcode_Rem:
+			case InstructionOpcode_Remu:
+			case InstructionOpcode_Divw:
+			case InstructionOpcode_Divuw:
+			case InstructionOpcode_Remw:
+			case InstructionOpcode_Remuw: cls = 2; break;
+			default: break;
+		}
+		h_op_class[op] = cls;
 	}
+
 	cudaMemcpyToSymbol(c_decode_info, h_decode_info, sizeof(h_decode_info));
+	cudaMemcpyToSymbol(c_op_class, h_op_class, sizeof(h_op_class));
 	h_decode_info_initialised = true;
 }
 
@@ -93,156 +109,122 @@ void filter_upload_meta(const EnumMeta* h_meta, U32 n_meta, const I64* h_imms, U
 	cudaMemcpyToSymbol(cf_imms, h_imms, n_imms * sizeof(I64));
 }
 
-__device__ __forceinline__ DecodedInst filter_decode_one(const Instruction& in) {
-	DecodedInst d;
-	const U32 op = (U32)in.op;
-	d.op = op;
-	d._pad = 0;
-	if(op == (U32)InstructionOpcode_Nop || op >= (U32)InstructionOpcode_Count) {
-		d.rd = 0;
-		d.rs1 = 0;
-		d.rs2 = 0;
-		d.imm = 0;
-		return d;
+__device__ __forceinline__ U64 sim_cheap(U32 op, U64 a, U64 b, U64 imm) {
+	const U32 sh_b  = (U32)(b & 0x3F);
+	const U32 sh_i  = (U32)(imm & 0x3F);
+	const U32 sh_b5 = (U32)(b & 0x1F);
+	const U32 sh_i5 = (U32)(imm & 0x1F);
+	const U32 a32 = (U32)a;
+	const U32 b32 = (U32)b;
+	const U32 i32 = (U32)imm;
+
+	switch(op) {
+		case InstructionOpcode_Add:   return a + b;
+		case InstructionOpcode_Sub:   return a - b;
+		case InstructionOpcode_Sll:   return a << sh_b;
+		case InstructionOpcode_Slt:   return ((I64)a < (I64)b) ? 1ull : 0ull;
+		case InstructionOpcode_Sltu:  return (a < b) ? 1ull : 0ull;
+		case InstructionOpcode_Xor:   return a ^ b;
+		case InstructionOpcode_Srl:   return a >> sh_b;
+		case InstructionOpcode_Sra:   return (U64)((I64)a >> sh_b);
+		case InstructionOpcode_Or:    return a | b;
+		case InstructionOpcode_And:   return a & b;
+		case InstructionOpcode_Addi:  return a + imm;
+		case InstructionOpcode_Slti:  return ((I64)a < (I64)imm) ? 1ull : 0ull;
+		case InstructionOpcode_Sltiu: return (a < imm) ? 1ull : 0ull;
+		case InstructionOpcode_Xori:  return a ^ imm;
+		case InstructionOpcode_Ori:   return a | imm;
+		case InstructionOpcode_Andi:  return a & imm;
+		case InstructionOpcode_Slli:  return a << sh_i;
+		case InstructionOpcode_Srli:  return a >> sh_i;
+		case InstructionOpcode_Srai:  return (U64)((I64)a >> sh_i);
+		case InstructionOpcode_Lui:   return (U64)(I64)(I32)((U32)imm << 12);
+		case InstructionOpcode_Addiw: return (U64)(I64)(I32)(a32 + i32);
+		case InstructionOpcode_Slliw: return (U64)(I64)(I32)(a32 << sh_i5);
+		case InstructionOpcode_Srliw: return (U64)(I64)(I32)(a32 >> sh_i5);
+		case InstructionOpcode_Sraiw: return (U64)(I64)((I32)a32 >> sh_i5);
+		case InstructionOpcode_Addw:  return (U64)(I64)(I32)(a32 + b32);
+		case InstructionOpcode_Subw:  return (U64)(I64)(I32)(a32 - b32);
+		case InstructionOpcode_Sllw:  return (U64)(I64)(I32)(a32 << sh_b5);
+		case InstructionOpcode_Srlw:  return (U64)(I64)(I32)(a32 >> sh_b5);
+		case InstructionOpcode_Sraw:  return (U64)(I64)((I32)a32 >> sh_b5);
+		default: return 0;
 	}
-	const U32 info = (U32)c_decode_info[op];
-	const U32 reg_mask = info & 0xF;
-	const U32 imm_slot = (info >> 8) & 0xF;
-	d.rd = c_slot_idx[(U32)in.operands[0].reg & 31];
-	d.rs1 = (reg_mask & 0x2) ? c_slot_idx[(U32)in.operands[1].reg & 31] : (U8)0;
-	d.rs2 = (reg_mask & 0x4) ? c_slot_idx[(U32)in.operands[2].reg & 31] : (U8)0;
-	d.imm = (imm_slot < 4) ? in.operands[imm_slot].imm : (U64)0;
-	return d;
 }
 
-__device__ __forceinline__ void sim_step(U64* regs, const DecodedInst* d) {
-	const U32 op = d->op;
-	const U32 rd = (U32)d->rd;
-	const U64 a = regs[(U32)d->rs1];
-	const U64 b = regs[(U32)d->rs2];
-	const U64 imm = d->imm;
-
-	// TODO: extensions
-	U64 v;
+__device__ __forceinline__ U64 sim_mul(U32 op, U64 a, U64 b) {
 	switch(op) {
-		case InstructionOpcode_Add: v = a + b; break;
-		case InstructionOpcode_Sub: v = a - b; break;
-		case InstructionOpcode_Sll: v = a << (b & 0x3F); break;
-		case InstructionOpcode_Slt: v = ((I64)a < (I64)b) ? 1ull : 0ull; break;
-		case InstructionOpcode_Sltu: v = (a < b) ? 1ull : 0ull; break;
-		case InstructionOpcode_Xor: v = a ^ b; break;
-		case InstructionOpcode_Srl: v = a >> (b & 0x3F); break;
-		case InstructionOpcode_Sra: v = (U64)((I64)a >> (b & 0x3F)); break;
-		case InstructionOpcode_Or: v = a | b; break;
-		case InstructionOpcode_And: v = a & b; break;
-		case InstructionOpcode_Addi: v = a + imm; break;
-		case InstructionOpcode_Slti: v = ((I64)a < (I64)imm) ? 1ull : 0ull; break;
-		case InstructionOpcode_Sltiu: v = (a < imm) ? 1ull : 0ull; break;
-		case InstructionOpcode_Xori: v = a ^ imm; break;
-		case InstructionOpcode_Ori: v = a | imm; break;
-		case InstructionOpcode_Andi: v = a & imm; break;
-		case InstructionOpcode_Slli: v = a << (imm & 0x3F); break;
-		case InstructionOpcode_Srli: v = a >> (imm & 0x3F); break;
-		case InstructionOpcode_Srai: v = (U64)((I64)a >> (imm & 0x3F)); break;
-		case InstructionOpcode_Lui: v = (U64)(I64)(I32)((U32)imm << 12); break;
-		case InstructionOpcode_Addiw: v = (U64)(I64)(I32)((U32)a + (U32)imm); break;
-		case InstructionOpcode_Slliw: v = (U64)(I64)(I32)((U32)a << (imm & 0x1F)); break;
-		case InstructionOpcode_Srliw: v = (U64)(I64)(I32)((U32)a >> (imm & 0x1F)); break;
-		case InstructionOpcode_Sraiw: v = (U64)(I64)((I32)a >> (imm & 0x1F)); break;
-		case InstructionOpcode_Addw: v = (U64)(I64)(I32)((U32)a + (U32)b); break;
-		case InstructionOpcode_Subw: v = (U64)(I64)(I32)((U32)a - (U32)b); break;
-		case InstructionOpcode_Sllw: v = (U64)(I64)(I32)((U32)a << (b & 0x1F)); break;
-		case InstructionOpcode_Srlw: v = (U64)(I64)(I32)((U32)a >> (b & 0x1F)); break;
-		case InstructionOpcode_Sraw: v = (U64)(I64)((I32)a >> (b & 0x1F)); break;
-		case InstructionOpcode_Mul: v = a * b; break;
+		case InstructionOpcode_Mul: return a * b;
 		case InstructionOpcode_Mulh: {
 			const __int128 sa = (__int128)(I64)a;
 			const __int128 sb = (__int128)(I64)b;
-			v = (U64)(I64)((sa * sb) >> 64);
-		} break;
+			return (U64)(I64)((sa * sb) >> 64);
+		}
 		case InstructionOpcode_Mulhsu: {
 			const __int128 sa = (__int128)(I64)a;
 			const __int128 ub = (__int128)(unsigned __int128)b;
-			v = (U64)(I64)((sa * ub) >> 64);
-		} break;
+			return (U64)(I64)((sa * ub) >> 64);
+		}
 		case InstructionOpcode_Mulhu: {
 			const unsigned __int128 ua = (unsigned __int128)a;
 			const unsigned __int128 ub = (unsigned __int128)b;
-			v = (U64)((ua * ub) >> 64);
-		} break;
-		case InstructionOpcode_Div: {
-			const I64 sa = (I64)a;
-			const I64 sb = (I64)b;
-			I64 q;
-			if(sb == 0)
-				q = -1;
-			else if(sa == (I64)0x8000000000000000ULL && sb == -1)
-				q = sa;
-			else
-				q = sa / sb;
-			v = (U64)q;
-		} break;
-		case InstructionOpcode_Divu: v = (b == 0) ? (U64)-1 : (a / b); break;
-		case InstructionOpcode_Rem: {
-			const I64 sa = (I64)a;
-			const I64 sb = (I64)b;
-			I64 r;
-			if(sb == 0)
-				r = sa;
-			else if(sa == (I64)0x8000000000000000ULL && sb == -1)
-				r = 0;
-			else
-				r = sa % sb;
-			v = (U64)r;
-		} break;
-		case InstructionOpcode_Remu: v = (b == 0) ? a : (a % b); break;
+			return (U64)((ua * ub) >> 64);
+		}
 		case InstructionOpcode_Mulw: {
 			const I32 r = (I32)a * (I32)b;
-			v = (U64)(I64)r;
-		} break;
-		case InstructionOpcode_Divw: {
-			const I32 sa = (I32)a;
-			const I32 sb = (I32)b;
-			I32 r;
-			if(sb == 0)
-				r = -1;
-			else if(sa == (I32)0x80000000 && sb == -1)
-				r = sa;
-			else
-				r = sa / sb;
-			v = (U64)(I64)r;
-		} break;
-		case InstructionOpcode_Divuw: {
-			const U32 ua = (U32)a;
-			const U32 ub = (U32)b;
-			v = (U64)(I64)(I32)(ub == 0 ? (U32)-1 : ua / ub);
-		} break;
-		case InstructionOpcode_Remw: {
-			const I32 sa = (I32)a;
-			const I32 sb = (I32)b;
-			I32 r;
-			if(sb == 0)
-				r = sa;
-			else if(sa == (I32)0x80000000 && sb == -1)
-				r = 0;
-			else
-				r = sa % sb;
-			v = (U64)(I64)r;
-		} break;
-		case InstructionOpcode_Remuw: {
-			const U32 ua = (U32)a;
-			const U32 ub = (U32)b;
-			v = (U64)(I64)(I32)(ub == 0 ? ua : ua % ub);
-		} break;
-		default: return;
+			return (U64)(I64)r;
+		}
+		default: return 0;
 	}
+}
 
-	if(rd != 0) regs[rd] = v;
+__device__ __forceinline__ U64 sim_div(U32 op, U64 a, U64 b) {
+	switch(op) {
+		case InstructionOpcode_Div: {
+			const I64 sa = (I64)a, sb = (I64)b;
+			if(sb == 0) return (U64)(I64)-1;
+			if(sa == (I64)0x8000000000000000ULL && sb == -1) return (U64)sa;
+			return (U64)(sa / sb);
+		}
+		case InstructionOpcode_Divu: return (b == 0) ? (U64)-1 : (a / b);
+		case InstructionOpcode_Rem: {
+			const I64 sa = (I64)a, sb = (I64)b;
+			if(sb == 0) return (U64)sa;
+			if(sa == (I64)0x8000000000000000ULL && sb == -1) return 0;
+			return (U64)(sa % sb);
+		}
+		case InstructionOpcode_Remu: return (b == 0) ? a : (a % b);
+		case InstructionOpcode_Divw: {
+			const I32 sa = (I32)a, sb = (I32)b;
+			I32 r;
+			if(sb == 0) r = -1;
+			else if(sa == (I32)0x80000000 && sb == -1) r = sa;
+			else r = sa / sb;
+			return (U64)(I64)r;
+		}
+		case InstructionOpcode_Divuw: {
+			const U32 ua = (U32)a, ub = (U32)b;
+			return (U64)(I64)(I32)(ub == 0 ? (U32)-1 : ua / ub);
+		}
+		case InstructionOpcode_Remw: {
+			const I32 sa = (I32)a, sb = (I32)b;
+			I32 r;
+			if(sb == 0) r = sa;
+			else if(sa == (I32)0x80000000 && sb == -1) r = 0;
+			else r = sa % sb;
+			return (U64)(I64)r;
+		}
+		case InstructionOpcode_Remuw: {
+			const U32 ua = (U32)a, ub = (U32)b;
+			return (U64)(I64)(I32)(ub == 0 ? ua : ua % ub);
+		}
+		default: return 0;
+	}
 }
 
 extern __shared__ U8 g_smem[];
 
-__global__ __launch_bounds__(FilterSimThreadsPerBlock, 8) void opt_filter_kernel(
+__global__ __launch_bounds__(FilterSimThreadsPerBlock, 2) void opt_filter_kernel(
 	const U64* __restrict__ tuples,
 	const EnumStateCode* __restrict__ parent_code,
 	U8* __restrict__ pass_count,
@@ -254,109 +236,176 @@ __global__ __launch_bounds__(FilterSimThreadsPerBlock, 8) void opt_filter_kernel
 	const CpuState* __restrict__ target_out
 ) {
 	const U32 tid = threadIdx.x;
-	const U64 cand_id = (U64)blockIdx.x * FilterSimThreadsPerBlock + tid;
+	const U32 blk_n = blockDim.x;
+	const U64 cand_id = (U64)blockIdx.x * blk_n + tid;
 
-	U64* s_test_in = (U64*)g_smem;
+	U64* s_test_in    = (U64*)g_smem;
 	U64* s_target_out = s_test_in + (size_t)FilterTestCount * active_count;
+	// register file
+	U64* s_regs       = s_target_out + (size_t)FilterTestCount * active_count;
 
-	// load packed
+	// test load
 	{
-		const U32 total = FilterTestCount * active_count;
-		for(U32 i = tid; i < total; i += FilterSimThreadsPerBlock) {
-			// derive (t, ps)
-			U32 t, ps;
-			if(active_count != 0) {
-				t = i / active_count;
-				ps = i - t * active_count;
-			} else {
-				t = 0;
-				ps = 0;
-			}
-			const U32 raw_r = (U32)c_unpack[ps];
-			s_test_in[(size_t)t * active_count + ps] = test_in[t].regs[raw_r];
-			s_target_out[(size_t)t * active_count + ps] = target_out[t].regs[raw_r];
+		const U32 ac = active_count;
+		const U32 total = FilterTestCount * ac;
+		for(U32 i = tid; i < total; i += blk_n) {
+			const U32 t  = i / ac;
+			const U32 r  = i - t * ac;
+			const U32 raw_r = (U32)c_unpack[r];
+			s_test_in   [i] = test_in   [t].regs[raw_r];
+			s_target_out[i] = target_out[t].regs[raw_r];
 		}
 	}
 	__syncthreads();
 
-	// decode tuple, fetch parent code, build slot-0 DecodedInst, decode rest
-	DecodedInst prog[MaxProgramLen];
+	// decode program
+	U32 op_0=0,  op_1=0,  op_2=0,  op_3=0,  op_4=0,  op_5=0,  op_6=0,  op_7=0;
+	U32 rd_0=0,  rd_1=0,  rd_2=0,  rd_3=0,  rd_4=0,  rd_5=0,  rd_6=0,  rd_7=0;
+	U32 rs1_0=0, rs1_1=0, rs1_2=0, rs1_3=0, rs1_4=0, rs1_5=0, rs1_6=0, rs1_7=0;
+	U32 rs2_0=0, rs2_1=0, rs2_2=0, rs2_3=0, rs2_4=0, rs2_5=0, rs2_6=0, rs2_7=0;
+	U64 imm_0=0, imm_1=0, imm_2=0, imm_3=0, imm_4=0, imm_5=0, imm_6=0, imm_7=0;
+
+	U32 op_class_or = 0;
+
 	{
 		U64 t = 0;
 		U32 parent_local_id = 0;
-		U32 op_idx = 0;
-		U32 rd_raw = 0;
-		U32 rs1_raw = 0;
-		U32 rs2_or_imm_idx = 0;
-		B32 is_imm = false;
+		U32 op_idx          = 0;
+		U32 rd_raw          = 0;
+		U32 rs1_raw         = 0;
+		U32 rs2_or_imm_idx  = 0;
+		B32 is_imm          = false;
 		if(cand_id < n_candidates) {
 			t = tuples[cand_id];
 			parent_local_id = (U32)(t & 0xFFFFFFFFull);
-			op_idx = (U32)((t >> 32) & 0xFFull);
-			rd_raw = (U32)((t >> 40) & 0x1Full);
-			rs1_raw = (U32)((t >> 45) & 0x1Full);
-			rs2_or_imm_idx = (U32)((t >> 50) & 0xFFull);
-			is_imm = (B32)((t >> 58) & 0x1ull);
+			op_idx          = (U32)((t >> 32) & 0xFFull);
+			rd_raw          = (U32)((t >> 40) & 0x1Full);
+			rs1_raw         = (U32)((t >> 45) & 0x1Full);
+			rs2_or_imm_idx  = (U32)((t >> 50) & 0xFFull);
+			is_imm          = (B32)((t >> 58) & 0x1ull);
 		}
 
-		// slot 0: build decoded directly
-		const U32 op = (cand_id < n_candidates) ? (U32)cf_meta_op[op_idx] : (U32)InstructionOpcode_Nop;
-		DecodedInst built;
-		built.op = op;
-		built._pad = 0;
-		built.rd = c_slot_idx[rd_raw & 31];
+		// slot 0
+		op_0  = (cand_id < n_candidates) ? (U32)cf_meta_op[op_idx]
+		                                 : (U32)InstructionOpcode_Nop;
+		rd_0  = (U32)c_slot_idx[rd_raw & 31];
+		rs1_0 = (U32)c_slot_idx[rs1_raw & 31];
 		if(is_imm) {
-			built.rs1 = c_slot_idx[rs1_raw & 31];
-			built.rs2 = 0;
-			built.imm = (U64)cf_imms[rs2_or_imm_idx];
+			rs2_0 = 0;
+			imm_0 = (U64)cf_imms[rs2_or_imm_idx];
 		} else {
-			built.rs1 = c_slot_idx[rs1_raw & 31];
-			built.rs2 = c_slot_idx[rs2_or_imm_idx & 31];
-			built.imm = 0;
+			rs2_0 = (U32)c_slot_idx[rs2_or_imm_idx & 31];
+			imm_0 = 0;
 		}
-		prog[0] = built;
+		op_class_or |= (U32)c_op_class[op_0];
 
-		// slots 1..prog_len-1: pull from parent code via the cache
-		// slots >= prog_len: NOP
-#pragma unroll
-		for(U32 k = 1; k < MaxProgramLen; ++k) {
-			Instruction raw;
-			if(cand_id < n_candidates && k < prog_len) {
-				raw = parent_code[parent_local_id].code[k];
-			} else {
-				raw.op = InstructionOpcode_Nop;
-				// compare our results to the reference
-#pragma unroll
-				for(U32 j = 0; j < 4; ++j) { raw.operands[j].imm = 0; }
-			}
-			prog[k] = filter_decode_one(raw);
-		}
+		// slots 1..prog_len-1: decode parent_code instructions
+		#define DECODE_SLOT(K)                                                                          \
+			do {                                                                                          \
+				U32 op_ = InstructionOpcode_Nop;                                                            \
+				U32 rd_ = 0, rs1_ = 0, rs2_ = 0;                                                            \
+				U64 imm_ = 0;                                                                               \
+				if(cand_id < n_candidates && K < prog_len) {                                                \
+					const Instruction* in_ = &parent_code[parent_local_id].code[K];                           \
+					op_ = (U32)in_->op;                                                                       \
+					const U32 info_  = (U32)c_decode_info[op_];                                               \
+					const U32 rmask_ = info_ & 0xF;                                                           \
+					const U32 islot_ = (info_ >> 8) & 0xF;                                                    \
+					rd_  = c_slot_idx[(U32)in_->operands[0].reg & 31];                                        \
+					rs1_ = (rmask_ & 0x2) ? (U32)c_slot_idx[(U32)in_->operands[1].reg & 31] : 0u;             \
+					rs2_ = (rmask_ & 0x4) ? (U32)c_slot_idx[(U32)in_->operands[2].reg & 31] : 0u;             \
+					imm_ = (islot_ < 4) ? in_->operands[islot_].imm : 0ull;                                   \
+				}                                                                                           \
+				op_##K = op_;                                                                               \
+				rd_##K = rd_;                                                                               \
+				rs1_##K = rs1_;                                                                             \
+				rs2_##K = rs2_;                                                                             \
+				imm_##K = imm_;                                                                             \
+				op_class_or |= (U32)c_op_class[op_];                                                        \
+			} while(0)
+
+		DECODE_SLOT(1);
+		DECODE_SLOT(2);
+		DECODE_SLOT(3);
+		DECODE_SLOT(4);
+		DECODE_SLOT(5);
+		DECODE_SLOT(6);
+		DECODE_SLOT(7);
+		#undef DECODE_SLOT
 	}
+
+	// warp-wide OR. when no lane in this warp has a MUL/DIV op, the whole warp branches past the
+	// heavy paths
+	U32 wc = op_class_or;
+	wc |= __shfl_xor_sync(0xFFFFFFFFu, wc, 1);
+	wc |= __shfl_xor_sync(0xFFFFFFFFu, wc, 2);
+	wc |= __shfl_xor_sync(0xFFFFFFFFu, wc, 4);
+	wc |= __shfl_xor_sync(0xFFFFFFFFu, wc, 8);
+	wc |= __shfl_xor_sync(0xFFFFFFFFu, wc, 16);
+	const B32 warp_has_mul = (wc & 1u) != 0;
+	const B32 warp_has_div = (wc & 2u) != 0;
 
 	if(cand_id >= n_candidates) return;
 
-	// run tests
 	U32 pass_mask = 0;
 	B32 lane_alive = true;
 
+	#pragma unroll 1
 	for(U32 t = 0; t < FilterTestCount; ++t) {
 		B32 ok = false;
 		if(lane_alive) {
-			U64 regs[FilterMaxActiveRegs];
+			// load this test's inputs
+			{
+				const U64* row = s_test_in + (size_t)t * active_count;
+				#pragma unroll 1
+				for(U32 r = 0; r < active_count; ++r) {
+					s_regs[(size_t)r * blk_n + tid] = row[r];
+				}
+				s_regs[tid] = 0ull; // x0
+			}
 
-			for(U32 i = 0; i < active_count; ++i) { regs[i] = s_test_in[(size_t)t * active_count + i]; }
-			regs[0] = 0;
+			// step macro
+			#define RUN_STEP(K)                                                                             \
+				do {                                                                                          \
+					const U32 op_  = op_##K;                                                                    \
+					const U32 rd_  = rd_##K;                                                                    \
+					const U32 rs1_ = rs1_##K;                                                                   \
+					const U32 rs2_ = rs2_##K;                                                                   \
+					const U64 imm_ = imm_##K;                                                                   \
+					const U64 a_   = s_regs[(size_t)rs1_ * blk_n + tid];                                        \
+					const U64 b_   = s_regs[(size_t)rs2_ * blk_n + tid];                                        \
+					U64 v_         = sim_cheap(op_, a_, b_, imm_);                                              \
+					if(warp_has_mul) {                                                                          \
+						const U32 cls_ = (U32)c_op_class[op_];                                                    \
+						if(cls_ == 1u) v_ = sim_mul(op_, a_, b_);                                                 \
+					}                                                                                           \
+					if(warp_has_div) {                                                                          \
+						const U32 cls_ = (U32)c_op_class[op_];                                                    \
+						if(cls_ == 2u) v_ = sim_div(op_, a_, b_);                                                 \
+					}                                                                                           \
+					s_regs[(size_t)rd_ * blk_n + tid] = v_;                                                     \
+					s_regs[tid] = 0ull;                                                                         \
+				} while(0)
 
-			for(U32 i = 0; i < prog_len; ++i) { sim_step(regs, &prog[i]); }
+			const U32 pl = prog_len;
+			if(pl > 0) RUN_STEP(0);
+			if(pl > 1) RUN_STEP(1);
+			if(pl > 2) RUN_STEP(2);
+			if(pl > 3) RUN_STEP(3);
+			if(pl > 4) RUN_STEP(4);
+			if(pl > 5) RUN_STEP(5);
+			if(pl > 6) RUN_STEP(6);
+			if(pl > 7) RUN_STEP(7);
+			#undef RUN_STEP
 
-			// compare against broadcast
+			// compare against live-out targets
 			ok = true;
+			const U64* expected_row = s_target_out + (size_t)t * active_count;
 			U64 m = packed_live_mask;
 			while(m) {
 				const U32 r = __ffsll((long long)m) - 1;
 				m &= m - 1;
-				const U64 expected = s_target_out[(size_t)t * active_count + r];
-				if(regs[r] != expected) {
+				if(s_regs[(size_t)r * blk_n + tid] != expected_row[r]) {
 					ok = false;
 					break;
 				}
@@ -374,8 +423,7 @@ __global__ __launch_bounds__(FilterSimThreadsPerBlock, 8) void opt_filter_kernel
 	}
 
 	// pass results
-	const B32 all_passed = (pass_mask == 0xFFFFFFFFu);
-	pass_count[cand_id] = all_passed ? (U8)FilterTestCount : (U8)0;
+	pass_count[cand_id] = (pass_mask == 0xFFFFFFFFu) ? (U8)FilterTestCount : (U8)0;
 }
 
 I32 filter_make(Filter* filter, U64 max_chunk_cands) {
@@ -412,17 +460,14 @@ I32 filter_make(Filter* filter, U64 max_chunk_cands) {
 	if(chunk < 1024) chunk = 1024;
 	if(max_chunk_cands != 0 && max_chunk_cands < chunk) chunk = max_chunk_cands;
 	const U64 cpb = FilterCandsPerBlock;
-	// align to warp block boundaries
 	const U64 padded_chunk = chunk + cpb - 1;
 	chunk = (padded_chunk / cpb) * cpb;
 	filter->max_chunk_cands = chunk;
 
-	// allocate persistent buffers
 	dmalloc(&filter->d_test_in, FilterTestCount * sizeof(CpuState));
 	dmalloc(&filter->d_target_out, FilterTestCount * sizeof(CpuState));
 	dmalloc(&filter->d_pass_count, filter->max_chunk_cands * sizeof(U8));
 
-	// pinned host buffer for pass_count copyback, reused across all chunks
 	filter->h_pass_count_cap = filter->max_chunk_cands;
 	if(cudaMallocHost((void**)&filter->h_pass_count, filter->h_pass_count_cap * sizeof(U8)) !=
 		 cudaSuccess) {
@@ -473,18 +518,28 @@ void filter_run(Filter* filter, FilterOptions* opt, U8** out_pass_counts) {
 		filter->tests_dirty = false;
 	}
 
-	const U32 shmem_bytes = (U32)(2ull * FilterTestCount * active_count * sizeof(U64));
-	U64 done = 0;
+	const U64 ts_pair = 2ull * (U64)FilterTestCount * (U64)active_count * sizeof(U64);
+	const U64 shared_cap = (U64)48 * 1024;
+	U64 rf_cap = (shared_cap > ts_pair) ? (shared_cap - ts_pair) : 0;
+	U64 max_threads_by_shared = rf_cap / ((U64)active_count * sizeof(U64));
+	max_threads_by_shared &= ~(U64)31; // round down to warp
+	if(max_threads_by_shared < 32) max_threads_by_shared = 32;
+	if(max_threads_by_shared > FilterSimThreadsPerBlock)
+		max_threads_by_shared = FilterSimThreadsPerBlock;
+	const U32 block_threads = (U32)max_threads_by_shared;
 
+	const U64 rf = (U64)block_threads * (U64)active_count * sizeof(U64);
+	const U32 shmem_bytes = (U32)(ts_pair + rf);
+
+	U64 done = 0;
 	while(done < opt->n_candidates) {
 		U64 this_chunk = (opt->n_candidates - done < filter->max_chunk_cands)
 											 ? (opt->n_candidates - done)
 											 : filter->max_chunk_cands;
 
-		const U32 n_blocks =
-			(U32)((this_chunk + FilterSimThreadsPerBlock - 1) / FilterSimThreadsPerBlock);
+		const U32 n_blocks = (U32)((this_chunk + block_threads - 1) / block_threads);
 		dim3 grid(n_blocks);
-		dim3 block(FilterSimThreadsPerBlock);
+		dim3 block(block_threads);
 		opt_filter_kernel<<<grid, block, shmem_bytes>>>(
 			opt->tuples + done,
 			opt->parent_code,
