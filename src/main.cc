@@ -173,8 +173,17 @@ I32 main(I32 argc, C8** argv) {
 		Optimizer optimizer;
 		optimizer_make(&optimizer, &opt);
 		Program program;
-		if(program_parse(&program, scratch, str_make(source, source_len))) { return 1; }
-		if(optimizer_run(&optimizer, &program)) { return 1; }
+		if(program_parse(&program, scratch, str_make(source, source_len))) {
+			optimizer_free(&optimizer);
+			arena_free(scratch);
+			return 1;
+		}
+		if(optimizer_run(&optimizer, &program)) {
+			optimizer_free(&optimizer);
+			arena_free(scratch);
+			return 1;
+		}
+		optimizer_free(&optimizer);
 		arena_free(scratch);
 	}
 

@@ -27,6 +27,7 @@ I32 optimizer_make(Optimizer* optimizer, OptimizerOptions* opt) {
 	optimizer->cur_active_mask = 0;
 	optimizer->cur_n_meta = 0;
 	optimizer->cur_imms = {};
+	optimizer->counterexample_count = 0;
 	optimizer->mem = arena_make(0);
 
 	if(filter_make(&optimizer->filter, optimizer->opt->batch_size)) {
