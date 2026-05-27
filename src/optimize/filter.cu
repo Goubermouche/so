@@ -7,6 +7,7 @@ static U8 h_slot_idx[32];
 static U8 h_unpack[FilterMaxActiveRegs];
 static U64 h_last_active_mask = 0;
 static __constant__ U16 cf_meta_op[EnumMaxMeta];
+static __constant__ U8 cf_meta_cls[EnumMaxMeta];
 static __constant__ I64 cf_imms[EnumImmPoolSize];
 
 U32 filter_upload_slot_idx(U64 active_mask) {
@@ -75,7 +76,6 @@ void filter_init_decode_info() {
 				break;
 			}
 		}
-		h_decode_info[op] = (U16)((reg_mask & 0xF) | (imm_slot << 8));
 
 		U8 cls = 0;
 		switch(op) {
@@ -95,6 +95,8 @@ void filter_init_decode_info() {
 			default: break;
 		}
 		h_op_class[op] = cls;
+
+		h_decode_info[op] = (U16)((reg_mask & 0xF) | (imm_slot << 8) | ((U32)cls << 12));
 	}
 
 	cudaMemcpyToSymbol(c_decode_info, h_decode_info, sizeof(h_decode_info));
@@ -104,8 +106,13 @@ void filter_init_decode_info() {
 
 void filter_upload_meta(const EnumMeta* h_meta, U32 n_meta, const I64* h_imms, U32 n_imms) {
 	U16 ops_buf[EnumMaxMeta];
-	for(U32 i = 0; i < n_meta && i < EnumMaxMeta; ++i) { ops_buf[i] = h_meta[i].op; }
+	U8 cls_buf[EnumMaxMeta];
+	for(U32 i = 0; i < n_meta && i < EnumMaxMeta; ++i) {
+		ops_buf[i] = h_meta[i].op;
+		cls_buf[i] = h_op_class[h_meta[i].op];
+	}
 	cudaMemcpyToSymbol(cf_meta_op, ops_buf, n_meta * sizeof(U16));
+	cudaMemcpyToSymbol(cf_meta_cls, cls_buf, n_meta * sizeof(U8));
 	cudaMemcpyToSymbol(cf_imms, h_imms, n_imms * sizeof(I64));
 }
 
@@ -222,15 +229,24 @@ __device__ __forceinline__ U64 sim_div(U32 op, U64 a, U64 b) {
 	}
 }
 
+__device__ __forceinline__ U64 sim_dispatch(
+	U32 op, U64 a, U64 b, U64 imm, U32 cls, B32 warp_has_mul, B32 warp_has_div
+) {
+	if(warp_has_mul && cls == 1u) return sim_mul(op, a, b);
+	if(warp_has_div && cls == 2u) return sim_div(op, a, b);
+	return sim_cheap(op, a, b, imm);
+}
+
 extern __shared__ U8 g_smem[];
 
+template<U32 PROG_LEN>
 __global__ __launch_bounds__(FilterSimThreadsPerBlock, 2) void opt_filter_kernel(
 	const U64* __restrict__ tuples,
 	const EnumStateCode* __restrict__ parent_code,
 	U8* __restrict__ pass_count,
 	U64 n_candidates,
 	U64 packed_live_mask,
-	U32 prog_len,
+	U64 packed_live_in_mask,
 	U32 active_count,
 	const CpuState* __restrict__ test_in,
 	const CpuState* __restrict__ target_out
@@ -241,8 +257,7 @@ __global__ __launch_bounds__(FilterSimThreadsPerBlock, 2) void opt_filter_kernel
 
 	U64* s_test_in    = (U64*)g_smem;
 	U64* s_target_out = s_test_in + (size_t)FilterTestCount * active_count;
-	// register file
-	U64* s_regs       = s_target_out + (size_t)FilterTestCount * active_count;
+	U64* s_regs = s_target_out + (size_t)FilterTestCount * active_count;
 
 	// test load
 	{
@@ -264,7 +279,7 @@ __global__ __launch_bounds__(FilterSimThreadsPerBlock, 2) void opt_filter_kernel
 	U32 rs1_0=0, rs1_1=0, rs1_2=0, rs1_3=0, rs1_4=0, rs1_5=0, rs1_6=0, rs1_7=0;
 	U32 rs2_0=0, rs2_1=0, rs2_2=0, rs2_3=0, rs2_4=0, rs2_5=0, rs2_6=0, rs2_7=0;
 	U64 imm_0=0, imm_1=0, imm_2=0, imm_3=0, imm_4=0, imm_5=0, imm_6=0, imm_7=0;
-
+	U32 cls_packed = 0;
 	U32 op_class_or = 0;
 
 	{
@@ -297,7 +312,9 @@ __global__ __launch_bounds__(FilterSimThreadsPerBlock, 2) void opt_filter_kernel
 			rs2_0 = (U32)c_slot_idx[rs2_or_imm_idx & 31];
 			imm_0 = 0;
 		}
-		op_class_or |= (U32)c_op_class[op_0];
+		const U32 cls0 = (cand_id < n_candidates) ? (U32)cf_meta_cls[op_idx] : 0u;
+		cls_packed |= (cls0 & 0x3u);
+		op_class_or |= cls0;
 
 		// slots 1..prog_len-1: decode parent_code instructions
 		#define DECODE_SLOT(K)                                                                          \
@@ -305,12 +322,14 @@ __global__ __launch_bounds__(FilterSimThreadsPerBlock, 2) void opt_filter_kernel
 				U32 op_ = InstructionOpcode_Nop;                                                            \
 				U32 rd_ = 0, rs1_ = 0, rs2_ = 0;                                                            \
 				U64 imm_ = 0;                                                                               \
-				if(cand_id < n_candidates && K < prog_len) {                                                \
+				U32 cls_K = 0;                                                                              \
+				if(cand_id < n_candidates && (K) < PROG_LEN) {                                              \
 					const Instruction* in_ = &parent_code[parent_local_id].code[K];                           \
 					op_ = (U32)in_->op;                                                                       \
 					const U32 info_  = (U32)c_decode_info[op_];                                               \
 					const U32 rmask_ = info_ & 0xF;                                                           \
 					const U32 islot_ = (info_ >> 8) & 0xF;                                                    \
+					cls_K            = (info_ >> 12) & 0x3;                                                   \
 					rd_  = c_slot_idx[(U32)in_->operands[0].reg & 31];                                        \
 					rs1_ = (rmask_ & 0x2) ? (U32)c_slot_idx[(U32)in_->operands[1].reg & 31] : 0u;             \
 					rs2_ = (rmask_ & 0x4) ? (U32)c_slot_idx[(U32)in_->operands[2].reg & 31] : 0u;             \
@@ -321,7 +340,8 @@ __global__ __launch_bounds__(FilterSimThreadsPerBlock, 2) void opt_filter_kernel
 				rs1_##K = rs1_;                                                                             \
 				rs2_##K = rs2_;                                                                             \
 				imm_##K = imm_;                                                                             \
-				op_class_or |= (U32)c_op_class[op_];                                                        \
+				cls_packed |= (cls_K & 0x3u) << ((K) * 2);                                                  \
+				op_class_or |= cls_K;                                                                       \
 			} while(0)
 
 		DECODE_SLOT(1);
@@ -357,11 +377,13 @@ __global__ __launch_bounds__(FilterSimThreadsPerBlock, 2) void opt_filter_kernel
 			// load this test's inputs
 			{
 				const U64* row = s_test_in + (size_t)t * active_count;
-				#pragma unroll 1
-				for(U32 r = 0; r < active_count; ++r) {
+				U64 m = packed_live_in_mask;
+				while(m) {
+					const U32 r = __ffsll((long long)m) - 1;
+					m &= m - 1;
 					s_regs[(size_t)r * blk_n + tid] = row[r];
 				}
-				s_regs[tid] = 0ull; // x0
+				s_regs[tid] = 0ull;
 			}
 
 			// step macro
@@ -372,22 +394,14 @@ __global__ __launch_bounds__(FilterSimThreadsPerBlock, 2) void opt_filter_kernel
 					const U32 rs1_ = rs1_##K;                                                                   \
 					const U32 rs2_ = rs2_##K;                                                                   \
 					const U64 imm_ = imm_##K;                                                                   \
+					const U32 cls_ = (cls_packed >> ((K) * 2)) & 0x3u;                                          \
 					const U64 a_   = s_regs[(size_t)rs1_ * blk_n + tid];                                        \
 					const U64 b_   = s_regs[(size_t)rs2_ * blk_n + tid];                                        \
-					U64 v_         = sim_cheap(op_, a_, b_, imm_);                                              \
-					if(warp_has_mul) {                                                                          \
-						const U32 cls_ = (U32)c_op_class[op_];                                                    \
-						if(cls_ == 1u) v_ = sim_mul(op_, a_, b_);                                                 \
-					}                                                                                           \
-					if(warp_has_div) {                                                                          \
-						const U32 cls_ = (U32)c_op_class[op_];                                                    \
-						if(cls_ == 2u) v_ = sim_div(op_, a_, b_);                                                 \
-					}                                                                                           \
-					s_regs[(size_t)rd_ * blk_n + tid] = v_;                                                     \
-					s_regs[tid] = 0ull;                                                                         \
+					const U64 v_   = sim_dispatch(op_, a_, b_, imm_, cls_, warp_has_mul, warp_has_div);         \
+					if(rd_ != 0u) { s_regs[(size_t)rd_ * blk_n + tid] = v_; }                                   \
 				} while(0)
 
-			const U32 pl = prog_len;
+			const U32 pl = PROG_LEN;
 			if(pl > 0) RUN_STEP(0);
 			if(pl > 1) RUN_STEP(1);
 			if(pl > 2) RUN_STEP(2);
@@ -510,6 +524,7 @@ void filter_run(Filter* filter, FilterOptions* opt, U8** out_pass_counts) {
 		return;
 	}
 	const U64 packed_live_mask = filter_pack_mask(opt->live_mask);
+	const U64 packed_live_in_mask = filter_pack_mask(opt->live_in_mask);
 
 	if(filter->tests_dirty) {
 		const U64 test_size = FilterTestCount * sizeof(CpuState);
@@ -540,17 +555,33 @@ void filter_run(Filter* filter, FilterOptions* opt, U8** out_pass_counts) {
 		const U32 n_blocks = (U32)((this_chunk + block_threads - 1) / block_threads);
 		dim3 grid(n_blocks);
 		dim3 block(block_threads);
-		opt_filter_kernel<<<grid, block, shmem_bytes>>>(
-			opt->tuples + done,
-			opt->parent_code,
-			(U8*)filter->d_pass_count,
-			this_chunk,
-			packed_live_mask,
-			opt->prog_len,
-			active_count,
-			(const CpuState*)filter->d_test_in,
-			(const CpuState*)filter->d_target_out
-		);
+
+		#define LAUNCH(N)                                                                              \
+			opt_filter_kernel<N><<<grid, block, shmem_bytes>>>(                                          \
+				opt->tuples + done,                                                                        \
+				opt->parent_code,                                                                          \
+				(U8*)filter->d_pass_count,                                                                 \
+				this_chunk,                                                                                \
+				packed_live_mask,                                                                          \
+				packed_live_in_mask,                                                                       \
+				active_count,                                                                              \
+				(const CpuState*)filter->d_test_in,                                                        \
+				(const CpuState*)filter->d_target_out                                                      \
+			)
+		switch(opt->prog_len) {
+			case 1: LAUNCH(1); break;
+			case 2: LAUNCH(2); break;
+			case 3: LAUNCH(3); break;
+			case 4: LAUNCH(4); break;
+			case 5: LAUNCH(5); break;
+			case 6: LAUNCH(6); break;
+			case 7: LAUNCH(7); break;
+			case 8: LAUNCH(8); break;
+			default:
+				fprintf(stderr, "error: filter_run: unsupported prog_len=%u\n", opt->prog_len);
+				return;
+		}
+		#undef LAUNCH
 		check_cuda(cudaGetLastError(), "filter kernel launch");
 		dtoh_memcpy(filter->h_pass_count + done, filter->d_pass_count, this_chunk * sizeof(U8));
 		done += this_chunk;
