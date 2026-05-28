@@ -42,7 +42,7 @@ I8 instruction_shape_src2_slot(InstructionShape s) {
 S8 operand_to_string(Arena* a, InstructionOperand op, InstructionOperandType ty) {
 	switch(ty) {
 		case InstructionOperandType_Reg: return reg_name((U32)op.reg);
-		case InstructionOperandType_Imm: return str_make_format(a, "%lld", (I64)op.imm);
+		case InstructionOperandType_Imm: return s8_make_fmt(a, "%lld", (I64)op.imm);
 		default: return S8("?");
 	}
 }

@@ -68,7 +68,7 @@ static void InstructionDatabase_build_host(InstructionDB* d) {
 InstructionOpcode instruction_db_find(S8 name, InstructionOperandType* ops, U8 op_cnt) {
 	for(U32 i = 0; i < (U32)InstructionOpcode_Count; ++i) {
 		InstructionInfo* info = &instruction_db_host.row[i];
-		if(!str_match(name, info->name)) { continue; }
+		if(!s8_equals(name, info->name)) { continue; }
 		if(info->operand_count != op_cnt) { continue; }
 		B32 ok = true;
 

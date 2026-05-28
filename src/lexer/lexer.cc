@@ -106,7 +106,7 @@ LexerToken lexer_next_tok_identifier(Lexer* lexer) {
 	}
 
 	U64 end = lexer->index - 1;
-	lexer->curr_string = str_make(lexer->source.ptr + start, end - start);
+	lexer->curr_string = s8_make(lexer->source.ptr + start, end - start);
 	auto LexerToken = lexer_str_to_tok(lexer->curr_string);
 
 	if(LexerToken != LexerToken_Unknown) { return lexer->curr = LexerToken; }
@@ -174,7 +174,7 @@ LexerToken lexer_str_to_tok(S8 str) {
 #define ABI_SIZE (sizeof(abi_map) / sizeof(abi_map[0]))
 
 	for(size_t i = 0; i < ABI_SIZE; ++i) {
-		if(str_match_cstr(str, abi_map[i].name)) return abi_map[i].tok;
+		if(s8_equals_cstr(str, abi_map[i].name)) return abi_map[i].tok;
 	}
 
 	return LexerToken_Unknown;

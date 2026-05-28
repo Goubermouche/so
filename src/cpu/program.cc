@@ -54,7 +54,7 @@ I32 program_parse(Program* Program, Arena* a, S8 source) {
 
 			// pseudo-op rewriting
 			//   sext.w rd, rs1   ->   addiw rd, rs1, 0
-			if(str_match_cstr(saved, "sext.w") && operand_count == 2 &&
+			if(s8_equals_cstr(saved, "sext.w") && operand_count == 2 &&
 				 operand_types[0] == InstructionOperandType_Reg &&
 				 operand_types[1] == InstructionOperandType_Reg) {
 				saved = S8("addiw");
@@ -125,7 +125,7 @@ S8 program_to_string(Program* Program, Arena* a) {
 	}
 
 	arena_free(scratch);
-	S8 r = str_make(start, total);
+	S8 r = s8_make(start, total);
 	return r;
 }
 
