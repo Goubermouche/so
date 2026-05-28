@@ -9,7 +9,8 @@ unset SOURCE_DATE_EPOCH
 mkdir -p out/obj
 
 export LD_LIBRARY_PATH=/run/opengl-driver/lib:$LD_LIBRARY_PATH
-export nvcc_flags="-I src -O2 -Wno-deprecated-gpu-targets -arch=sm_61 -std=c++20"
+#export nvcc_flags="-I src -O2 -Wno-deprecated-gpu-targets -arch=sm_61 -std=c++20"
+export nvcc_flags="-I src -O2 -Wno-deprecated-gpu-targets -arch=sm_61 -std=c++20 -Xcompiler -Wall,-Wextra,-Werror"
 
 srcs_c=$(find src -name '*.c' 2>/dev/null)
 srcs_cu=$(find src -name '*.cu' 2>/dev/null)

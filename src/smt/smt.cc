@@ -15,7 +15,6 @@ static void z3_error_cb(Z3_context c, Z3_error_code ec) {
 }
 
 SMT_Result smt_equiv(Program* a, Program* b, U64 live_outs) {
-	F64 t0 = get_time_ms();
 	SMT_Result r = {};
 
 	// init Z3

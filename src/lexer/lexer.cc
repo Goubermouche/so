@@ -127,11 +127,13 @@ LexerToken lexer_next_tok_comment(Lexer* lexer) {
 }
 
 LexerToken lexer_next_tok_string(Lexer* lexer) {
+	(void)lexer;
 	Assert(false, "TODO: next_tok_string");
 	return LexerToken_Unknown;
 }
 
 LexerToken lexer_next_tok_char(Lexer* lexer) {
+	(void)lexer;
 	Assert(false, "TODO: next_tok_char");
 	return LexerToken_Unknown;
 }

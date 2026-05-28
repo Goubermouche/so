@@ -29,13 +29,13 @@ typedef enum DatabaseExtensionBitsEnum {
 } DatabaseExtensionBitsEnum;
 
 // array of all extension directory names
-static S8 DatabaseExtensionNames[] = {
+inline const S8 DatabaseExtensionNames[] = {
 #define X(tag, dir, bit) S8(dir),
 	DatabaseExtensionList(X)
 #undef X
 };
 
-static U32 DatabaseExtensionBits[] = {
+inline const U32 DatabaseExtensionBits[] = {
 #define X(tag, dir, bit) (1u << (bit)),
 	DatabaseExtensionList(X)
 #undef X
