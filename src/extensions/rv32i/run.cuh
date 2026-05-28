@@ -12,8 +12,8 @@ HostDevice void ext_rv_wr(U64 regs[32], U32 d, U64 v) {
 	regs[0] = 0;
 }
 
-HostDevice B32 ext_rv32i_run(U32 op, U64 regs[32], const Instruction* in) {
-	const U32 d = (U32)in->operands[0].reg;
+HostDevice B32 ext_rv32i_run(U32 op, U64 regs[32], Instruction* in) {
+	U32 d = (U32)in->operands[0].reg;
 
 	switch(op) {
 		case InstructionOpcode_Add:

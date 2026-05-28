@@ -36,7 +36,7 @@ Str str_make_format(Arena* a, const C8* fmt, ...) {
 Str str_pad(Arena* a, Str s, U8 pad_byte, U64 target_size) {
 	if(target_size <= s.size) { return s; }
 	U64 pad_len = target_size - s.size;
-	C8* dst =  ArenaPush(a, C8, target_size);
+	C8* dst = ArenaPush(a, C8, target_size);
 	memcpy(dst, s.ptr, s.size);
 	memset(dst + s.size, pad_byte, pad_len);
 	Str r;
@@ -47,7 +47,13 @@ Str str_pad(Arena* a, Str s, U8 pad_byte, U64 target_size) {
 
 B32 str_match_cstr(Str s, const C8* cstr) {
 	for(U64 i = 0; i < s.size; ++i) {
-		if(cstr[i] == '\0' || s.ptr[i] != cstr[i]) { return 0; }
+		if(cstr[i] == '\0' || s.ptr[i] != cstr[i]) { return false; }
 	}
 	return cstr[s.size] == '\0';
+}
+
+B32 str_match(Str a, Str b) {
+	if(a.size != b.size) return false;
+	if(a.size == 0) return true;
+	return memcmp(a.ptr, b.ptr, a.size) == 0;
 }

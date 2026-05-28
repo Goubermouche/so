@@ -23,7 +23,7 @@ typedef struct Instruction {
 } Instruction;
 
 typedef struct InstructionInfo {
-	const C8* name;
+	Str name;
 	InstructionOperandType operands[4];
 	InstructionOpcode op;
 	I8 dst_slot;

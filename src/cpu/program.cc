@@ -66,7 +66,7 @@ I32 program_parse(Program* Program, Arena* a, Str source) {
 			curr_inst.op = instruction_db_find(saved, operand_types, operand_count);
 			Assert(curr_inst.op != InstructionOpcode_Count,
 						 "no InstructionOpcode matches mnemonic '%.*s' with %d operand(s)\n", (int)saved.size,
-						 (const C8*)saved.ptr, (int)operand_count);
+						 saved.ptr, (int)operand_count);
 
 			if(count >= MaxProgramLen) {
 				fprintf(stderr, "error: program_parse: source exceeds MaxProgramLen (%d) instructions\n",
@@ -95,13 +95,13 @@ Str program_to_string(Program* Program, Arena* a) {
 	U64 total = 0;
 
 	for(U32 i = 0; i < Program->size; ++i) {
-		const Instruction inst = Program->instructions[i];
-		const InstructionInfo* info = instruction_db_find_info(inst.op);
+		Instruction inst = Program->instructions[i];
+		InstructionInfo* info = instruction_db_find_info(inst.op);
 		arena_push_data(a, "  ", 2);
 		total += 2;
 
-		U64 name_len = strlen(info->name);
-		arena_push_data(a, info->name, name_len);
+		U64 name_len = info->name.size;
+		arena_push_data(a, info->name.ptr, name_len);
 		total += name_len;
 		if(name_len < 8) {
 			C8 pad[8] = {' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '};
@@ -109,7 +109,7 @@ Str program_to_string(Program* Program, Arena* a) {
 			total += 8 - name_len;
 		}
 
-		const U8 nop = info->operand_count;
+		U8 nop = info->operand_count;
 		for(U8 j = 0; j < nop; ++j) {
 			Str s = operand_to_string(scratch, inst.operands[j], info->operands[j]);
 			arena_push_data(a, s.ptr, s.size);
@@ -134,16 +134,16 @@ U64 program_get_live_out(Program* Program) {
 	U64 live_out = 0;
 
 	for(U64 idx = Program->size; idx-- > 0;) {
-		const Instruction& in = Program->instructions[idx];
-		const InstructionInfo* info = instruction_db_find_info(in.op);
+		Instruction& in = Program->instructions[idx];
+		InstructionInfo* info = instruction_db_find_info(in.op);
 
 		// write side first
 		if(info->dst_slot >= 0) {
-			const U32 r = (U32)in.operands[info->dst_slot].reg;
+			U32 r = (U32)in.operands[info->dst_slot].reg;
 
 			// x0 writes don't define anything
 			if(r != 0) {
-				const U64 bit = 1ULL << r;
+				U64 bit = 1ULL << r;
 
 				if(!(touched & bit)) {
 					live_out |= bit;
@@ -154,12 +154,12 @@ U64 program_get_live_out(Program* Program) {
 
 		// read side
 		if(info->src_slot >= 0) {
-			const U32 r = (U32)in.operands[info->src_slot].reg;
+			U32 r = (U32)in.operands[info->src_slot].reg;
 			touched |= 1ULL << r;
 		}
 
 		if(info->src2_slot >= 0) {
-			const U32 r = (U32)in.operands[info->src2_slot].reg;
+			U32 r = (U32)in.operands[info->src2_slot].reg;
 			touched |= 1ULL << r;
 		}
 	}
@@ -172,20 +172,20 @@ U64 program_get_live_in(Program* Program) {
 	U64 live_in = 0;
 
 	for(U32 i = 0; i < Program->size; ++i) {
-		const InstructionInfo* info = instruction_db_find_info(Program->instructions[i].op);
+		InstructionInfo* info = instruction_db_find_info(Program->instructions[i].op);
 
 		if(info->src_slot >= 0) {
-			const U32 r = (U32)Program->instructions[i].operands[info->src_slot].reg;
+			U32 r = (U32)Program->instructions[i].operands[info->src_slot].reg;
 			if(!(written & (1ull << r))) { live_in |= 1ull << r; }
 		}
 
 		if(info->src2_slot >= 0) {
-			const U32 r = (U32)Program->instructions[i].operands[info->src2_slot].reg;
+			U32 r = (U32)Program->instructions[i].operands[info->src2_slot].reg;
 			if(!(written & (1ull << r))) { live_in |= 1ull << r; }
 		}
 
 		if(info->dst_slot >= 0) {
-			const U32 r = (U32)Program->instructions[i].operands[info->dst_slot].reg;
+			U32 r = (U32)Program->instructions[i].operands[info->dst_slot].reg;
 			written |= 1ull << r;
 		}
 	}

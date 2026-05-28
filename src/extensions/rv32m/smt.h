@@ -3,7 +3,7 @@
 
 #include "smt/smt.h"
 
-inline B32 ext_rv32m_smt(Z3_context ctx, SMT_State* s, const SMT_Decode* d) {
+inline B32 ext_rv32m_smt(Z3_context ctx, SMT_State* s, SMT_Decode* d) {
 	switch(d->op) {
 		case InstructionOpcode_Mul:    SMT_WR(Z3_mk_bvmul(ctx, SMT_A, SMT_B));
 		case InstructionOpcode_Mulh:   SMT_WR(SMT_Extract(127, 64, Z3_mk_bvmul(ctx, SMT_Sext(64, SMT_A), SMT_Sext(64, SMT_B))));

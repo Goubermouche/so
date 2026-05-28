@@ -29,13 +29,13 @@ typedef enum DatabaseExtensionBitsEnum {
 } DatabaseExtensionBitsEnum;
 
 // array of all extension directory names
-static Str const DatabaseExtensionNames[] = {
+static Str DatabaseExtensionNames[] = {
 #define X(tag, dir, bit) StrLit(dir),
 	DatabaseExtensionList(X)
 #undef X
 };
 
-static const U32 DatabaseExtensionBits[] = {
+static U32 DatabaseExtensionBits[] = {
 #define X(tag, dir, bit) (1u << (bit)),
 	DatabaseExtensionList(X)
 #undef X
@@ -60,10 +60,10 @@ extern InstructionDB instruction_db_host;
 void instruction_db_load();
 
 #ifdef __CUDACC__
-__device__ const InstructionInfo* instruction_db_find_info_dev(InstructionOpcode op);
+__device__ InstructionInfo* instruction_db_find_info_dev(InstructionOpcode op);
 #endif // #ifdef __CUDACC__
 
-HostDevice const InstructionInfo* instruction_db_find_info(InstructionOpcode op) {
+HostDevice InstructionInfo* instruction_db_find_info(InstructionOpcode op) {
 #ifdef __CUDA_ARCH__
 	return instruction_db_find_info_dev(op);
 #else
@@ -71,6 +71,6 @@ HostDevice const InstructionInfo* instruction_db_find_info(InstructionOpcode op)
 #endif // #ifdef __CUDA_ARCH__
 }
 
-InstructionOpcode instruction_db_find(Str name, const InstructionOperandType* ops, U8 op_cnt);
+InstructionOpcode instruction_db_find(Str name, InstructionOperandType* ops, U8 op_cnt);
 
 #endif // #ifndef EXT_DATABASE_CUH

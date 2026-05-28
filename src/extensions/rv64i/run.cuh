@@ -4,8 +4,8 @@
 #include "cpu/instruction.cuh"
 #include "extensions/rv32i/run.cuh"
 
-HostDevice B32 ext_rv64i_run(U32 op, U64 regs[32], const Instruction* in) {
-	const U32 d = (U32)in->operands[0].reg;
+HostDevice B32 ext_rv64i_run(U32 op, U64 regs[32], Instruction* in) {
+	U32 d = (U32)in->operands[0].reg;
 
 	switch(op) {
 		case InstructionOpcode_Addiw:

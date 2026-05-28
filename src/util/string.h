@@ -16,5 +16,6 @@ Str str_make_format(Arena* a, const C8* fmt, ...);
 
 Str str_pad(Arena* a, Str s, U8 pad_byte, U64 target_size);
 B32 str_match_cstr(Str s, const C8* cstr);
+B32 str_match(Str a, Str b);
 
 #endif // UTL_STR_H

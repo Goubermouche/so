@@ -54,12 +54,12 @@ U64 filter_pack_mask(U64 raw_mask);
 void filter_init_decode_info();
 void filter_upload_meta(const EnumMeta* h_meta, U32 n_meta, const I64* h_imms, U32 n_imms);
 
-HostDevice void filter_run_lane(U64 regs[32], const Instruction* prog, U32 prog_len) {
+HostDevice void filter_run_lane(U64 regs[32], Instruction* prog, U32 prog_len) {
 	regs[0] = 0;
 
 	for(U32 i = 0; i < prog_len; ++i) {
-		const Instruction* in = &prog[i];
-		const U32 op = (U32)in->op;
+		Instruction* in = &prog[i];
+		U32 op = (U32)in->op;
 
 		if(op == InstructionOpcode_Nop) { continue; }
 
@@ -70,7 +70,7 @@ HostDevice void filter_run_lane(U64 regs[32], const Instruction* prog, U32 prog_
 	}
 }
 
-inline CpuState filter_run_host(const Program* prog, const CpuState* in) {
+inline CpuState filter_run_host(Program* prog, CpuState* in) {
 	CpuState out = *in;
 	out.regs[0] = 0;
 	filter_run_lane(out.regs, prog->instructions, prog->size);

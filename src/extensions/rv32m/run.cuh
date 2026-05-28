@@ -4,34 +4,34 @@
 #include "cpu/instruction.cuh"
 #include "extensions/rv32i/run.cuh"
 
-HostDevice B32 ext_rv32m_run(U32 op, U64 regs[32], const Instruction* in) {
-	const U32 d = (U32)in->operands[0].reg;
-	const U64 a = regs[in->operands[1].reg];
-	const U64 b = regs[in->operands[2].reg];
+HostDevice B32 ext_rv32m_run(U32 op, U64 regs[32], Instruction* in) {
+	U32 d = (U32)in->operands[0].reg;
+	U64 a = regs[in->operands[1].reg];
+	U64 b = regs[in->operands[2].reg];
 
 	switch(op) {
 		case InstructionOpcode_Mul: ext_rv_wr(regs, d, a * b); return true;
 		case InstructionOpcode_Mulh: {
-			const __int128 sa = (__int128)(I64)a;
-			const __int128 sb = (__int128)(I64)b;
+			__int128 sa = (__int128)(I64)a;
+			__int128 sb = (__int128)(I64)b;
 			ext_rv_wr(regs, d, (U64)(I64)((sa * sb) >> 64));
 			return true;
 		}
 		case InstructionOpcode_Mulhsu: {
-			const __int128 sa = (__int128)(I64)a;
-			const __int128 ub = (__int128)(unsigned __int128)b;
+			__int128 sa = (__int128)(I64)a;
+			__int128 ub = (__int128)(unsigned __int128)b;
 			ext_rv_wr(regs, d, (U64)(I64)((sa * ub) >> 64));
 			return true;
 		}
 		case InstructionOpcode_Mulhu: {
-			const unsigned __int128 ua = (unsigned __int128)a;
-			const unsigned __int128 ub = (unsigned __int128)b;
+			unsigned __int128 ua = (unsigned __int128)a;
+			unsigned __int128 ub = (unsigned __int128)b;
 			ext_rv_wr(regs, d, (U64)((ua * ub) >> 64));
 			return true;
 		}
 		case InstructionOpcode_Div: {
-			const I64 sa = (I64)a;
-			const I64 sb = (I64)b;
+			I64 sa = (I64)a;
+			I64 sb = (I64)b;
 			I64 q;
 
 			if(sb == 0) {
@@ -50,8 +50,8 @@ HostDevice B32 ext_rv32m_run(U32 op, U64 regs[32], const Instruction* in) {
 			return true;
 		}
 		case InstructionOpcode_Rem: {
-			const I64 sa = (I64)a;
-			const I64 sb = (I64)b;
+			I64 sa = (I64)a;
+			I64 sb = (I64)b;
 			I64 r;
 
 			if(sb == 0) {

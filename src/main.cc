@@ -31,19 +31,19 @@ I32 list_e() {
 	return 0;
 }
 
-I32 parse_e(OptimizerOptions& opt, const C8* p) {
+I32 parse_e(OptimizerOptions& opt, C8* p) {
 	opt.ext_mask = 0;
 	while(*p) {
 		while(*p == ' ' || *p == ',' || *p == '+') p++;
 		if(!*p) break;
 
-		const C8* start = p;
+		C8* start = p;
 		while(*p && *p != ' ' && *p != ',' && *p != '+') p++;
 
 		B32 found = false;
 		for(U32 i = 0; i < DatabaseExtensionCount; ++i) {
-			const C8* ext = DatabaseExtensionNames[i].ptr;
-			const C8* s = start;
+			C8* ext = DatabaseExtensionNames[i].ptr;
+			C8* s = start;
 
 			while(s < p && *ext == *s) {
 				ext++;
@@ -69,7 +69,7 @@ I32 parse_e(OptimizerOptions& opt, const C8* p) {
 	return 0;
 }
 
-I32 parse_u32(const C8* src, U32& out) {
+I32 parse_u32(C8* src, U32& out) {
 	C8* endptr;
 	errno = 0;
 	U32 num = strtoul(src, &endptr, 10);
@@ -93,7 +93,7 @@ I32 parse_u32(const C8* src, U32& out) {
 	return 0;
 }
 
-I32 read_file(const C8* filename, C8** out, U64* out_len) {
+I32 read_file(C8* filename, C8** out, U64* out_len) {
 	FILE* file = fopen(filename, "rb");
 	if(!file) {
 		fprintf(stderr, "error: cannot open file '%s'\n", filename);
