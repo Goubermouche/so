@@ -1,7 +1,7 @@
 #include "cpu/program.h"
 #include "lexer/lexer.h"
 
-I32 program_parse(Program* Program, Arena* a, Str source) {
+I32 program_parse(Program* Program, Arena* a, S8 source) {
 	Instruction buf[MaxProgramLen];
 	U32 count = 0;
 	Lexer lexer;
@@ -15,7 +15,7 @@ I32 program_parse(Program* Program, Arena* a, Str source) {
 		if(lexer.curr == LexerToken_EndOfFile) break;
 
 		if(lexer.curr == LexerToken_Identifier) {
-			Str saved = lexer.curr_string;
+			S8 saved = lexer.curr_string;
 			lexer_next_tok(&lexer);
 			if(lexer.curr == LexerToken_Colon) {
 				lexer_next_tok(&lexer);
@@ -57,7 +57,7 @@ I32 program_parse(Program* Program, Arena* a, Str source) {
 			if(str_match_cstr(saved, "sext.w") && operand_count == 2 &&
 				 operand_types[0] == InstructionOperandType_Reg &&
 				 operand_types[1] == InstructionOperandType_Reg) {
-				saved = StrLit("addiw");
+				saved = S8("addiw");
 				curr_inst.operands[2].imm = 0;
 				operand_types[2] = InstructionOperandType_Imm;
 				operand_count = 3;
@@ -89,7 +89,7 @@ I32 program_parse(Program* Program, Arena* a, Str source) {
 	return 0;
 }
 
-Str program_to_string(Program* Program, Arena* a) {
+S8 program_to_string(Program* Program, Arena* a) {
 	Arena* scratch = arena_make(0);
 	C8* start = (C8*)ArenaPush(a, C8, 0);
 	U64 total = 0;
@@ -111,7 +111,7 @@ Str program_to_string(Program* Program, Arena* a) {
 
 		U8 nop = info->operand_count;
 		for(U8 j = 0; j < nop; ++j) {
-			Str s = operand_to_string(scratch, inst.operands[j], info->operands[j]);
+			S8 s = operand_to_string(scratch, inst.operands[j], info->operands[j]);
 			arena_push_data(a, s.ptr, s.size);
 			total += s.size;
 			if(j + 1 < nop) {
@@ -125,7 +125,7 @@ Str program_to_string(Program* Program, Arena* a) {
 	}
 
 	arena_free(scratch);
-	Str r = str_make(start, total);
+	S8 r = str_make(start, total);
 	return r;
 }
 

@@ -260,7 +260,7 @@ void optimizer_log_startup(Optimizer* optimizer) {
 	Arena* scratch = arena_make(0);
 
 	printf("source (len: %u):\n", optimizer->prog->size);
-	Str src = program_to_string(optimizer->prog, scratch);
+	S8 src = program_to_string(optimizer->prog, scratch);
 	printf("%s", (C8*)src.ptr);
 	printf("live-in:  { ");
 	opt_print_reg_mask(optimizer->live_in);
@@ -291,7 +291,7 @@ void optimizer_log_results(Optimizer* optimizer, B32 found) {
 	}
 
 	printf("done: optimization found (len: %u):\n", optimizer->best.size);
-	Str s = program_to_string(&optimizer->best, optimizer->mem);
+	S8 s = program_to_string(&optimizer->best, optimizer->mem);
 	printf("%s", (C8*)s.ptr);
 }
 

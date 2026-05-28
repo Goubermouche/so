@@ -3,7 +3,8 @@
 
 #include "util/string.h"
 
-typedef enum LexerToken {
+typedef U8 LexerToken;
+typedef enum LexerTokenEnum {
 	LexerToken_Unknown = 0,
 
 	LexerToken_Identifier,
@@ -56,18 +57,18 @@ typedef enum LexerToken {
 	LexerToken_Colon,
 	LexerToken_Newline,
 	LexerToken_EndOfFile,
-} LexerToken;
+} LexerTokenEnum;
 
 typedef struct Lexer {
-	Str source;
+	S8 source;
 	C8 current_char;
 	U64 index;
 	LexerToken curr;
-	Str curr_string;
+	S8 curr_string;
 	I64 curr_imm; // signed
 } Lexer;
 
-I32 lexer_make(Lexer* lexer, Str source);
+I32 lexer_make(Lexer* lexer, S8 source);
 
 LexerToken lexer_next_tok(Lexer* lexer);
 LexerToken lexer_next_tok_identifier(Lexer* lexer);
@@ -75,16 +76,16 @@ LexerToken lexer_next_tok_comment(Lexer* lexer);
 LexerToken lexer_next_tok_string(Lexer* lexer);
 LexerToken lexer_next_tok_char(Lexer* lexer);
 
-C8   lexer_next_char(Lexer* lexer);
-B32  lexer_is_at_end(Lexer* lexer);
+C8 lexer_next_char(Lexer* lexer);
+B32 lexer_is_at_end(Lexer* lexer);
 void lexer_consume_spaces(Lexer* lexer);
-B32  lexer_is_whitespace(C8 c);
+B32 lexer_is_whitespace(C8 c);
 
-LexerToken lexer_str_to_tok(Str Str);
-LexerToken lexer_str_to_num_tok(Lexer* lexer, Str Str);
+LexerToken lexer_str_to_tok(S8 S8);
+LexerToken lexer_str_to_num_tok(Lexer* lexer, S8 S8);
 
-Str lexer_token_to_str(LexerToken tok);
-B32    lexer_token_is_reg(LexerToken tok);
-U64    lexer_token_to_reg_index(LexerToken tok);
+S8 lexer_token_to_str(LexerToken tok);
+B32 lexer_token_is_reg(LexerToken tok);
+U64 lexer_token_to_reg_index(LexerToken tok);
 
 #endif // LEX_LEXER_H

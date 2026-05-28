@@ -4,7 +4,8 @@
 #include "util/device.cuh"
 #include "util/string.h"
 
-typedef enum Reg : U32 {
+typedef U8 Reg;
+typedef enum RegEnum {
 	Reg_X0 = 0,
 	Reg_X1,
 	Reg_X2,
@@ -38,47 +39,47 @@ typedef enum Reg : U32 {
 	Reg_X30,
 	Reg_X31,
 	Reg_Count = 32,
-} Reg;
+} RegEnum;
 
 typedef struct CpuState {
 	U64 regs[32];
 } CpuState;
 
-HostDevice Str reg_name(U32 r) {
+HostDevice S8 reg_name(U32 r) {
 	switch(r) {
-		case 0:  return StrLit("x0");
-		case 1:  return StrLit("x1");
-		case 2:  return StrLit("x2");
-		case 3:  return StrLit("x3");
-		case 4:  return StrLit("x4");
-		case 5:  return StrLit("x5");
-		case 6:  return StrLit("x6");
-		case 7:  return StrLit("x7");
-		case 8:  return StrLit("x8");
-		case 9:  return StrLit("x9");
-		case 10: return StrLit("x10");
-		case 11: return StrLit("x11");
-		case 12: return StrLit("x12");
-		case 13: return StrLit("x13");
-		case 14: return StrLit("x14");
-		case 15: return StrLit("x15");
-		case 16: return StrLit("x16");
-		case 17: return StrLit("x17");
-		case 18: return StrLit("x18");
-		case 19: return StrLit("x19");
-		case 20: return StrLit("x20");
-		case 21: return StrLit("x21");
-		case 22: return StrLit("x22");
-		case 23: return StrLit("x23");
-		case 24: return StrLit("x24");
-		case 25: return StrLit("x25");
-		case 26: return StrLit("x26");
-		case 27: return StrLit("x27");
-		case 28: return StrLit("x28");
-		case 29: return StrLit("x29");
-		case 30: return StrLit("x30");
-		case 31: return StrLit("x31");
-		default: return StrLit("?");
+		case 0: return S8("x0");
+		case 1: return S8("x1");
+		case 2: return S8("x2");
+		case 3: return S8("x3");
+		case 4: return S8("x4");
+		case 5: return S8("x5");
+		case 6: return S8("x6");
+		case 7: return S8("x7");
+		case 8: return S8("x8");
+		case 9: return S8("x9");
+		case 10: return S8("x10");
+		case 11: return S8("x11");
+		case 12: return S8("x12");
+		case 13: return S8("x13");
+		case 14: return S8("x14");
+		case 15: return S8("x15");
+		case 16: return S8("x16");
+		case 17: return S8("x17");
+		case 18: return S8("x18");
+		case 19: return S8("x19");
+		case 20: return S8("x20");
+		case 21: return S8("x21");
+		case 22: return S8("x22");
+		case 23: return S8("x23");
+		case 24: return S8("x24");
+		case 25: return S8("x25");
+		case 26: return S8("x26");
+		case 27: return S8("x27");
+		case 28: return S8("x28");
+		case 29: return S8("x29");
+		case 30: return S8("x30");
+		case 31: return S8("x31");
+		default: return S8("?");
 	}
 }
 

@@ -1,5 +1,4 @@
 #include "cpu/instruction.cuh"
-#include "util/device.cuh"
 
 InstructionOperandType instruction_shape_op0(InstructionShape s) {
 	return s == InstructionShape_None ? InstructionOperandType_None : InstructionOperandType_Reg;
@@ -40,10 +39,10 @@ I8 instruction_shape_src2_slot(InstructionShape s) {
 	return s == InstructionShape_RRR ? (I8)2 : (I8)-1;
 }
 
-Str operand_to_string(Arena* a, InstructionOperand op, InstructionOperandType ty) {
+S8 operand_to_string(Arena* a, InstructionOperand op, InstructionOperandType ty) {
 	switch(ty) {
 		case InstructionOperandType_Reg: return reg_name((U32)op.reg);
 		case InstructionOperandType_Imm: return str_make_format(a, "%lld", (I64)op.imm);
-		default: return StrLit("?");
+		default: return S8("?");
 	}
 }

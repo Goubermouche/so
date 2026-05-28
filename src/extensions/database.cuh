@@ -29,8 +29,8 @@ typedef enum DatabaseExtensionBitsEnum {
 } DatabaseExtensionBitsEnum;
 
 // array of all extension directory names
-static Str DatabaseExtensionNames[] = {
-#define X(tag, dir, bit) StrLit(dir),
+static S8 DatabaseExtensionNames[] = {
+#define X(tag, dir, bit) S8(dir),
 	DatabaseExtensionList(X)
 #undef X
 };
@@ -43,7 +43,8 @@ static U32 DatabaseExtensionBits[] = {
 
 #define DatabaseExtensionCount (sizeof(DatabaseExtensionNames) / sizeof(DatabaseExtensionNames[0]))
 
-typedef enum InstructionOpcodeEnum : U32 {
+// typedef in instruction.cuh
+typedef enum InstructionOpcodeEnum {
 #define X(tag, mnemonic, shape, comm) InstructionOpcode_##tag,
 	DatabaseExtensionOpcodeList(X)
 #undef X
@@ -71,6 +72,6 @@ HostDevice InstructionInfo* instruction_db_find_info(InstructionOpcode op) {
 #endif // #ifdef __CUDA_ARCH__
 }
 
-InstructionOpcode instruction_db_find(Str name, InstructionOperandType* ops, U8 op_cnt);
+InstructionOpcode instruction_db_find(S8 name, InstructionOperandType* ops, U8 op_cnt);
 
 #endif // #ifndef EXT_DATABASE_CUH

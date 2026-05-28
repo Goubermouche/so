@@ -41,12 +41,13 @@ typedef struct SMT_State {
 	Z3_ast r[32];
 } SMT_State;
 
-typedef enum SMT_ResultType {
+typedef U8 SMT_ResultType;
+typedef enum SMT_ResultTypeEnum {
 	SMT_ResultType_EQUIVALENT,
 	SMT_ResultType_COUNTEREXAMPLE,
 	SMT_ResultType_TIMEOUT,
 	SMT_ResultType_ERROR,
-} SMT_ResultType;
+} SMT_ResultTypeEnum;
 
 typedef struct SMT_Result {
 	SMT_ResultType type;

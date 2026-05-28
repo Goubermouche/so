@@ -1,26 +1,26 @@
 #include "lexer/lexer.h"
 #include "cpu/cpu.cuh"
 
-Str lexer_token_to_str(LexerToken tok) {
+S8 lexer_token_to_str(LexerToken tok) {
 	switch(tok) {
-		case LexerToken_Unknown: return StrLit("unknown");
-		case LexerToken_Identifier: return StrLit("identifier");
-		case LexerToken_Number: return StrLit("number");
-		case LexerToken_Comma: return StrLit(",");
-		case LexerToken_LeftBracket: return StrLit("[");
-		case LexerToken_RightBracket: return StrLit("]");
-		case LexerToken_LeftBrace: return StrLit("(");
-		case LexerToken_RightBrace: return StrLit(")");
-		case LexerToken_Plus: return StrLit("+");
-		case LexerToken_Minus: return StrLit("-");
-		case LexerToken_Asterisk: return StrLit("*");
-		case LexerToken_DollarSign: return StrLit("$");
-		case LexerToken_Colon: return StrLit(":");
-		case LexerToken_Newline: return StrLit("newline");
-		case LexerToken_EndOfFile: return StrLit("eof");
+		case LexerToken_Unknown: return S8("unknown");
+		case LexerToken_Identifier: return S8("identifier");
+		case LexerToken_Number: return S8("number");
+		case LexerToken_Comma: return S8(",");
+		case LexerToken_LeftBracket: return S8("[");
+		case LexerToken_RightBracket: return S8("]");
+		case LexerToken_LeftBrace: return S8("(");
+		case LexerToken_RightBrace: return S8(")");
+		case LexerToken_Plus: return S8("+");
+		case LexerToken_Minus: return S8("-");
+		case LexerToken_Asterisk: return S8("*");
+		case LexerToken_DollarSign: return S8("$");
+		case LexerToken_Colon: return S8(":");
+		case LexerToken_Newline: return S8("newline");
+		case LexerToken_EndOfFile: return S8("eof");
 		default:
 			if(lexer_token_is_reg(tok)) { return reg_name(lexer_token_to_reg_index(tok)); }
-			return StrLit("?");
+			return S8("?");
 	}
 }
 
@@ -33,7 +33,7 @@ U64 lexer_token_to_reg_index(LexerToken tok) {
 	return (U64)tok - (U64)LexerToken_RegX0;
 }
 
-I32 lexer_make(Lexer* lexer, Str source) {
+I32 lexer_make(Lexer* lexer, S8 source) {
 	lexer->index = 0;
 	lexer->source = source;
 	lexer->current_char = 0;
@@ -136,7 +136,7 @@ LexerToken lexer_next_tok_char(Lexer* lexer) {
 	return LexerToken_Unknown;
 }
 
-LexerToken lexer_str_to_tok(Str str) {
+LexerToken lexer_str_to_tok(S8 str) {
 	// numeric register (x1, x2,...)
 	if(str.size > 1 && str.ptr[0] == 'x') {
 		C8 buf[16] = {0};
@@ -180,16 +180,16 @@ LexerToken lexer_str_to_tok(Str str) {
 	return LexerToken_Unknown;
 }
 
-LexerToken lexer_str_to_num_tok(Lexer* lexer, Str Str) {
+LexerToken lexer_str_to_num_tok(Lexer* lexer, S8 S8) {
 	I32 base = 10;
 	C8 buf[64];
-	Assert(Str.size < sizeof(buf), "numeric literal too long ('%.*s')\n", (int)Str.size, Str.ptr);
-	memcpy(buf, Str.ptr, Str.size);
-	if(Str.size >= sizeof(buf)) __builtin_unreachable();
-	buf[Str.size] = 0;
+	Assert(S8.size < sizeof(buf), "numeric literal too long ('%.*s')\n", (int)S8.size, S8.ptr);
+	memcpy(buf, S8.ptr, S8.size);
+	if(S8.size >= sizeof(buf)) __builtin_unreachable();
+	buf[S8.size] = 0;
 	C8* data = buf;
 
-	if(Str.size > 1 && buf[0] == '0') {
+	if(S8.size > 1 && buf[0] == '0') {
 		switch(buf[1]) {
 			case 'x':
 				base = 16;
