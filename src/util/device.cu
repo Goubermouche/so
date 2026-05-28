@@ -30,10 +30,10 @@ I32 device_init() {
 		fprintf(stderr, "error: cannot query device properties\n");
 		return 2;
 	}
-	const F64 bus_width_bytes = (F64)p.memoryBusWidth / 8.0;
-	const F64 mem_bw_gbs = bus_width_bytes * ((F64)p.memoryClockRate * 1000.0) * 2.0 / 1e9;
-	const I32 max_threads = p.multiProcessorCount * p.maxThreadsPerMultiProcessor;
-	const I32 max_warps = max_threads / 32;
+	F64 bus_width_bytes = (F64)p.memoryBusWidth / 8.0;
+	F64 mem_bw_gbs = bus_width_bytes * ((F64)p.memoryClockRate * 1000.0) * 2.0 / 1e9;
+	I32 max_threads = p.multiProcessorCount * p.maxThreadsPerMultiProcessor;
+	I32 max_warps = max_threads / 32;
 	printf("device: %s (sm_%u%u)\n", p.name, p.major, p.minor);
 	printf("  threads: %u\n", max_threads);
 	printf("  warps: %u\n", max_warps);
@@ -46,16 +46,16 @@ I32 device_init() {
 }
 
 __global__ void scan_block_kernel(
-	const U32* __restrict__ d_in,
+	U32* __restrict__ d_in,
 	U64* __restrict__ d_out,
 	U64* __restrict__ d_block_sums,
 	I32 n
 ) {
 	__shared__ U64 smem[DeviceExclusiveSumScanBlock];
 
-	const I32 tid = (I32)threadIdx.x;
-	const I32 idx = (I32)blockIdx.x * DeviceExclusiveSumScanTile + tid;
-	const U64 val = (idx < n) ? (U64)d_in[idx] : 0ull;
+	I32 tid = (I32)threadIdx.x;
+	I32 idx = (I32)blockIdx.x * DeviceExclusiveSumScanTile + tid;
+	U64 val = (idx < n) ? (U64)d_in[idx] : 0ull;
 
 	// convert to exclusive by shifting
 	smem[tid] = (tid == 0) ? 0ull : val;
@@ -70,8 +70,8 @@ __global__ void scan_block_kernel(
 		__syncthreads();
 	}
 
-	const U64 inclusive = smem[tid];
-	const U64 exclusive = inclusive - val;
+	U64 inclusive = smem[tid];
+	U64 exclusive = inclusive - val;
 
 	if(idx < n) d_out[idx] = exclusive;
 
@@ -81,7 +81,7 @@ __global__ void scan_block_kernel(
 }
 
 __global__ void scan_block_sums_serial(
-	const U64* __restrict__ d_block_sums,
+	U64* __restrict__ d_block_sums,
 	U64* __restrict__ d_block_offsets,
 	I32 n_blocks
 ) {
@@ -95,23 +95,23 @@ __global__ void scan_block_sums_serial(
 
 __global__ void scan_add_offsets_kernel(
 	U64* __restrict__ d_out,
-	const U64* __restrict__ d_block_offsets,
+	U64* __restrict__ d_block_offsets,
 	I32 n
 ) {
-	const I32 idx = (I32)blockIdx.x * DeviceExclusiveSumScanTile + (I32)threadIdx.x;
+	I32 idx = (I32)blockIdx.x * DeviceExclusiveSumScanTile + (I32)threadIdx.x;
 	if(idx >= n) return;
 	if(blockIdx.x == 0) return; // offset is 0
 	d_out[idx] += d_block_offsets[blockIdx.x];
 }
 
-void device_exclusive_sum(void* d_tmp, U64* tmp_bytes, const U32* d_in, U64* d_out, I32 n) {
+void device_exclusive_sum(void* d_tmp, U64* tmp_bytes, U32* d_in, U64* d_out, I32 n) {
 	if(n <= 0) {
 		if(d_tmp == 0) *tmp_bytes = 1;
 		return;
 	}
 
-	const I32 n_blocks = (n + DeviceExclusiveSumScanTile - 1) / DeviceExclusiveSumScanTile;
-	const U64 needed = (U64)n_blocks * sizeof(U64) * 2;
+	I32 n_blocks = (n + DeviceExclusiveSumScanTile - 1) / DeviceExclusiveSumScanTile;
+	U64 needed = (U64)n_blocks * sizeof(U64) * 2;
 
 	if(d_tmp == 0) {
 		*tmp_bytes = Max(needed, 1);

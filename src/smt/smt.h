@@ -51,10 +51,9 @@ typedef enum SMT_ResultType {
 typedef struct SMT_Result {
 	SMT_ResultType type;
 	CpuState counterexample;
-	const C8* error;
 } SMT_Result;
 
-SMT_Result smt_equiv(const Program& a, const Program& b, U64 live_outs);
+SMT_Result smt_equiv(Program* a, Program* b, U64 live_outs);
 
 Z3_ast smt_low6(Z3_context ctx, Z3_ast v);
 Z3_ast smt_sext_w(Z3_context ctx, Z3_ast v64);
@@ -65,8 +64,8 @@ Z3_ast smt_mk_bv64_const(Z3_context ctx, const C8* name);
 void smt_wr(Z3_context ctx, SMT_State* state, U32 d, Z3_ast v);
 void smt_pin_x0(Z3_context ctx, SMT_State* state);
 SMT_State smt_make_input_state(Z3_context ctx);
-SMT_State smt_clone_state(Z3_context ctx, const SMT_State* src);
+SMT_State smt_clone_state(Z3_context ctx, SMT_State* src);
 void smt_free_state(Z3_context ctx, SMT_State* state);
-SMT_State smt_run(Z3_context ctx, const SMT_State* in, const Program* p);
+SMT_State smt_run(Z3_context ctx, SMT_State* in, Program* p);
 
 #endif // #ifndef SMT_SMT_H

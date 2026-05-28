@@ -57,8 +57,8 @@ typedef struct EnumLayer {
 } EnumLayer;
 
 typedef struct EnumOptions {
-	const EnumOpcodePool* pool;
-	const EnumImmPool* imms;
+	EnumOpcodePool* pool;
+	EnumImmPool* imms;
 	U64 live_in_mask;
 	U64 live_out_mask;
 	U32 prog_len;
@@ -107,8 +107,8 @@ void enum_run(Enum* e, EnumOptions* opt);
 U64 enum_emit_batch(Enum* e);
 U64 enum_find_chunk_fit(U64* d_offsets, U64 cursor, U64 n_front, U64 total, U64 cap);
 
-void enum_make_meta_host(const EnumOpcodePool* pool, EnumMeta* out, U32* out_n);
+void enum_make_meta_host(EnumOpcodePool* pool, EnumMeta* out, U32* out_n);
 void enum_make_opcode_pool(EnumOpcodePool* pool, U32 ext_mask);
-void enum_make_imm_pool(EnumImmPool* pool, const Program* prog);
+void enum_make_imm_pool(EnumImmPool* pool, Program* prog);
 
 #endif // OPT_ENUMERATE_CUH

@@ -21,6 +21,6 @@ I32 device_init();
 #define DeviceExclusiveSumScanBlock 256
 #define DeviceExclusiveSumScanTile DeviceExclusiveSumScanBlock
 
-void device_exclusive_sum(void* d_tmp, U64* tmp_bytes, const U32* d_in, U64* d_out, I32 n);
+void device_exclusive_sum(void* d_tmp, U64* tmp_bytes, U32* d_in, U64* d_out, I32 n);
 
 #endif // #define DEVICE_H

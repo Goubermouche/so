@@ -82,10 +82,10 @@ I32 optimizer_run(Optimizer* optimizer, Program* program) {
 }
 
 I32 optimizer_run_iter(Optimizer* optimizer, EnumOptions* cfg, U32 len, U32 iter) {
-	const U32 prev_cex = optimizer->counterexample_count;
+	U32 prev_cex = optimizer->counterexample_count;
 
 	// generate candidates
-	const F64 t_upper = get_time_ms();
+	F64 t_upper = get_time_ms();
 	enum_run(&optimizer->enumerate, cfg);
 	optimizer->ms_enum += get_time_ms() - t_upper;
 
@@ -93,7 +93,7 @@ I32 optimizer_run_iter(Optimizer* optimizer, EnumOptions* cfg, U32 len, U32 iter
 	// or a solution / new counterexample is found
 	U64 total_emitted = 0;
 	for(;;) {
-		const F64 t_chunk = get_time_ms();
+		F64 t_chunk = get_time_ms();
 		U64 emitted = enum_emit_batch(&optimizer->enumerate);
 		optimizer->ms_enum += get_time_ms() - t_chunk;
 
@@ -134,9 +134,9 @@ B32 optimizer_run_length(Optimizer* optimizer, U32 len) {
 	// scratch range r in [5, max_scratch), and any register in live_in / live_out. this is the upper
 	// bound on the regs the sim might see; the filter kernel uses it to size its packed reg file
 	U64 scratch_mask = 0;
-	const U32 hi = max_scratch < 32 ? max_scratch : 32;
+	U32 hi = max_scratch < 32 ? max_scratch : 32;
 	for(U32 r = 5; r < hi; ++r) { scratch_mask |= 1ull << r; }
-	const U64 low_regs = 0x1Eull | 1ull; // bits 1..4 | x0
+	U64 low_regs = 0x1Eull | 1ull; // bits 1..4 | x0
 	optimizer->cur_active_mask =  low_regs | scratch_mask | optimizer->live_in | optimizer->live_out;
 
 	// CEGIS main loop for instructions of length 'len'. iterates until we
@@ -152,7 +152,7 @@ B32 optimizer_run_length(Optimizer* optimizer, U32 len) {
 		cfg.max_scratch = max_scratch;
 		cfg.cap = optimizer->opt->batch_size;
 
-		const I32 result = optimizer_run_iter(optimizer, &cfg, len, iter);
+		I32 result = optimizer_run_iter(optimizer, &cfg, len, iter);
 		if(result == 1) { return true; }
 		if(result == -1) { return false; } // no new cex -> give up at this length
 	}
@@ -166,22 +166,22 @@ void optimizer_reconstruct_survivor(Optimizer* optimizer, U64 i, U32 len, Instru
 
 	// fetch the tuple for this cand
 	U64 tuple = 0;
-	dtoh_memcpy(&tuple, (const U64*)e->d_tuples + i, sizeof(U64));
+	dtoh_memcpy(&tuple, (U64*)e->d_tuples + i, sizeof(U64));
 	// decode
-	const U32 parent_local_id = (U32)(tuple & 0xFFFFFFFFull);
-	const U32 op_idx = (U32)((tuple >> 32) & 0xFFull);
-	const U32 rd = (U32)((tuple >> 40) & 0x1Full);
-	const U32 rs1 = (U32)((tuple >> 45) & 0x1Full);
-	const U32 rs2_or_imm_idx = (U32)((tuple >> 50) & 0xFFull);
-	const B32 is_imm = (B32)((tuple >> 58) & 0x1ull);
+	U32 parent_local_id = (U32)(tuple & 0xFFFFFFFFull);
+	U32 op_idx = (U32)((tuple >> 32) & 0xFFull);
+	U32 rd = (U32)((tuple >> 40) & 0x1Full);
+	U32 rs1 = (U32)((tuple >> 45) & 0x1Full);
+	U32 rs2_or_imm_idx = (U32)((tuple >> 50) & 0xFFull);
+	B32 is_imm = (B32)((tuple >> 58) & 0x1ull);
 
 	// pull parent code (slot-0 will be overwritten by the built instruction)
 	EnumStateCode parent_code;
-	const EnumStateCode* d_parent_code = (const EnumStateCode*)e->d_last_front_code + e->out_parent_base + parent_local_id;
+	EnumStateCode* d_parent_code = (EnumStateCode*)e->d_last_front_code + e->out_parent_base + parent_local_id;
 	dtoh_memcpy(&parent_code, d_parent_code, sizeof(EnumStateCode));
 
 	// build slot-0 instruction from the tuple + meta + imm pool (host copies)
-	const EnumMeta& m = optimizer->cur_meta[op_idx];
+	EnumMeta& m = optimizer->cur_meta[op_idx];
 	Instruction built;
 	built.op = (InstructionOpcode)m.op;
 	for(U32 k = 0; k < 4; ++k) { built.operands[k].imm = 0; }
@@ -198,7 +198,7 @@ void optimizer_reconstruct_survivor(Optimizer* optimizer, U64 i, U32 len, Instru
 
 B32 optimizer_filter_batch(Optimizer* optimizer, U32 len) {
 	Enum* e = &optimizer->enumerate;
-	const U64 p_cnt = e->out_n_cands;
+	U64 p_cnt = e->out_n_cands;
 	if(p_cnt == 0) { return false; }
 
 	FilterOptions cfg;
@@ -206,8 +206,8 @@ B32 optimizer_filter_batch(Optimizer* optimizer, U32 len) {
 	cfg.live_in_mask = optimizer->live_in;
 	cfg.active_mask = optimizer->cur_active_mask;
 	cfg.prog_len = len;
-	cfg.tuples = (const U64*)e->d_tuples;
-	cfg.parent_code = (const EnumStateCode*)e->d_last_front_code + e->out_parent_base;
+	cfg.tuples = (U64*)e->d_tuples;
+	cfg.parent_code = (EnumStateCode*)e->d_last_front_code + e->out_parent_base;
 	cfg.n_candidates = p_cnt;
 	cfg.test_in = optimizer->test_in;
 	cfg.target_out = optimizer->target_out;
@@ -222,15 +222,15 @@ B32 optimizer_filter_batch(Optimizer* optimizer, U32 len) {
 	optimizer->filter_passes++;
 
 	// go through our candidates, if they passed the test set we verify them
-	// via an SMT_State solver
+	// via an SMT solver
 	for(U64 i = 0; i < p_cnt; ++i) {
 		if(pass_counts[i] == FilterTestCount) {
 			Instruction survivor_inst[MaxProgramLen];
 			optimizer_reconstruct_survivor(optimizer, i, len, survivor_inst);
-			const F64 t0_smt = get_time_ms();
+			F64 t0_smt = get_time_ms();
 			Program survivor = {survivor_inst, len};
-			// verify via an SMT_State solver
-			SMT_Result res = smt_equiv(*optimizer->prog, survivor, optimizer->live_out);
+			// verify via an SMT solver
+			SMT_Result res = smt_equiv(optimizer->prog, &survivor, optimizer->live_out);
 			optimizer->ms_smt += get_time_ms() - t0_smt;
 			++optimizer->smt_calls;
 
@@ -243,7 +243,7 @@ B32 optimizer_filter_batch(Optimizer* optimizer, U32 len) {
 			} else if(res.type == SMT_ResultType_COUNTEREXAMPLE) {
 				// add the counterexample (round robin), then abort this batch.
 				// mark tests dirty so the next filter_run re-uploads them
-				const U32 slot = 16 + (optimizer->counterexample_count % 16);
+				U32 slot = 16 + (optimizer->counterexample_count % 16);
 				optimizer->counterexample_count++;
 				optimizer->test_in[slot] = res.counterexample;
 				optimizer->target_out[slot] = filter_run_host(optimizer->prog, &res.counterexample);
@@ -261,7 +261,7 @@ void optimizer_log_startup(Optimizer* optimizer) {
 
 	printf("source (len: %u):\n", optimizer->prog->size);
 	Str src = program_to_string(optimizer->prog, scratch);
-	printf("%s", (const C8*)src.ptr);
+	printf("%s", (C8*)src.ptr);
 	printf("live-in:  { ");
 	opt_print_reg_mask(optimizer->live_in);
 	printf(" }\n");
@@ -292,19 +292,19 @@ void optimizer_log_results(Optimizer* optimizer, B32 found) {
 
 	printf("done: optimization found (len: %u):\n", optimizer->best.size);
 	Str s = program_to_string(&optimizer->best, optimizer->mem);
-	printf("%s", (const C8*)s.ptr);
+	printf("%s", (C8*)s.ptr);
 }
 
 void optimizer_log_stats(Optimizer* optimizer) {
 	printf("statistics:\n");
 	printf("  candidates:  %.2fM\n", (F64)optimizer->total_candidates / 1e6);
-	const F64 safe_ms_enum = (optimizer->ms_enum > 0.0) ? optimizer->ms_enum : 0.001;
-	const F64 eps = (F64)optimizer->total_candidates / (safe_ms_enum / 1000.0);
-	const F64 epsm = eps / 1e6;
+	F64 safe_ms_enum = (optimizer->ms_enum > 0.0) ? optimizer->ms_enum : 0.001;
+	F64 eps = (F64)optimizer->total_candidates / (safe_ms_enum / 1000.0);
+	F64 epsm = eps / 1e6;
 	printf("  enum time:   %.2fms (%.2fM cand/sec)\n", optimizer->ms_enum, epsm);
-	const F64 safe_ms_filter = (optimizer->ms_filter > 0.0) ? optimizer->ms_filter : 0.001;
-	const F64 fps = (F64)optimizer->total_candidates / (safe_ms_filter / 1000.0);
-	const F64 fpsm = fps / 1e6;
+	F64 safe_ms_filter = (optimizer->ms_filter > 0.0) ? optimizer->ms_filter : 0.001;
+	F64 fps = (F64)optimizer->total_candidates / (safe_ms_filter / 1000.0);
+	F64 fpsm = fps / 1e6;
 	printf("  filter time: %.2fms (%.2fM cand/sec)\n", optimizer->ms_filter, fpsm);
 	printf("  smt time:    %.2fms (%zu calls)\n", optimizer->ms_smt, optimizer->smt_calls);
 	printf("  total time:  %.2fms\n", optimizer->ms_total);

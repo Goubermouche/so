@@ -6,17 +6,16 @@
 #include "util/type.h"
 
 // thread-local Z3 error capture
-static thread_local C8 g_err_buf[512];
 static thread_local bool g_err_set = false;
 
 static void z3_error_cb(Z3_context c, Z3_error_code ec) {
 	Z3_string msg = Z3_get_error_msg(c, ec);
-	snprintf(g_err_buf, sizeof(g_err_buf), "%s", msg ? msg : "z3 error");
+	fprintf(stderr, "%s", msg ? msg : "z3 error");
 	g_err_set = true;
 }
 
-SMT_Result smt_equiv(const Program& a, const Program& b, U64 live_outs) {
-	const F64 t0 = get_time_ms();
+SMT_Result smt_equiv(Program* a, Program* b, U64 live_outs) {
+	F64 t0 = get_time_ms();
 	SMT_Result r = {};
 
 	// init Z3
@@ -36,10 +35,9 @@ SMT_Result smt_equiv(const Program& a, const Program& b, U64 live_outs) {
 	smt_pin_x0(ctx, &in);
 
 	// run first program
-	SMT_State out_target = smt_run(ctx, &in, &a);
+	SMT_State out_target = smt_run(ctx, &in, a);
 	if(g_err_set) {
 		r.type = SMT_ResultType_ERROR;
-		r.error = g_err_buf;
 		smt_free_state(ctx, &in);
 		smt_free_state(ctx, &out_target);
 		Z3_params_dec_ref(ctx, params);
@@ -48,10 +46,9 @@ SMT_Result smt_equiv(const Program& a, const Program& b, U64 live_outs) {
 	}
 
 	// run second program
-	SMT_State out_rewrite = smt_run(ctx, &in, &b);
+	SMT_State out_rewrite = smt_run(ctx, &in, b);
 	if(g_err_set) {
 		r.type = SMT_ResultType_ERROR;
-		r.error = g_err_buf;
 		smt_free_state(ctx, &in);
 		smt_free_state(ctx, &out_target);
 		smt_free_state(ctx, &out_rewrite);
@@ -126,7 +123,6 @@ SMT_Result smt_equiv(const Program& a, const Program& b, U64 live_outs) {
 
 	if(g_err_set && r.type != SMT_ResultType_COUNTEREXAMPLE) {
 		r.type = SMT_ResultType_ERROR;
-		r.error = g_err_buf;
 	}
 
 	Z3_dec_ref(ctx, formula);
@@ -196,7 +192,7 @@ void smt_free_state(Z3_context ctx, SMT_State* state) {
 	}
 }
 
-SMT_State smt_clone_state(Z3_context ctx, const SMT_State* src) {
+SMT_State smt_clone_state(Z3_context ctx, SMT_State* src) {
 	SMT_State out = {};
 	for(U32 i = 0; i < 32; ++i) {
 		out.r[i] = src->r[i];
@@ -218,19 +214,19 @@ SMT_State smt_make_input_state(Z3_context ctx) {
 	return a;
 }
 
-SMT_State smt_run(Z3_context ctx, const SMT_State* in, const Program* p) {
+SMT_State smt_run(Z3_context ctx, SMT_State* in, Program* p) {
 	SMT_State regs = smt_clone_state(ctx, in);
 	smt_pin_x0(ctx, &regs);
 	Z3_sort s64 = Z3_mk_bv_sort(ctx, 64);
 
 	for(U32 i = 0; i < p->size; ++i) {
-		const Instruction& ins = p->instructions[i];
-		const U32 op = (U32)ins.op;
+		Instruction& ins = p->instructions[i];
+		U32 op = (U32)ins.op;
 
 		if(op == InstructionOpcode_Nop) { continue; }
 
 		// get operands
-		const InstructionInfo* info = &instruction_db_host.row[op];
+		InstructionInfo* info = &instruction_db_host.row[op];
 
 		Z3_ast imm = Z3_mk_unsigned_int64(ctx, 0, s64);
 		Z3_inc_ref(ctx, imm);

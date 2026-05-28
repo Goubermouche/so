@@ -37,11 +37,11 @@ typedef struct FilterOptions {
 	U64 live_in_mask;
 	U64 active_mask;
 	U32 prog_len;
-	const U64* tuples;                // per-cand U64 (parent_local_id, op, rd, rs1, rs2/imm, is_imm)
-	const EnumStateCode* parent_code; // indexed by parent_local_id
+	U64* tuples;                // per-cand U64 (parent_local_id, op, rd, rs1, rs2/imm, is_imm)
+	EnumStateCode* parent_code; // indexed by parent_local_id
 	U64 n_candidates;
-	const CpuState* test_in;
-	const CpuState* target_out;
+	CpuState* test_in;
+	CpuState* target_out;
 } FilterOptions;
 
 I32 filter_make(Filter* filter, U64 max_chunk_cands);
@@ -52,7 +52,7 @@ void filter_run(Filter* filter, FilterOptions* opt, U8** out_pass_counts);
 U32 filter_upload_slot_idx(U64 active_mask);
 U64 filter_pack_mask(U64 raw_mask);
 void filter_init_decode_info();
-void filter_upload_meta(const EnumMeta* h_meta, U32 n_meta, const I64* h_imms, U32 n_imms);
+void filter_upload_meta(EnumMeta* h_meta, U32 n_meta, I64* h_imms, U32 n_imms);
 
 HostDevice void filter_run_lane(U64 regs[32], Instruction* prog, U32 prog_len) {
 	regs[0] = 0;

@@ -19,9 +19,7 @@ Str lexer_token_to_str(LexerToken tok) {
 		case LexerToken_Newline: return StrLit("newline");
 		case LexerToken_EndOfFile: return StrLit("eof");
 		default:
-			if(lexer_token_is_reg(tok)) {
-				return reg_name(lexer_token_to_reg_index(tok));
-			}
+			if(lexer_token_is_reg(tok)) { return reg_name(lexer_token_to_reg_index(tok)); }
 			return StrLit("?");
 	}
 }
@@ -101,16 +99,15 @@ B32 lexer_is_whitespace(C8 c) {
 }
 
 LexerToken lexer_next_tok_identifier(Lexer* lexer) {
-	const U64 start = lexer->index - 1;
+	U64 start = lexer->index - 1;
 
 	while(isalnum(lexer->current_char) || lexer->current_char == '_' || lexer->current_char == '.') {
 		lexer_next_char(lexer);
 	}
 
-	const U64 end = lexer->index - 1;
+	U64 end = lexer->index - 1;
 	lexer->curr_string = str_make(lexer->source.ptr + start, end - start);
-
-	const auto LexerToken = lexer_str_to_tok(lexer->curr_string);
+	auto LexerToken = lexer_str_to_tok(lexer->curr_string);
 
 	if(LexerToken != LexerToken_Unknown) { return lexer->curr = LexerToken; }
 
@@ -143,7 +140,7 @@ LexerToken lexer_str_to_tok(Str str) {
 	// numeric register (x1, x2,...)
 	if(str.size > 1 && str.ptr[0] == 'x') {
 		C8 buf[16] = {0};
-		const U64 n = str.size < 15 ? str.size : 15;
+		U64 n = str.size < 15 ? str.size : 15;
 		memcpy(buf, str.ptr, n);
 		buf[n] = 0;
 
@@ -160,7 +157,7 @@ LexerToken lexer_str_to_tok(Str str) {
 	} RegMapping;
 
 	// ABI names
-	static const RegMapping abi_map[] = {
+	static RegMapping abi_map[] = {
 		{"zero", LexerToken_RegX0}, {"ra", LexerToken_RegX1},		{"sp", LexerToken_RegX2},
 		{"gp", LexerToken_RegX3},		{"tp", LexerToken_RegX4},		{"t0", LexerToken_RegX5},
 		{"t1", LexerToken_RegX6},		{"t2", LexerToken_RegX7},		{"s0", LexerToken_RegX8},
@@ -171,10 +168,12 @@ LexerToken lexer_str_to_tok(Str str) {
 		{"s4", LexerToken_RegX20},	{"s5", LexerToken_RegX21},	{"s6", LexerToken_RegX22},
 		{"s7", LexerToken_RegX23},	{"s8", LexerToken_RegX24},	{"s9", LexerToken_RegX25},
 		{"s10", LexerToken_RegX26}, {"s11", LexerToken_RegX27}, {"t3", LexerToken_RegX28},
-		{"t4", LexerToken_RegX29},	{"t5", LexerToken_RegX30},	{"t6", LexerToken_RegX31}};
+		{"t4", LexerToken_RegX29},	{"t5", LexerToken_RegX30},	{"t6", LexerToken_RegX31}
+	};
 
-	static const U64 abi_size = sizeof(abi_map) / sizeof(abi_map[0]);
-	for(size_t i = 0; i < abi_size; ++i) {
+#define ABI_SIZE (sizeof(abi_map) / sizeof(abi_map[0]))
+
+	for(size_t i = 0; i < ABI_SIZE; ++i) {
 		if(str_match_cstr(str, abi_map[i].name)) return abi_map[i].tok;
 	}
 
@@ -184,8 +183,7 @@ LexerToken lexer_str_to_tok(Str str) {
 LexerToken lexer_str_to_num_tok(Lexer* lexer, Str Str) {
 	I32 base = 10;
 	C8 buf[64];
-	Assert(Str.size < sizeof(buf), "numeric literal too long ('%.*s')\n", (int)Str.size,
-				 (const C8*)Str.ptr);
+	Assert(Str.size < sizeof(buf), "numeric literal too long ('%.*s')\n", (int)Str.size, Str.ptr);
 	memcpy(buf, Str.ptr, Str.size);
 	if(Str.size >= sizeof(buf)) __builtin_unreachable();
 	buf[Str.size] = 0;
@@ -210,7 +208,7 @@ LexerToken lexer_str_to_num_tok(Lexer* lexer, Str Str) {
 	}
 
 	errno = 0;
-	const U64 number = strtoull(data, 0, base);
+	U64 number = strtoull(data, 0, base);
 	Assert(errno == 0, "strtoull failed for '%s'\n", buf);
 	lexer->curr_imm = (I64)number;
 	return lexer->curr = LexerToken_Number;
