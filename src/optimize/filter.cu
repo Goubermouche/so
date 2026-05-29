@@ -128,131 +128,6 @@ void filter_upload_meta(EnumMeta* h_meta, U32 n_meta, I64* h_imms, U32 n_imms) {
 	cudaMemcpyToSymbol(cf_imms, h_imms, n_imms * sizeof(I64));
 }
 
-__device__ __forceinline__ U64 sim_cheap(U32 op, U64 a, U64 b, U64 imm) {
-	U32 sh_b = (U32)(b & 0x3F);
-	U32 sh_i = (U32)(imm & 0x3F);
-	U32 sh_b5 = (U32)(b & 0x1F);
-	U32 sh_i5 = (U32)(imm & 0x1F);
-	U32 a32 = (U32)a;
-	U32 b32 = (U32)b;
-	U32 i32 = (U32)imm;
-
-	switch(op) {
-		case InstructionOpcode_Add: return a + b;
-		case InstructionOpcode_Sub: return a - b;
-		case InstructionOpcode_Sll: return a << sh_b;
-		case InstructionOpcode_Slt: return ((I64)a < (I64)b) ? 1ull : 0ull;
-		case InstructionOpcode_Sltu: return (a < b) ? 1ull : 0ull;
-		case InstructionOpcode_Xor: return a ^ b;
-		case InstructionOpcode_Srl: return a >> sh_b;
-		case InstructionOpcode_Sra: return (U64)((I64)a >> sh_b);
-		case InstructionOpcode_Or: return a | b;
-		case InstructionOpcode_And: return a & b;
-		case InstructionOpcode_Addi: return a + imm;
-		case InstructionOpcode_Slti: return ((I64)a < (I64)imm) ? 1ull : 0ull;
-		case InstructionOpcode_Sltiu: return (a < imm) ? 1ull : 0ull;
-		case InstructionOpcode_Xori: return a ^ imm;
-		case InstructionOpcode_Ori: return a | imm;
-		case InstructionOpcode_Andi: return a & imm;
-		case InstructionOpcode_Slli: return a << sh_i;
-		case InstructionOpcode_Srli: return a >> sh_i;
-		case InstructionOpcode_Srai: return (U64)((I64)a >> sh_i);
-		case InstructionOpcode_Lui: return (U64)(I64)(I32)((U32)imm << 12);
-		case InstructionOpcode_Addiw: return (U64)(I64)(I32)(a32 + i32);
-		case InstructionOpcode_Slliw: return (U64)(I64)(I32)(a32 << sh_i5);
-		case InstructionOpcode_Srliw: return (U64)(I64)(I32)(a32 >> sh_i5);
-		case InstructionOpcode_Sraiw: return (U64)(I64)((I32)a32 >> sh_i5);
-		case InstructionOpcode_Addw: return (U64)(I64)(I32)(a32 + b32);
-		case InstructionOpcode_Subw: return (U64)(I64)(I32)(a32 - b32);
-		case InstructionOpcode_Sllw: return (U64)(I64)(I32)(a32 << sh_b5);
-		case InstructionOpcode_Srlw: return (U64)(I64)(I32)(a32 >> sh_b5);
-		case InstructionOpcode_Sraw: return (U64)(I64)((I32)a32 >> sh_b5);
-		default: return 0;
-	}
-}
-
-__device__ __forceinline__ U64 sim_mul(U32 op, U64 a, U64 b) {
-	switch(op) {
-		case InstructionOpcode_Mul: return a * b;
-		case InstructionOpcode_Mulh: {
-			__int128 sa = (__int128)(I64)a;
-			__int128 sb = (__int128)(I64)b;
-			return (U64)(I64)((sa * sb) >> 64);
-		}
-		case InstructionOpcode_Mulhsu: {
-			__int128 sa = (__int128)(I64)a;
-			__int128 ub = (__int128)(unsigned __int128)b;
-			return (U64)(I64)((sa * ub) >> 64);
-		}
-		case InstructionOpcode_Mulhu: {
-			unsigned __int128 ua = (unsigned __int128)a;
-			unsigned __int128 ub = (unsigned __int128)b;
-			return (U64)((ua * ub) >> 64);
-		}
-		case InstructionOpcode_Mulw: {
-			I32 r = (I32)a * (I32)b;
-			return (U64)(I64)r;
-		}
-		default: return 0;
-	}
-}
-
-__device__ __forceinline__ U64 sim_div(U32 op, U64 a, U64 b) {
-	switch(op) {
-		case InstructionOpcode_Div: {
-			I64 sa = (I64)a, sb = (I64)b;
-			if(sb == 0) return (U64)(I64)-1;
-			if(sa == (I64)0x8000000000000000ULL && sb == -1) return (U64)sa;
-			return (U64)(sa / sb);
-		}
-		case InstructionOpcode_Divu: return (b == 0) ? (U64)-1 : (a / b);
-		case InstructionOpcode_Rem: {
-			I64 sa = (I64)a, sb = (I64)b;
-			if(sb == 0) return (U64)sa;
-			if(sa == (I64)0x8000000000000000ULL && sb == -1) return 0;
-			return (U64)(sa % sb);
-		}
-		case InstructionOpcode_Remu: return (b == 0) ? a : (a % b);
-		case InstructionOpcode_Divw: {
-			I32 sa = (I32)a, sb = (I32)b;
-			I32 r;
-			if(sb == 0)
-				r = -1;
-			else if(sa == (I32)0x80000000 && sb == -1)
-				r = sa;
-			else
-				r = sa / sb;
-			return (U64)(I64)r;
-		}
-		case InstructionOpcode_Divuw: {
-			U32 ua = (U32)a, ub = (U32)b;
-			return (U64)(I64)(I32)(ub == 0 ? (U32)-1 : ua / ub);
-		}
-		case InstructionOpcode_Remw: {
-			I32 sa = (I32)a, sb = (I32)b;
-			I32 r;
-			if(sb == 0)
-				r = sa;
-			else if(sa == (I32)0x80000000 && sb == -1)
-				r = 0;
-			else
-				r = sa % sb;
-			return (U64)(I64)r;
-		}
-		case InstructionOpcode_Remuw: {
-			U32 ua = (U32)a, ub = (U32)b;
-			return (U64)(I64)(I32)(ub == 0 ? ua : ua % ub);
-		}
-		default: return 0;
-	}
-}
-
-__device__ __forceinline__ U64
-sim_dispatch(U32 op, U64 a, U64 b, U64 imm, U32 cls, B32 warp_has_mul, B32 warp_has_div) {
-	if(warp_has_mul && cls == 1u) return sim_mul(op, a, b);
-	if(warp_has_div && cls == 2u) return sim_div(op, a, b);
-	return sim_cheap(op, a, b, imm);
-}
 
 extern __shared__ U8 g_smem[];
 
@@ -294,7 +169,7 @@ extern __shared__ U8 g_smem[];
 		U32 cls_ = (cls_packed >> ((K) * 2)) & 0x3u;                                                   \
 		U64 a_ = s_regs[(size_t)rs1_ * blk_n + tid];                                                   \
 		U64 b_ = s_regs[(size_t)rs2_ * blk_n + tid];                                                   \
-		U64 v_ = sim_dispatch(op_, a_, b_, imm_, cls_, warp_has_mul, warp_has_div);                    \
+		U64 v_ = ext_run_inst_dispatch(op_, a_, b_, imm_, cls_, warp_has_mul, warp_has_div);           \
 		if(rd_ != 0u) { s_regs[(size_t)rd_ * blk_n + tid] = v_; }                                      \
 	} while(0)
 

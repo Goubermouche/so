@@ -17,6 +17,13 @@ typedef enum InstructionOperandTypeEnum {
 
 typedef U32 InstructionOpcode; // enum in ext
 
+typedef U8 InstructionOpcodeClass;
+typedef enum InstructionOpcodeClassEnum {
+	InstructionOpcodeClass_Cheap = 0,
+	InstructionOpcodeClass_Mul,
+	InstructionOpcodeClass_Div
+} InstructionOpcodeClassEnum;
+
 typedef struct Instruction {
 	InstructionOpcode op;
 	InstructionOperand operands[4];
