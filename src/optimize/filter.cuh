@@ -22,10 +22,10 @@ typedef struct Filter {
 	// device
 	void* d_test_in;		// reference inputs
 	void* d_target_out; // reference outputs
-	void* d_pass_count; // per-candidate pass counts
+	void* d_pass_bits;  // per-candidate pass bit (1 => passed all tests, 0 => failed)
 	// host
-	U8* h_pass_count;
-	U64 h_pass_count_cap;
+	U32* h_pass_bits;
+	U64 h_pass_bits_cap; // capacity in U32 words
 	B32 tests_dirty;    // if true, reuploads test set on run
 } Filter;
 
@@ -43,7 +43,7 @@ typedef struct FilterOptions {
 
 I32 filter_make(Filter* filter, U64 max_chunk_cands);
 void filter_free(Filter* filter);
-void filter_run(Filter* filter, FilterOptions* opt, U8** out_pass_counts);
+void filter_run(Filter* filter, FilterOptions* opt, U32** out_pass_bits);
 
 U32 filter_upload_slot_idx(U64 active_mask);
 U64 filter_pack_mask(U64 raw_mask);

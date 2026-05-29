@@ -149,7 +149,7 @@ template<U32 PROG_LEN>
 __global__ __launch_bounds__(FilterSimThreadsPerBlock, 2) void opt_filter_kernel(
 	PackedInstruction* __restrict__ instructions,
 	EnumStateCode* __restrict__ parent_code,
-	U8* __restrict__ pass_count,
+	U32* __restrict__ pass_bits,
 	U64 n_candidates,
 	U64 packed_live_mask,
 	U64 packed_live_in_mask,
@@ -287,7 +287,10 @@ __global__ __launch_bounds__(FilterSimThreadsPerBlock, 2) void opt_filter_kernel
 	}
 
 	// pass results
-	pass_count[cand_id] = (pass_mask == 0xFFFFFFFFu) ? (U8)FilterTestCount : (U8)0;
+	// all 32 threads cooperate to write 32 candidate results
+	U32 word = __ballot_sync(0xFFFFFFFFu, pass_mask == 0xFFFFFFFFu);
+	if((tid & 31u) == 0u)
+		pass_bits[cand_id / 32u] = word;
 }
 
 #undef DECODE_SLOT
@@ -297,9 +300,9 @@ I32 filter_make(Filter* filter, U64 max_chunk_cands) {
 	filter->max_chunk_cands = 0;
 	filter->d_test_in = 0;
 	filter->d_target_out = 0;
-	filter->d_pass_count = 0;
-	filter->h_pass_count = 0;
-	filter->h_pass_count_cap = 0;
+	filter->d_pass_bits = 0;
+	filter->h_pass_bits = 0;
+	filter->h_pass_bits_cap = 0;
 	filter->tests_dirty = true;
 
 	filter_init_decode_info();
@@ -337,16 +340,17 @@ I32 filter_make(Filter* filter, U64 max_chunk_cands) {
 	// allocs
 	dmalloc(&filter->d_test_in, FilterTestCount * sizeof(CpuState));
 	dmalloc(&filter->d_target_out, FilterTestCount * sizeof(CpuState));
-	dmalloc(&filter->d_pass_count, filter->max_chunk_cands * sizeof(U8));
+	U64 pass_words = (filter->max_chunk_cands + 31u) / 32u;
+	dmalloc(&filter->d_pass_bits, pass_words * sizeof(U32));
 
-	filter->h_pass_count_cap = filter->max_chunk_cands;
-	if(cudaMallocHost((void**)&filter->h_pass_count, filter->h_pass_count_cap * sizeof(U8)) !=
+	filter->h_pass_bits_cap = pass_words;
+	if(cudaMallocHost((void**)&filter->h_pass_bits, filter->h_pass_bits_cap * sizeof(U32)) !=
 		 cudaSuccess) {
-		filter->h_pass_count = (U8*)malloc(filter->h_pass_count_cap * sizeof(U8));
-		if(!filter->h_pass_count) return 5;
+		filter->h_pass_bits = (U32*)malloc(filter->h_pass_bits_cap * sizeof(U32));
+		if(!filter->h_pass_bits) return 5;
 	}
 
-	U64 used_mem = fixed_mem_bytes + filter->max_chunk_cands * sizeof(U8);
+	U64 used_mem = fixed_mem_bytes + pass_words * sizeof(U32);
 
 	printf("filter:\n");
 	printf("  chunk size: %zu cands\n", filter->max_chunk_cands);
@@ -358,14 +362,14 @@ I32 filter_make(Filter* filter, U64 max_chunk_cands) {
 void filter_free(Filter* filter) {
 	if(filter->d_test_in) cudaFree(filter->d_test_in);
 	if(filter->d_target_out) cudaFree(filter->d_target_out);
-	if(filter->d_pass_count) cudaFree(filter->d_pass_count);
-	if(filter->h_pass_count) {
-		if(cudaFreeHost(filter->h_pass_count) != cudaSuccess) free(filter->h_pass_count);
+	if(filter->d_pass_bits) cudaFree(filter->d_pass_bits);
+	if(filter->h_pass_bits) {
+		if(cudaFreeHost(filter->h_pass_bits) != cudaSuccess) free(filter->h_pass_bits);
 	}
 }
 
-void filter_run(Filter* filter, FilterOptions* opt, U8** out_pass_counts) {
-	*out_pass_counts = filter->h_pass_count;
+void filter_run(Filter* filter, FilterOptions* opt, U32** out_pass_bits) {
+	*out_pass_bits = filter->h_pass_bits;
 	if(opt->instructions == 0 || opt->n_candidates == 0) return;
 
 	// verify register count
@@ -418,12 +422,14 @@ void filter_run(Filter* filter, FilterOptions* opt, U8** out_pass_counts) {
 		U32 n_blocks = (U32)((this_chunk + block_threads - 1) / block_threads);
 		dim3 grid(n_blocks);
 		dim3 block(block_threads);
+		U64 chunk_words = (this_chunk + 31u) / 32u;
+		U64 done_words = done / 32u;
 
 #define LAUNCH(N)                                                                                  \
 	opt_filter_kernel<N><<<grid, block, shmem_bytes>>>(                                              \
 		opt->instructions + done,                                                                      \
 		opt->parent_code,                                                                              \
-		(U8*)filter->d_pass_count,                                                                     \
+		(U32*)filter->d_pass_bits,                                                                     \
 		this_chunk,                                                                                    \
 		packed_live_mask,                                                                              \
 		packed_live_in_mask,                                                                           \
@@ -448,7 +454,7 @@ void filter_run(Filter* filter, FilterOptions* opt, U8** out_pass_counts) {
 #undef LAUNCH
 		check_cuda(cudaGetLastError(), "filter kernel launch");
 		// copy back results
-		dtoh_memcpy(filter->h_pass_count + done, filter->d_pass_count, this_chunk * sizeof(U8));
+		dtoh_memcpy(filter->h_pass_bits + done_words, filter->d_pass_bits, chunk_words * sizeof(U32));
 		done += this_chunk;
 	}
 }

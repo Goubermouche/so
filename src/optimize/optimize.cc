@@ -198,21 +198,30 @@ B32 optimizer_filter_batch(Optimizer* optimizer, U32 len) {
 
 	// run mass filter - remove the majority of candidate programs by verifying
 	// their correctness against a set of random and counterexample tests
-	U8* pass_counts = 0;
+	U32* pass_bits = 0; // 1 => candidate passed all tests
 	F64 t0_filter = get_time_ms();
-	filter_run(&optimizer->filter, &cfg, &pass_counts);
+	filter_run(&optimizer->filter, &cfg, &pass_bits);
 	optimizer->ms_filter += get_time_ms() - t0_filter;
 	optimizer->total_candidates += p_cnt;
 	optimizer->filter_passes++;
 
 	// go through our candidates, if they passed the test set we verify them
-	// via an SMT solver
-	for(U64 i = 0; i < p_cnt; ++i) {
-		if(pass_counts[i] == FilterTestCount) {
-			Instruction survivor_inst[MaxProgramLen];
-			optimizer_reconstruct_survivor(optimizer, i, len, survivor_inst);
+	// via an SMT solver. iterate word-by-word to avoid per-candidate division;
+	// skip zero words entirely (the common case) and use ctz to find set bits.
+	U64 n_words = (p_cnt + 31u) / 32u;
+	for(U64 w = 0; w < n_words; ++w) {
+		U32 word = pass_bits[w];
+		while(word) {
+			U32 bit = (U32)__builtin_ctz(word);
+			word &= word - 1u; // clear lowest set bit
+			U64 i = w * 32u + bit;
+			if(i >= p_cnt) break; // didn't pass
+
+			// rebuild candidate that passed filtering
+			Instruction survivor_instructions[MaxProgramLen];
+			optimizer_reconstruct_survivor(optimizer, i, len, survivor_instructions);
+			Program survivor = {survivor_instructions, len};
 			F64 t0_smt = get_time_ms();
-			Program survivor = {survivor_inst, len};
 			// verify via an SMT solver
 			SMT_Result res = smt_equiv(optimizer->prog, &survivor, optimizer->live_out);
 			optimizer->ms_smt += get_time_ms() - t0_smt;
@@ -221,7 +230,7 @@ B32 optimizer_filter_batch(Optimizer* optimizer, U32 len) {
 			if(res.type == SMT_ResultType_EQUIVALENT) {
 				// equivalent Program
 				Instruction* dst = ArenaPush(optimizer->mem, Instruction, len);
-				memcpy(dst, survivor_inst, sizeof(Instruction) * len);
+				memcpy(dst, survivor_instructions, sizeof(Instruction) * len);
 				optimizer->best = {dst, len};
 				return true;
 			} else if(res.type == SMT_ResultType_COUNTEREXAMPLE) {
