@@ -165,18 +165,18 @@ void optimizer_reconstruct_survivor(Optimizer* optimizer, U64 i, U32 len, Instru
 	Enum* e = &optimizer->enumerate;
 
 	// fetch + decode the instruction for this cand
-	U64 packed = 0;
-	dtoh_memcpy(&packed, (U64*)e->d_instructions + i, sizeof(U64));
-	UnpackedInstruction inst = instruction_unpack(packed);
+	PackedInstruction packed = 0;
+	dtoh_memcpy(&packed, (PackedInstruction*)e->d_instructions + i, sizeof(PackedInstruction));
+	UnpackedInstruction unpacked = instruction_unpack(packed);
 
 	// pull parent code (slot-0 will be overwritten by the built instruction)
 	EnumStateCode parent_code;
-	EnumStateCode* d_parent_code = (EnumStateCode*)e->d_last_front_code + e->out_parent_base + inst.parent_local_id;
+	EnumStateCode* d_parent_code = (EnumStateCode*)e->d_last_front_code + e->out_parent_base + unpacked.parent_local_id;
 	dtoh_memcpy(&parent_code, d_parent_code, sizeof(EnumStateCode));
 
 	// build slot-0 instruction from the packed instruction + meta + imm pool (host copies)
-	EnumMeta& m = optimizer->cur_meta[inst.op_idx];
-	out_inst[0] = enum_build_inst(&m, inst, optimizer->cur_imms.vals);
+	EnumMeta& m = optimizer->cur_meta[unpacked.op_idx];
+	out_inst[0] = enum_build_inst(&m, unpacked, optimizer->cur_imms.vals);
 	for(U32 k = 1; k < len; ++k) { out_inst[k] = parent_code.code[k]; }
 }
 
@@ -190,7 +190,7 @@ B32 optimizer_filter_batch(Optimizer* optimizer, U32 len) {
 	cfg.live_in_mask = optimizer->live_in;
 	cfg.active_mask = optimizer->cur_active_mask;
 	cfg.prog_len = len;
-	cfg.instructions = (U64*)e->d_instructions;
+	cfg.instructions = (PackedInstruction*)e->d_instructions;
 	cfg.parent_code = (EnumStateCode*)e->d_last_front_code + e->out_parent_base;
 	cfg.n_candidates = p_cnt;
 	cfg.test_in = optimizer->test_in;

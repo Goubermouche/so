@@ -246,7 +246,7 @@ extern __shared__ U8 g_smem[];
 
 template<U32 PROG_LEN>
 __global__ __launch_bounds__(FilterSimThreadsPerBlock, 2) void opt_filter_kernel(
-	U64* __restrict__ instructions,
+	PackedInstruction* __restrict__ instructions,
 	EnumStateCode* __restrict__ parent_code,
 	U8* __restrict__ pass_count,
 	U64 n_candidates,
@@ -288,22 +288,21 @@ __global__ __launch_bounds__(FilterSimThreadsPerBlock, 2) void opt_filter_kernel
 	U32 op_class_or = 0;
 
 	{
-		U64 t = 0;
 		U32 parent_local_id = 0;
 		U32 op_idx = 0;
 		U32 rd_raw = 0;
 		U32 rs1_raw = 0;
 		U32 rs2_or_imm_idx = 0;
 		B32 is_imm = false;
+		
 		if(cand_id < n_candidates) {
-			t = instructions[cand_id];
-			UnpackedInstruction f = instruction_unpack(t);
-			parent_local_id = f.parent_local_id;
-			op_idx = f.op_idx;
-			rd_raw = f.rd;
-			rs1_raw = f.rs1;
-			rs2_or_imm_idx = f.rs2_or_imm_idx;
-			is_imm = f.is_imm;
+			UnpackedInstruction unpacked = instruction_unpack(instructions[cand_id]);
+			parent_local_id = unpacked.parent_local_id;
+			op_idx = unpacked.op_idx;
+			rd_raw = unpacked.rd;
+			rs1_raw = unpacked.rs1;
+			rs2_or_imm_idx = unpacked.rs2_or_imm_idx;
+			is_imm = unpacked.is_imm;
 		}
 
 		// slot 0

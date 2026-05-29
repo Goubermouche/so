@@ -122,7 +122,7 @@ __device__ __forceinline__ U32 opt_try_one(
 	U32 parent_local_id,
 	EnumStateHeader* dst_hdr,
 	EnumStateCode* dst_code,
-	U64* dst_instructions,
+	PackedInstruction* dst_instructions,
 	U64 write_base,
 	U32* write_local,
 	U64 cap_states,
@@ -186,7 +186,7 @@ __device__ U32 opt_expand_one(
 	U32 parent_local_id,
 	EnumStateHeader* dst_hdr,
 	EnumStateCode* dst_code,
-	U64* dst_instructions,
+	PackedInstruction* dst_instructions,
 	U64 write_base,
 	U64 cap_states,
 	U64 cap_cands
@@ -381,13 +381,13 @@ __global__ void opt_emit_kernel_upper(
 	);
 }
 
-__global__ void opt_emi_insntructions_kernel(
+__global__ void emit_instructions_kernel(
 	EnumStateHeader* __restrict__ src_hdr_front,
 	U32 n_src,
 	U64* __restrict__ d_offsets,
 	U64 base_adjust,
 	EnumLayer e,
-	U64* __restrict__ dst_instructions,
+	PackedInstruction* __restrict__ dst_instructions,
 	U64 cap_cands
 ) {
 	U32 tid = blockIdx.x * blockDim.x + threadIdx.x;
@@ -426,7 +426,7 @@ I32 enum_make(Enum* e, U64 batch_size) {
 	dmalloc(&e->d_front_b_code, capacity * sizeof(EnumStateCode));
 	dmalloc(&e->d_counts, capacity * sizeof(U32));
 	dmalloc(&e->d_offsets, capacity * sizeof(U64));
-	dmalloc(&e->d_instructions, capacity * sizeof(U64));
+	dmalloc(&e->d_instructions, capacity * sizeof(PackedInstruction));
 	e->scan_tmp_bytes = 0;
 	device_exclusive_sum(0, &e->scan_tmp_bytes, (U32*)e->d_counts, (U64*)e->d_offsets, (I32)capacity);
 	dmalloc(&e->d_scan_tmp, e->scan_tmp_bytes);
@@ -653,12 +653,12 @@ U64 enum_emit_batch(Enum* e) {
 
 	if(emitted > 0) {
 		U32 threads = 256;
-		U64* d_instructions = (U64*)e->d_instructions;
+		PackedInstruction* d_instructions = (PackedInstruction*)e->d_instructions;
 		EnumStateHeader* d_hdr = (EnumStateHeader*)e->d_last_front_hdr;
 
 		// emit packed instructions per cand
 		U32 emit_blocks = (U32)((k + threads - 1) / threads);
-		opt_emi_insntructions_kernel<<<emit_blocks, threads>>>(
+		emit_instructions_kernel<<<emit_blocks, threads>>>(
 			d_hdr + cursor, (U32)k, d_offsets + cursor, base_off, lctx, d_instructions, cap
 		);
 		check_cuda(cudaGetLastError(), "enum emit instructions kernel");
