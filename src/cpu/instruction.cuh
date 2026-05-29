@@ -50,6 +50,8 @@ typedef enum InstructionShapeEnum {
 	InstructionShape_RI,			 // rd, imm
 } InstructionShapeEnum;
 
+InstructionOpcodeClass instruction_opcode_class(InstructionOpcode op);
+
 InstructionOperandType instruction_shape_op0(InstructionShape s);
 InstructionOperandType instruction_shape_op1(InstructionShape s);
 InstructionOperandType instruction_shape_op2(InstructionShape s);

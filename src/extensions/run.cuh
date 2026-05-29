@@ -1,16 +1,10 @@
 #ifndef EXT_RUN_CUH
 #define EXT_RUN_CUH
 
-#include "cpu/instruction.cuh"
+#include "cpu/program.h"
+#include "extensions/database.cuh"
 
-// sign-extend the low 32 bits of value to 64 bits
-HostDevice I64 ext_rv_sext32(U64 value) { return (I64)(I32)(U32)value; }
-
-HostDevice void ext_rv_wr(U64 regs[32], U32 destination, U64 value) {
-	regs[destination] = value;
-	regs[0] = 0; // pin x0
-}
-
+// innstruction runners
 HostDevice U64 ext_run_inst_cheap(InstructionOpcode op, U64 a, U64 b, U64 imm) {
 	U32 sh_b = (U32)(b & 0x3F);
 	U32 sh_i = (U32)(imm & 0x3F);
@@ -146,63 +140,7 @@ HostDevice U64 ext_run_inst_dispatch(
 	return ext_run_inst_cheap(op, op_1, op_2, imm);
 }
 
-HostDevice InstructionOpcodeClass ext_op_class(InstructionOpcode op) {
-	switch(op) {
-		case InstructionOpcode_Mul:
-		case InstructionOpcode_Mulh:
-		case InstructionOpcode_Mulhsu:
-		case InstructionOpcode_Mulhu:
-		case InstructionOpcode_Mulw: return InstructionOpcodeClass_Mul;
-		case InstructionOpcode_Div:
-		case InstructionOpcode_Divu:
-		case InstructionOpcode_Rem:
-		case InstructionOpcode_Remu:
-		case InstructionOpcode_Divw:
-		case InstructionOpcode_Divuw:
-		case InstructionOpcode_Remw:
-		case InstructionOpcode_Remuw: return InstructionOpcodeClass_Div;
-		default: return InstructionOpcodeClass_Cheap;
-	}
-}
-
-HostDevice B32 ext_run_inst(U64 regs[32], Instruction* inst) {
-	U32 destination;
-	U64 op_1;
-	U64 op_2;
-	U64 imm;
-
-	if(inst->op == InstructionOpcode_Lui) {
-		// RI
-		destination = (U32)inst->operands[0].reg;
-		op_1 = 0;
-		op_2 = 0;
-		imm = inst->operands[1].imm;
-	} else {
-		// RRR / RRI
-		destination = (U32)inst->operands[0].reg;
-		op_1 = regs[inst->operands[1].reg & 31];
-		op_2 = regs[inst->operands[2].reg & 31];
-		imm = inst->operands[2].imm;
-	}
-
-	InstructionOpcodeClass op_class = ext_op_class(inst->op);
-	U64 value = ext_run_inst_dispatch(inst->op, op_1, op_2, imm, op_class, true, true);
-	ext_rv_wr(regs, destination, value);
-	return true;
-}
-
-HostDevice CpuState ext_run_program(Program* prog, CpuState* in) {
-	CpuState out = *in;
-	out.regs[0] = 0;
-
-	for(U32 i = 0; i < prog->size; ++i) {
-		Instruction* inst = &prog->instructions[i];
-
-		if(inst->op == InstructionOpcode_Nop) { continue; }
-		ext_run_inst(out.regs, inst);
-	}
-
-	return out;
-}
+B32 ext_run_inst(U64 regs[32], Instruction* inst);
+CpuState ext_run_program(Program* prog, CpuState* in);
 
 #endif // #ifndef EXT_RUN_CUH

@@ -1,26 +1,24 @@
 #include "optimize/filter.cuh"
 
-static __constant__ U8 c_slot_idx[32];
-static __constant__ U8 c_unpack[FilterMaxActiveRegs];
-
+// register pooling
 static U8 h_slot_idx[32];
-static U8 h_unpack[FilterMaxActiveRegs];
-static U64 h_last_active_mask = 0;
+static __constant__ U8 c_unpack[FilterMaxActiveRegs];
+static __constant__ U8 c_slot_idx[32];
+
+// filter metadata
 static __constant__ U16 cf_meta_op[EnumMaxMeta];
-static __constant__ U8 cf_meta_cls[EnumMaxMeta];
 static __constant__ I64 cf_imms[EnumImmPoolSize];
 
+// device filter info containing a reg mask, immm slot and opcode class for a given instruction type
 static __constant__ U16 c_decode_info[InstructionOpcode_Count];
-static U16 h_decode_info[InstructionOpcode_Count];
 
-// 0 = cheap, 1 = mul, 2 = div
-static __constant__ U8 c_op_class[InstructionOpcode_Count];
-static U8 h_op_class[InstructionOpcode_Count];
-
-static B32 h_decode_info_initialised = false;
+// filter kernel shared mem
+extern __shared__ U8 g_smem[];
 
 U32 filter_upload_slot_idx(U64 active_mask) {
 	// setup register slots
+	static U64 h_last_active_mask = 0;
+	static U8 h_unpack[FilterMaxActiveRegs];
 	active_mask |= 1ull;
 
 	if(active_mask == h_last_active_mask) {
@@ -69,7 +67,7 @@ U64 filter_pack_mask(U64 raw_mask) {
 }
 
 void filter_init_decode_info() {
-	if(h_decode_info_initialised) return;
+	U16 h_decode_info[InstructionOpcode_Count];
 
 	for(U32 op = 0; op < (U32)InstructionOpcode_Count; ++op) {
 		InstructionInfo* info = &instruction_db_host.row[op];
@@ -87,59 +85,33 @@ void filter_init_decode_info() {
 			}
 		}
 
-		U8 cls = 0;
-		switch(op) {
-			case InstructionOpcode_Mul:
-			case InstructionOpcode_Mulh:
-			case InstructionOpcode_Mulhsu:
-			case InstructionOpcode_Mulhu:
-			case InstructionOpcode_Mulw: cls = 1; break;
-			case InstructionOpcode_Div:
-			case InstructionOpcode_Divu:
-			case InstructionOpcode_Rem:
-			case InstructionOpcode_Remu:
-			case InstructionOpcode_Divw:
-			case InstructionOpcode_Divuw:
-			case InstructionOpcode_Remw:
-			case InstructionOpcode_Remuw: cls = 2; break;
-			default: break;
-		}
-		h_op_class[op] = cls;
-
-		h_decode_info[op] = (U16)((reg_mask & 0xF) | (imm_slot << 8) | ((U32)cls << 12));
+		InstructionOpcodeClass op_class = instruction_opcode_class(op);
+		h_decode_info[op] = (U16)((reg_mask & 0xF) | (imm_slot << 8) | ((U32)op_class << 12));
 	}
 
 	cudaMemcpyToSymbol(c_decode_info, h_decode_info, sizeof(h_decode_info));
-	cudaMemcpyToSymbol(c_op_class, h_op_class, sizeof(h_op_class));
-	h_decode_info_initialised = true;
 }
 
 void filter_upload_meta(EnumMeta* h_meta, U32 n_meta, I64* h_imms, U32 n_imms) {
 	U16 ops_buf[EnumMaxMeta];
-	U8 cls_buf[EnumMaxMeta];
 
 	for(U32 i = 0; i < n_meta && i < EnumMaxMeta; ++i) {
 		ops_buf[i] = h_meta[i].op;
-		cls_buf[i] = h_op_class[h_meta[i].op];
 	}
 
 	cudaMemcpyToSymbol(cf_meta_op, ops_buf, n_meta * sizeof(U16));
-	cudaMemcpyToSymbol(cf_meta_cls, cls_buf, n_meta * sizeof(U8));
 	cudaMemcpyToSymbol(cf_imms, h_imms, n_imms * sizeof(I64));
 }
 
-
-extern __shared__ U8 g_smem[];
-
 #define DECODE_SLOT(K)                                                                             \
 	do {                                                                                             \
-		U32 op_ = InstructionOpcode_Nop;                                                               \
+		InstructionOpcode op_ = InstructionOpcode_Nop;                                                 \
 		U32 rd_ = 0, rs1_ = 0, rs2_ = 0;                                                               \
 		U64 imm_ = 0;                                                                                  \
 		U32 cls_K = 0;                                                                                 \
 		if(cand_id < n_candidates && (K) < PROG_LEN) {                                                 \
 			Instruction* in_ = &parent_code[unpacked.parent_local_id].code[K];                           \
-			op_ = (U32)in_->op;                                                                          \
+			op_ = (InstructionOpcode)in_->op;                                                            \
 			U32 info_ = (U32)c_decode_info[op_];                                                         \
 			U32 rmask_ = info_ & 0xF;                                                                    \
 			U32 islot_ = (info_ >> 8) & 0xF;                                                             \
@@ -208,7 +180,7 @@ __global__ __launch_bounds__(FilterSimThreadsPerBlock, 2) void opt_filter_kernel
 	__syncthreads();
 
 	// decode program
-	U32 op_0 = 0, op_1 = 0, op_2 = 0, op_3 = 0, op_4 = 0, op_5 = 0, op_6 = 0, op_7 = 0;
+	InstructionOpcode op_0 = 0, op_1 = 0, op_2 = 0, op_3 = 0, op_4 = 0, op_5 = 0, op_6 = 0, op_7 = 0;
 	U32 rd_0 = 0, rd_1 = 0, rd_2 = 0, rd_3 = 0, rd_4 = 0, rd_5 = 0, rd_6 = 0, rd_7 = 0;
 	U32 rs1_0 = 0, rs1_1 = 0, rs1_2 = 0, rs1_3 = 0, rs1_4 = 0, rs1_5 = 0, rs1_6 = 0, rs1_7 = 0;
 	U32 rs2_0 = 0, rs2_1 = 0, rs2_2 = 0, rs2_3 = 0, rs2_4 = 0, rs2_5 = 0, rs2_6 = 0, rs2_7 = 0;
@@ -224,7 +196,9 @@ __global__ __launch_bounds__(FilterSimThreadsPerBlock, 2) void opt_filter_kernel
 			unpacked = instruction_unpack(instructions[cand_id]);
 
 		// slot 0
-		op_0 = (cand_id < n_candidates) ? (U32)cf_meta_op[unpacked.op_idx] : (U32)InstructionOpcode_Nop;
+		op_0 = (InstructionOpcode)InstructionOpcode_Nop;
+		if(cand_id < n_candidates)
+			op_0 = (InstructionOpcode)cf_meta_op[unpacked.op_idx];
 		rd_0 = (U32)c_slot_idx[unpacked.rd & 31];
 		rs1_0 = (U32)c_slot_idx[unpacked.rs1 & 31];
 
@@ -235,10 +209,6 @@ __global__ __launch_bounds__(FilterSimThreadsPerBlock, 2) void opt_filter_kernel
 			rs2_0 = (U32)c_slot_idx[unpacked.rs2_or_imm_idx & 31];
 			imm_0 = 0;
 		}
-
-		U32 cls0 = (cand_id < n_candidates) ? (U32)cf_meta_cls[unpacked.op_idx] : 0u;
-		cls_packed |= (cls0 & 0x3u);
-		op_class_or |= cls0;
 
 		// slots 1..prog_len-1: decode parent_code instructions
 		DECODE_SLOT(1);
@@ -310,7 +280,7 @@ __global__ __launch_bounds__(FilterSimThreadsPerBlock, 2) void opt_filter_kernel
 		}
 
 		if(ok) pass_mask |= (1u << t);
-		else   lane_alive = false;
+		else lane_alive = false;
 
 		// if every lane has failed, break
 		if(!__any_sync(0xFFFFFFFFu, lane_alive)) break;

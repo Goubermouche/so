@@ -1,4 +1,24 @@
 #include "cpu/instruction.cuh"
+#include "extensions/database.cuh"
+
+InstructionOpcodeClass instruction_opcode_class(InstructionOpcode op) {
+	switch(op) {
+		case InstructionOpcode_Mul:
+		case InstructionOpcode_Mulh:
+		case InstructionOpcode_Mulhsu:
+		case InstructionOpcode_Mulhu:
+		case InstructionOpcode_Mulw: return InstructionOpcodeClass_Mul;
+		case InstructionOpcode_Div:
+		case InstructionOpcode_Divu:
+		case InstructionOpcode_Rem:
+		case InstructionOpcode_Remu:
+		case InstructionOpcode_Divw:
+		case InstructionOpcode_Divuw:
+		case InstructionOpcode_Remw:
+		case InstructionOpcode_Remuw: return InstructionOpcodeClass_Div;
+		default: return InstructionOpcodeClass_Cheap;
+	}
+}
 
 InstructionOperandType instruction_shape_op0(InstructionShape s) {
 	return s == InstructionShape_None ? InstructionOperandType_None : InstructionOperandType_Reg;
