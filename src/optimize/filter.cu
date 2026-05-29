@@ -10,8 +10,19 @@ static __constant__ U16 cf_meta_op[EnumMaxMeta];
 static __constant__ U8 cf_meta_cls[EnumMaxMeta];
 static __constant__ I64 cf_imms[EnumImmPoolSize];
 
+static __constant__ U16 c_decode_info[InstructionOpcode_Count];
+static U16 h_decode_info[InstructionOpcode_Count];
+
+// 0 = cheap, 1 = mul, 2 = div
+static __constant__ U8 c_op_class[InstructionOpcode_Count];
+static U8 h_op_class[InstructionOpcode_Count];
+
+static B32 h_decode_info_initialised = false;
+
 U32 filter_upload_slot_idx(U64 active_mask) {
+	// setup register slots
 	active_mask |= 1ull;
+
 	if(active_mask == h_last_active_mask) {
 		U32 k = 0;
 		for(U32 r = 0; r < 32; ++r) {
@@ -19,11 +30,14 @@ U32 filter_upload_slot_idx(U64 active_mask) {
 		}
 		return k;
 	}
+
 	for(U32 r = 0; r < 32; ++r) { h_slot_idx[r] = 0xFF; }
 	for(U32 s = 0; s < FilterMaxActiveRegs; ++s) { h_unpack[s] = 0; }
+
 	h_slot_idx[0] = 0;
 	h_unpack[0] = 0;
 	U32 k = 1;
+
 	for(U32 r = 1; r < 32; ++r) {
 		if(!(active_mask & (1ull << r))) continue;
 		if(k >= FilterMaxActiveRegs) return 0;
@@ -31,10 +45,12 @@ U32 filter_upload_slot_idx(U64 active_mask) {
 		h_unpack[k] = (U8)r;
 		++k;
 	}
+
 	U8 device_slot_idx[32];
 	for(U32 r = 0; r < 32; ++r) {
 		device_slot_idx[r] = (h_slot_idx[r] == 0xFF) ? (U8)0 : h_slot_idx[r];
 	}
+
 	cudaMemcpyToSymbol(c_slot_idx, device_slot_idx, sizeof(device_slot_idx));
 	cudaMemcpyToSymbol(c_unpack, h_unpack, sizeof(h_unpack));
 	h_last_active_mask = active_mask;
@@ -52,24 +68,18 @@ U64 filter_pack_mask(U64 raw_mask) {
 	return out;
 }
 
-static __constant__ U16 c_decode_info[InstructionOpcode_Count];
-static U16 h_decode_info[InstructionOpcode_Count];
-
-// 0 = cheap, 1 = mul, 2 = div
-static __constant__ U8 c_op_class[InstructionOpcode_Count];
-static U8 h_op_class[InstructionOpcode_Count];
-
-static B32 h_decode_info_initialised = false;
-
 void filter_init_decode_info() {
 	if(h_decode_info_initialised) return;
+
 	for(U32 op = 0; op < (U32)InstructionOpcode_Count; ++op) {
 		InstructionInfo* info = &instruction_db_host.row[op];
 		U32 reg_mask = 0;
 		if(info->dst_slot >= 0) reg_mask |= 1u << (U32)info->dst_slot;
 		if(info->src_slot >= 0) reg_mask |= 1u << (U32)info->src_slot;
 		if(info->src2_slot >= 0) reg_mask |= 1u << (U32)info->src2_slot;
+
 		U32 imm_slot = 0xF;
+
 		for(U32 k = 0; k < 4; ++k) {
 			if(info->operands[k] == InstructionOperandType_Imm) {
 				imm_slot = k;
@@ -107,10 +117,12 @@ void filter_init_decode_info() {
 void filter_upload_meta(EnumMeta* h_meta, U32 n_meta, I64* h_imms, U32 n_imms) {
 	U16 ops_buf[EnumMaxMeta];
 	U8 cls_buf[EnumMaxMeta];
+
 	for(U32 i = 0; i < n_meta && i < EnumMaxMeta; ++i) {
 		ops_buf[i] = h_meta[i].op;
 		cls_buf[i] = h_op_class[h_meta[i].op];
 	}
+
 	cudaMemcpyToSymbol(cf_meta_op, ops_buf, n_meta * sizeof(U16));
 	cudaMemcpyToSymbol(cf_meta_cls, cls_buf, n_meta * sizeof(U8));
 	cudaMemcpyToSymbol(cf_imms, h_imms, n_imms * sizeof(I64));
@@ -244,83 +256,6 @@ sim_dispatch(U32 op, U64 a, U64 b, U64 imm, U32 cls, B32 warp_has_mul, B32 warp_
 
 extern __shared__ U8 g_smem[];
 
-template<U32 PROG_LEN>
-__global__ __launch_bounds__(FilterSimThreadsPerBlock, 2) void opt_filter_kernel(
-	PackedInstruction* __restrict__ instructions,
-	EnumStateCode* __restrict__ parent_code,
-	U8* __restrict__ pass_count,
-	U64 n_candidates,
-	U64 packed_live_mask,
-	U64 packed_live_in_mask,
-	U32 active_count,
-	CpuState* __restrict__ test_in,
-	CpuState* __restrict__ target_out
-) {
-	U32 tid = threadIdx.x;
-	U32 blk_n = blockDim.x;
-	U64 cand_id = (U64)blockIdx.x * blk_n + tid;
-
-	U64* s_test_in = (U64*)g_smem;
-	U64* s_target_out = s_test_in + (size_t)FilterTestCount * active_count;
-	U64* s_regs = s_target_out + (size_t)FilterTestCount * active_count;
-
-	// test load
-	{
-		U32 ac = active_count;
-		U32 total = FilterTestCount * ac;
-		for(U32 i = tid; i < total; i += blk_n) {
-			U32 t = i / ac;
-			U32 r = i - t * ac;
-			U32 raw_r = (U32)c_unpack[r];
-			s_test_in[i] = test_in[t].regs[raw_r];
-			s_target_out[i] = target_out[t].regs[raw_r];
-		}
-	}
-	__syncthreads();
-
-	// decode program
-	U32 op_0 = 0, op_1 = 0, op_2 = 0, op_3 = 0, op_4 = 0, op_5 = 0, op_6 = 0, op_7 = 0;
-	U32 rd_0 = 0, rd_1 = 0, rd_2 = 0, rd_3 = 0, rd_4 = 0, rd_5 = 0, rd_6 = 0, rd_7 = 0;
-	U32 rs1_0 = 0, rs1_1 = 0, rs1_2 = 0, rs1_3 = 0, rs1_4 = 0, rs1_5 = 0, rs1_6 = 0, rs1_7 = 0;
-	U32 rs2_0 = 0, rs2_1 = 0, rs2_2 = 0, rs2_3 = 0, rs2_4 = 0, rs2_5 = 0, rs2_6 = 0, rs2_7 = 0;
-	U64 imm_0 = 0, imm_1 = 0, imm_2 = 0, imm_3 = 0, imm_4 = 0, imm_5 = 0, imm_6 = 0, imm_7 = 0;
-	U32 cls_packed = 0;
-	U32 op_class_or = 0;
-
-	{
-		U32 parent_local_id = 0;
-		U32 op_idx = 0;
-		U32 rd_raw = 0;
-		U32 rs1_raw = 0;
-		U32 rs2_or_imm_idx = 0;
-		B32 is_imm = false;
-		
-		if(cand_id < n_candidates) {
-			UnpackedInstruction unpacked = instruction_unpack(instructions[cand_id]);
-			parent_local_id = unpacked.parent_local_id;
-			op_idx = unpacked.op_idx;
-			rd_raw = unpacked.rd;
-			rs1_raw = unpacked.rs1;
-			rs2_or_imm_idx = unpacked.rs2_or_imm_idx;
-			is_imm = unpacked.is_imm;
-		}
-
-		// slot 0
-		op_0 = (cand_id < n_candidates) ? (U32)cf_meta_op[op_idx] : (U32)InstructionOpcode_Nop;
-		rd_0 = (U32)c_slot_idx[rd_raw & 31];
-		rs1_0 = (U32)c_slot_idx[rs1_raw & 31];
-		if(is_imm) {
-			rs2_0 = 0;
-			imm_0 = (U64)cf_imms[rs2_or_imm_idx];
-		} else {
-			rs2_0 = (U32)c_slot_idx[rs2_or_imm_idx & 31];
-			imm_0 = 0;
-		}
-		U32 cls0 = (cand_id < n_candidates) ? (U32)cf_meta_cls[op_idx] : 0u;
-		cls_packed |= (cls0 & 0x3u);
-		op_class_or |= cls0;
-
-// slots 1..prog_len-1: decode parent_code instructions
 #define DECODE_SLOT(K)                                                                             \
 	do {                                                                                             \
 		U32 op_ = InstructionOpcode_Nop;                                                               \
@@ -328,7 +263,7 @@ __global__ __launch_bounds__(FilterSimThreadsPerBlock, 2) void opt_filter_kernel
 		U64 imm_ = 0;                                                                                  \
 		U32 cls_K = 0;                                                                                 \
 		if(cand_id < n_candidates && (K) < PROG_LEN) {                                                 \
-			Instruction* in_ = &parent_code[parent_local_id].code[K];                                    \
+			Instruction* in_ = &parent_code[unpacked.parent_local_id].code[K];                           \
 			op_ = (U32)in_->op;                                                                          \
 			U32 info_ = (U32)c_decode_info[op_];                                                         \
 			U32 rmask_ = info_ & 0xF;                                                                    \
@@ -348,48 +283,6 @@ __global__ __launch_bounds__(FilterSimThreadsPerBlock, 2) void opt_filter_kernel
 		op_class_or |= cls_K;                                                                          \
 	} while(0)
 
-		DECODE_SLOT(1);
-		DECODE_SLOT(2);
-		DECODE_SLOT(3);
-		DECODE_SLOT(4);
-		DECODE_SLOT(5);
-		DECODE_SLOT(6);
-		DECODE_SLOT(7);
-#undef DECODE_SLOT
-	}
-
-	// warp-wide OR. when no lane in this warp has a MUL/DIV op, the whole warp branches past the
-	// heavy paths
-	U32 wc = op_class_or;
-	wc |= __shfl_xor_sync(0xFFFFFFFFu, wc, 1);
-	wc |= __shfl_xor_sync(0xFFFFFFFFu, wc, 2);
-	wc |= __shfl_xor_sync(0xFFFFFFFFu, wc, 4);
-	wc |= __shfl_xor_sync(0xFFFFFFFFu, wc, 8);
-	wc |= __shfl_xor_sync(0xFFFFFFFFu, wc, 16);
-	B32 warp_has_mul = (wc & 1u) != 0;
-	B32 warp_has_div = (wc & 2u) != 0;
-
-	if(cand_id >= n_candidates) return;
-
-	U32 pass_mask = 0;
-	B32 lane_alive = true;
-
-#pragma unroll 1
-	for(U32 t = 0; t < FilterTestCount; ++t) {
-		B32 ok = false;
-		if(lane_alive) {
-			// load this test's inputs
-			{
-				U64* row = s_test_in + (size_t)t * active_count;
-				U64 m = packed_live_in_mask;
-				while(m) {
-					U32 r = __ffsll((long long)m) - 1;
-					m &= m - 1;
-					s_regs[(size_t)r * blk_n + tid] = row[r];
-				}
-				s_regs[tid] = 0ull;
-			}
-
 // step macro
 #define RUN_STEP(K)                                                                                \
 	do {                                                                                             \
@@ -405,6 +298,118 @@ __global__ __launch_bounds__(FilterSimThreadsPerBlock, 2) void opt_filter_kernel
 		if(rd_ != 0u) { s_regs[(size_t)rd_ * blk_n + tid] = v_; }                                      \
 	} while(0)
 
+template<U32 PROG_LEN>
+__global__ __launch_bounds__(FilterSimThreadsPerBlock, 2) void opt_filter_kernel(
+	PackedInstruction* __restrict__ instructions,
+	EnumStateCode* __restrict__ parent_code,
+	U8* __restrict__ pass_count,
+	U64 n_candidates,
+	U64 packed_live_mask,
+	U64 packed_live_in_mask,
+	U32 active_count,
+	CpuState* __restrict__ test_in,
+	CpuState* __restrict__ target_out
+) {
+	U32 tid = threadIdx.x;
+	U32 blk_n = blockDim.x;
+	U64 cand_id = (U64)blockIdx.x * blk_n + tid;
+	U64* s_test_in = (U64*)g_smem;
+	U64* s_target_out = s_test_in + (size_t)FilterTestCount * active_count;
+	U64* s_regs = s_target_out + (size_t)FilterTestCount * active_count;
+
+	// load tests
+	{
+		U32 ac = active_count;
+		U32 total = FilterTestCount * ac;
+		for(U32 i = tid; i < total; i += blk_n) {
+			U32 t = i / ac;
+			U32 r = i - t * ac;
+			U32 raw_r = (U32)c_unpack[r];
+			s_test_in[i] = test_in[t].regs[raw_r];
+			s_target_out[i] = target_out[t].regs[raw_r];
+		}
+	}
+
+	__syncthreads();
+
+	// decode program
+	U32 op_0 = 0, op_1 = 0, op_2 = 0, op_3 = 0, op_4 = 0, op_5 = 0, op_6 = 0, op_7 = 0;
+	U32 rd_0 = 0, rd_1 = 0, rd_2 = 0, rd_3 = 0, rd_4 = 0, rd_5 = 0, rd_6 = 0, rd_7 = 0;
+	U32 rs1_0 = 0, rs1_1 = 0, rs1_2 = 0, rs1_3 = 0, rs1_4 = 0, rs1_5 = 0, rs1_6 = 0, rs1_7 = 0;
+	U32 rs2_0 = 0, rs2_1 = 0, rs2_2 = 0, rs2_3 = 0, rs2_4 = 0, rs2_5 = 0, rs2_6 = 0, rs2_7 = 0;
+	U64 imm_0 = 0, imm_1 = 0, imm_2 = 0, imm_3 = 0, imm_4 = 0, imm_5 = 0, imm_6 = 0, imm_7 = 0;
+	U32 cls_packed = 0;
+	U32 op_class_or = 0;
+
+	// decode programs
+	{
+		UnpackedInstruction unpacked = {};
+
+		if(cand_id < n_candidates)
+			unpacked = instruction_unpack(instructions[cand_id]);
+
+		// slot 0
+		op_0 = (cand_id < n_candidates) ? (U32)cf_meta_op[unpacked.op_idx] : (U32)InstructionOpcode_Nop;
+		rd_0 = (U32)c_slot_idx[unpacked.rd & 31];
+		rs1_0 = (U32)c_slot_idx[unpacked.rs1 & 31];
+
+		if(unpacked.is_imm) {
+			rs2_0 = 0;
+			imm_0 = (U64)cf_imms[unpacked.rs2_or_imm_idx];
+		} else {
+			rs2_0 = (U32)c_slot_idx[unpacked.rs2_or_imm_idx & 31];
+			imm_0 = 0;
+		}
+
+		U32 cls0 = (cand_id < n_candidates) ? (U32)cf_meta_cls[unpacked.op_idx] : 0u;
+		cls_packed |= (cls0 & 0x3u);
+		op_class_or |= cls0;
+
+		// slots 1..prog_len-1: decode parent_code instructions
+		DECODE_SLOT(1);
+		DECODE_SLOT(2);
+		DECODE_SLOT(3);
+		DECODE_SLOT(4);
+		DECODE_SLOT(5);
+		DECODE_SLOT(6);
+		DECODE_SLOT(7);
+	}
+
+	// warp-wide OR, when no lane in this warp has a MUL/DIV op, the whole warp branches past the
+	// heavy paths
+	U32 wc = op_class_or;
+	wc |= __shfl_xor_sync(0xFFFFFFFFu, wc, 1);
+	wc |= __shfl_xor_sync(0xFFFFFFFFu, wc, 2);
+	wc |= __shfl_xor_sync(0xFFFFFFFFu, wc, 4);
+	wc |= __shfl_xor_sync(0xFFFFFFFFu, wc, 8);
+	wc |= __shfl_xor_sync(0xFFFFFFFFu, wc, 16);
+	B32 warp_has_mul = (wc & 1u) != 0;
+	B32 warp_has_div = (wc & 2u) != 0;
+
+	if(cand_id >= n_candidates) return;
+
+	U32 pass_mask = 0;
+	B32 lane_alive = true;
+
+	// run tests
+#pragma unroll 1
+	for(U32 t = 0; t < FilterTestCount; ++t) {
+		B32 ok = false;
+		if(lane_alive) {
+			// load this test's inputs
+			{
+				U64* row = s_test_in + (size_t)t * active_count;
+				U64 m = packed_live_in_mask;
+
+				while(m) {
+					U32 r = __ffsll((long long)m) - 1;
+					m &= m - 1;
+					s_regs[(size_t)r * blk_n + tid] = row[r];
+				}
+
+				s_regs[tid] = 0ull;
+			}
+
 			U32 pl = PROG_LEN;
 			if(pl > 0) RUN_STEP(0);
 			if(pl > 1) RUN_STEP(1);
@@ -414,7 +419,6 @@ __global__ __launch_bounds__(FilterSimThreadsPerBlock, 2) void opt_filter_kernel
 			if(pl > 5) RUN_STEP(5);
 			if(pl > 6) RUN_STEP(6);
 			if(pl > 7) RUN_STEP(7);
-#undef RUN_STEP
 
 			// compare against live-out targets
 			ok = true;
@@ -430,11 +434,8 @@ __global__ __launch_bounds__(FilterSimThreadsPerBlock, 2) void opt_filter_kernel
 			}
 		}
 
-		if(ok) {
-			pass_mask |= (1u << t);
-		} else {
-			lane_alive = false;
-		}
+		if(ok) pass_mask |= (1u << t);
+		else   lane_alive = false;
 
 		// if every lane has failed, break
 		if(!__any_sync(0xFFFFFFFFu, lane_alive)) break;
@@ -443,6 +444,9 @@ __global__ __launch_bounds__(FilterSimThreadsPerBlock, 2) void opt_filter_kernel
 	// pass results
 	pass_count[cand_id] = (pass_mask == 0xFFFFFFFFu) ? (U8)FilterTestCount : (U8)0;
 }
+
+#undef DECODE_SLOT
+#undef RUN_STEP
 
 I32 filter_make(Filter* filter, U64 max_chunk_cands) {
 	filter->max_chunk_cands = 0;
@@ -455,6 +459,7 @@ I32 filter_make(Filter* filter, U64 max_chunk_cands) {
 
 	filter_init_decode_info();
 
+	// get avail VRAM
 	I32 dev = 0;
 	if(cudaGetDevice(&dev) != cudaSuccess) return 1;
 	cudaDeviceProp p;
@@ -468,8 +473,10 @@ I32 filter_make(Filter* filter, U64 max_chunk_cands) {
 		fprintf(stderr, "error: insufficient VRAM for fixed buffers\n");
 		return 4;
 	}
+
 	usable_mem -= fixed_mem_bytes;
 
+	// calculate max candidates we can process per chunk
 	U64 per_cand = sizeof(U8) + 2 * sizeof(U32);
 	U64 chunk = usable_mem / per_cand;
 	U64 hw_warps = (U64)p.multiProcessorCount * p.maxThreadsPerMultiProcessor / 32ull;
@@ -482,6 +489,7 @@ I32 filter_make(Filter* filter, U64 max_chunk_cands) {
 	chunk = (padded_chunk / cpb) * cpb;
 	filter->max_chunk_cands = chunk;
 
+	// allocs
 	dmalloc(&filter->d_test_in, FilterTestCount * sizeof(CpuState));
 	dmalloc(&filter->d_target_out, FilterTestCount * sizeof(CpuState));
 	dmalloc(&filter->d_pass_count, filter->max_chunk_cands * sizeof(U8));
@@ -511,12 +519,11 @@ void filter_free(Filter* filter) {
 	}
 }
 
-void filter_mark_tests_dirty(Filter* filter) { filter->tests_dirty = true; }
-
 void filter_run(Filter* filter, FilterOptions* opt, U8** out_pass_counts) {
 	*out_pass_counts = filter->h_pass_count;
 	if(opt->instructions == 0 || opt->n_candidates == 0) return;
 
+	// verify register count
 	U32 active_count = filter_upload_slot_idx(opt->active_mask);
 	if(active_count == 0 || active_count > FilterMaxActiveRegs) {
 		fprintf(
@@ -527,9 +534,12 @@ void filter_run(Filter* filter, FilterOptions* opt, U8** out_pass_counts) {
 		);
 		return;
 	}
+
+	// extract live masks
 	U64 packed_live_mask = filter_pack_mask(opt->live_mask);
 	U64 packed_live_in_mask = filter_pack_mask(opt->live_in_mask);
 
+	// test set changed, reupload
 	if(filter->tests_dirty) {
 		U64 test_size = FilterTestCount * sizeof(CpuState);
 		htod_memcpy(filter->d_test_in, opt->test_in, test_size);
@@ -537,25 +547,29 @@ void filter_run(Filter* filter, FilterOptions* opt, U8** out_pass_counts) {
 		filter->tests_dirty = false;
 	}
 
+	// calculate shared mem size for filtering kernel
 	U64 ts_pair = 2ull * (U64)FilterTestCount * (U64)active_count * sizeof(U64);
 	U64 shared_cap = (U64)48 * 1024;
 	U64 rf_cap = (shared_cap > ts_pair) ? (shared_cap - ts_pair) : 0;
 	U64 max_threads_by_shared = rf_cap / ((U64)active_count * sizeof(U64));
 	max_threads_by_shared &= ~(U64)31; // round down to warp
-	if(max_threads_by_shared < 32) max_threads_by_shared = 32;
+	if(max_threads_by_shared < 32)
+		max_threads_by_shared = 32;
 	if(max_threads_by_shared > FilterSimThreadsPerBlock)
 		max_threads_by_shared = FilterSimThreadsPerBlock;
 	U32 block_threads = (U32)max_threads_by_shared;
-
 	U64 rf = (U64)block_threads * (U64)active_count * sizeof(U64);
 	U32 shmem_bytes = (U32)(ts_pair + rf);
 
+	// filter all candidates in batches
 	U64 done = 0;
 	while(done < opt->n_candidates) {
-		U64 this_chunk = (opt->n_candidates - done < filter->max_chunk_cands)
-											 ? (opt->n_candidates - done)
-											 : filter->max_chunk_cands;
+		// calculate chunk size
+		U64 this_chunk = filter->max_chunk_cands;
+		if(opt->n_candidates - done < filter->max_chunk_cands)
+			this_chunk = opt->n_candidates - done;
 
+		// calculate launch params
 		U32 n_blocks = (U32)((this_chunk + block_threads - 1) / block_threads);
 		dim3 grid(n_blocks);
 		dim3 block(block_threads);
@@ -572,6 +586,7 @@ void filter_run(Filter* filter, FilterOptions* opt, U8** out_pass_counts) {
 		(CpuState*)filter->d_test_in,                                                                  \
 		(CpuState*)filter->d_target_out                                                                \
 	)
+		// launch filtering kernel
 		switch(opt->prog_len) {
 			case 1: LAUNCH(1); break;
 			case 2: LAUNCH(2); break;
@@ -587,6 +602,7 @@ void filter_run(Filter* filter, FilterOptions* opt, U8** out_pass_counts) {
 		}
 #undef LAUNCH
 		check_cuda(cudaGetLastError(), "filter kernel launch");
+		// copy back results
 		dtoh_memcpy(filter->h_pass_count + done, filter->d_pass_count, this_chunk * sizeof(U8));
 		done += this_chunk;
 	}

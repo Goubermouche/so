@@ -26,7 +26,7 @@ typedef struct Filter {
 	// host
 	U8* h_pass_count;
 	U64 h_pass_count_cap;
-	B32 tests_dirty;
+	B32 tests_dirty;    // if true, reuploads test set on run
 } Filter;
 
 typedef struct FilterOptions {
@@ -43,7 +43,6 @@ typedef struct FilterOptions {
 
 I32 filter_make(Filter* filter, U64 max_chunk_cands);
 void filter_free(Filter* filter);
-void filter_mark_tests_dirty(Filter* filter);
 void filter_run(Filter* filter, FilterOptions* opt, U8** out_pass_counts);
 
 U32 filter_upload_slot_idx(U64 active_mask);

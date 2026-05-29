@@ -231,7 +231,7 @@ B32 optimizer_filter_batch(Optimizer* optimizer, U32 len) {
 				optimizer->counterexample_count++;
 				optimizer->test_in[slot] = res.counterexample;
 				optimizer->target_out[slot] = ext_run_program(optimizer->prog, &res.counterexample);
-				filter_mark_tests_dirty(&optimizer->filter);
+				optimizer->filter.tests_dirty = true; // test set changed, mark dirty
 				return false;
 			}
 		}
@@ -316,5 +316,5 @@ void optimizer_init_tests(Optimizer* optimizer) {
 		optimizer->target_out[t] = ext_run_program(optimizer->prog, &in);
 	}
 
-	filter_mark_tests_dirty(&optimizer->filter);
+	optimizer->filter.tests_dirty = true; // new tests, mark dirty
 }
