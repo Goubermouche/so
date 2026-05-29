@@ -66,7 +66,7 @@ I32 optimizer_run(Optimizer* optimizer, Program* program) {
 	F64 t0 = get_time_ms();
 	B32 found = false;
 
-	for(U32 len = 1; len <= MaxProgramLen; ++len) {
+	for(U32 len = 1; len < program->size; ++len) {
 		printf("  searching length %u\n", len);
 		if(optimizer_run_length(optimizer, len)) {
 			found = true;
@@ -280,7 +280,7 @@ void optimizer_log_startup(Optimizer* optimizer) {
 
 void optimizer_log_results(Optimizer* optimizer, B32 found) {
 	if(!found) {
-		printf("done: no optimizations found (len: %u)\n", MaxProgramLen);
+		printf("done: no optimizations found (len: %u)\n", optimizer->prog->size);
 		return;
 	}
 
