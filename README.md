@@ -10,7 +10,7 @@ nix-shell
 Currently gathered by `./out/sup ./test/addmul.s -e rv32i, rv32m`.
 | GPU      | Enumerate (cand/sec) | Filter (cand/sec) |
 |----------|----------------------|-------------------|
-| GTX 1070 | 4800M                | 4300M             |
+| GTX 1070 | 4800M                | 5000M             |
 ## resources
 - [**riscv-opcodes**](https://github.com/riscv/riscv-opcodes)
 - [**HieraSynth**](https://dl.acm.org/doi/10.1145/3763162)

@@ -193,6 +193,7 @@ B32 optimizer_filter_batch(Optimizer* optimizer, U32 len) {
 	cfg.instructions = (PackedInstruction*)e->d_instructions;
 	cfg.parent_code = (EnumStateCode*)e->d_last_front_code + e->out_parent_base;
 	cfg.n_candidates = p_cnt;
+	cfg.n_parents = e->out_n_parents_chunk;
 	cfg.test_in = optimizer->test_in;
 	cfg.target_out = optimizer->target_out;
 

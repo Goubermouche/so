@@ -103,6 +103,37 @@ void filter_upload_meta(EnumMeta* h_meta, U32 n_meta, I64* h_imms, U32 n_imms) {
 	cudaMemcpyToSymbol(cf_imms, h_imms, n_imms * sizeof(I64));
 }
 
+__global__ void filter_transcode_kernel(
+	EnumStateCode* __restrict__ parent_code,
+	FilterSlot* __restrict__ out_slots,
+	U32 n_parents,
+	U32 prog_len
+) {
+	// transcode parent_code into filter slots to save memory
+	U32 idx = blockIdx.x * blockDim.x + threadIdx.x;
+	U32 slot = idx % (prog_len - 1) + 1; // which instruction slot (1..prog_len-1)
+	U32 pid = idx / (prog_len - 1);			 // which parent
+	if(pid >= n_parents) return;
+
+	Instruction* in = &parent_code[pid].code[slot];
+	InstructionOpcode op = (InstructionOpcode)in->op;
+	U32 info = (U32)c_decode_info[op];
+	U32 rmask = info & 0xF;
+	U32 islot = (info >> 8) & 0xF;
+
+	// remap
+	U32 rd = c_slot_idx[(U32)in->operands[0].reg & 31];
+	U32 rs1 = (rmask & 0x2) ? (U32)c_slot_idx[(U32)in->operands[1].reg & 31] : 0u;
+	U32 rs2 = (rmask & 0x4) ? (U32)c_slot_idx[(U32)in->operands[2].reg & 31] : 0u;
+	U64 imm = (islot < 4) ? in->operands[islot].imm : 0ull;
+
+	FilterSlot s;
+	s.op = (U16)op;
+	s.regs = (U16)(rd | (rs1 << 5) | (rs2 << 10));
+	s.imm = imm;
+	out_slots[idx] = s;
+}
+
 #define DECODE_SLOT(K)                                                                             \
 	do {                                                                                             \
 		InstructionOpcode op_ = InstructionOpcode_Nop;                                                 \
@@ -110,16 +141,14 @@ void filter_upload_meta(EnumMeta* h_meta, U32 n_meta, I64* h_imms, U32 n_imms) {
 		U64 imm_ = 0;                                                                                  \
 		U32 cls_K = 0;                                                                                 \
 		if(cand_id < n_candidates && (K) < PROG_LEN) {                                                 \
-			Instruction* in_ = &parent_code[unpacked.parent_local_id].code[K];                           \
-			op_ = (InstructionOpcode)in_->op;                                                            \
+			FilterSlot s_ = filter_slots[unpacked.parent_local_id * (PROG_LEN - 1) + ((K) - 1)];         \
+			op_ = (InstructionOpcode)s_.op;                                                              \
 			U32 info_ = (U32)c_decode_info[op_];                                                         \
-			U32 rmask_ = info_ & 0xF;                                                                    \
-			U32 islot_ = (info_ >> 8) & 0xF;                                                             \
 			cls_K = (info_ >> 12) & 0x3;                                                                 \
-			rd_ = c_slot_idx[(U32)in_->operands[0].reg & 31];                                            \
-			rs1_ = (rmask_ & 0x2) ? (U32)c_slot_idx[(U32)in_->operands[1].reg & 31] : 0u;                \
-			rs2_ = (rmask_ & 0x4) ? (U32)c_slot_idx[(U32)in_->operands[2].reg & 31] : 0u;                \
-			imm_ = (islot_ < 4) ? in_->operands[islot_].imm : 0ull;                                      \
+			rd_  = (U32)(s_.regs & 0x1Fu);                                                               \
+			rs1_ = (U32)((s_.regs >> 5) & 0x1Fu);                                                        \
+			rs2_ = (U32)((s_.regs >> 10) & 0x1Fu);                                                       \
+			imm_ = s_.imm;                                                                               \
 		}                                                                                              \
 		op_##K = op_;                                                                                  \
 		rd_##K = rd_;                                                                                  \
@@ -148,7 +177,7 @@ void filter_upload_meta(EnumMeta* h_meta, U32 n_meta, I64* h_imms, U32 n_imms) {
 template<U32 PROG_LEN>
 __global__ __launch_bounds__(FilterSimThreadsPerBlock, 2) void opt_filter_kernel(
 	PackedInstruction* __restrict__ instructions,
-	EnumStateCode* __restrict__ parent_code,
+	FilterSlot* __restrict__ filter_slots,
 	U32* __restrict__ pass_bits,
 	U64 n_candidates,
 	U64 packed_live_mask,
@@ -210,7 +239,7 @@ __global__ __launch_bounds__(FilterSimThreadsPerBlock, 2) void opt_filter_kernel
 			imm_0 = 0;
 		}
 
-		// slots 1..prog_len-1: decode parent_code instructions
+		// slots 1..prog_len-1:
 		DECODE_SLOT(1);
 		DECODE_SLOT(2);
 		DECODE_SLOT(3);
@@ -298,9 +327,11 @@ __global__ __launch_bounds__(FilterSimThreadsPerBlock, 2) void opt_filter_kernel
 
 I32 filter_make(Filter* filter, U64 max_chunk_cands) {
 	filter->max_chunk_cands = 0;
+	filter->max_filter_slots = 0;
 	filter->d_test_in = 0;
 	filter->d_target_out = 0;
 	filter->d_pass_bits = 0;
+	filter->d_filter_slots = 0;
 	filter->h_pass_bits = 0;
 	filter->h_pass_bits_cap = 0;
 	filter->tests_dirty = true;
@@ -342,6 +373,10 @@ I32 filter_make(Filter* filter, U64 max_chunk_cands) {
 	dmalloc(&filter->d_target_out, FilterTestCount * sizeof(CpuState));
 	U64 pass_words = (filter->max_chunk_cands + 31u) / 32u;
 	dmalloc(&filter->d_pass_bits, pass_words * sizeof(U32));
+	// filter slot buffer: one FilterSlot per (parent, slot-index) pair,
+	// parents per chunk <= max_chunk_cands; slots per parent = MaxProgramLen - 1
+	filter->max_filter_slots = filter->max_chunk_cands * (MaxProgramLen - 1);
+	dmalloc(&filter->d_filter_slots, filter->max_filter_slots * sizeof(FilterSlot));
 
 	filter->h_pass_bits_cap = pass_words;
 	if(cudaMallocHost((void**)&filter->h_pass_bits, filter->h_pass_bits_cap * sizeof(U32)) !=
@@ -350,7 +385,7 @@ I32 filter_make(Filter* filter, U64 max_chunk_cands) {
 		if(!filter->h_pass_bits) return 5;
 	}
 
-	U64 used_mem = fixed_mem_bytes + pass_words * sizeof(U32);
+	U64 used_mem = fixed_mem_bytes + pass_words * sizeof(U32) + filter->max_filter_slots * sizeof(FilterSlot);
 
 	printf("filter:\n");
 	printf("  chunk size: %zu cands\n", filter->max_chunk_cands);
@@ -363,6 +398,7 @@ void filter_free(Filter* filter) {
 	if(filter->d_test_in) cudaFree(filter->d_test_in);
 	if(filter->d_target_out) cudaFree(filter->d_target_out);
 	if(filter->d_pass_bits) cudaFree(filter->d_pass_bits);
+	if(filter->d_filter_slots) cudaFree(filter->d_filter_slots);
 	if(filter->h_pass_bits) {
 		if(cudaFreeHost(filter->h_pass_bits) != cudaSuccess) free(filter->h_pass_bits);
 	}
@@ -410,6 +446,20 @@ void filter_run(Filter* filter, FilterOptions* opt, U32** out_pass_bits) {
 	U64 rf = (U64)block_threads * (U64)active_count * sizeof(U64);
 	U32 shmem_bytes = (U32)(ts_pair + rf);
 
+	// transcode parent code to compact FilterSlots on the GPU once per run
+	if(opt->prog_len > 1 && opt->n_parents > 0) {
+		U32 total_slots = (U32)(opt->n_parents * (opt->prog_len - 1));
+		U32 tc_block = 256;
+		U32 tc_grid = (total_slots + tc_block - 1) / tc_block;
+		filter_transcode_kernel<<<tc_grid, tc_block>>>(
+			opt->parent_code,
+			(FilterSlot*)filter->d_filter_slots,
+			(U32)opt->n_parents,
+			opt->prog_len
+		);
+		check_cuda(cudaGetLastError(), "filter transcode kernel");
+	}
+
 	// filter all candidates in batches
 	U64 done = 0;
 	while(done < opt->n_candidates) {
@@ -428,7 +478,7 @@ void filter_run(Filter* filter, FilterOptions* opt, U32** out_pass_bits) {
 #define LAUNCH(N)                                                                                  \
 	opt_filter_kernel<N><<<grid, block, shmem_bytes>>>(                                              \
 		opt->instructions + done,                                                                      \
-		opt->parent_code,                                                                              \
+		(FilterSlot*)filter->d_filter_slots,                                                           \
 		(U32*)filter->d_pass_bits,                                                                     \
 		this_chunk,                                                                                    \
 		packed_live_mask,                                                                              \

@@ -19,15 +19,23 @@
 
 typedef struct Filter {
 	U64 max_chunk_cands;
+	U64 max_filter_slots; // capacity of d_filter_slots in FilterSlot elements
 	// device
 	void* d_test_in;		// reference inputs
 	void* d_target_out; // reference outputs
 	void* d_pass_bits;  // per-candidate pass bit (1 => passed all tests, 0 => failed)
+	void* d_filter_slots; // transcoded compact parent slots [n_parents * (prog_len-1)]
 	// host
 	U32* h_pass_bits;
 	U64 h_pass_bits_cap; // capacity in U32 words
 	B32 tests_dirty;    // if true, reuploads test set on run
 } Filter;
+
+typedef struct FilterSlot {
+	U16 op;		// InstructionOpcode (TODO)
+	U16 regs; // rd[4:0] | rs1[9:5] | rs2[14:10]
+	U64 imm;	// (0 when not used)
+} FilterSlot;
 
 typedef struct FilterOptions {
 	U64 live_mask;
@@ -37,6 +45,7 @@ typedef struct FilterOptions {
 	PackedInstruction* instructions;
 	EnumStateCode* parent_code; // indexed by parent_local_id
 	U64 n_candidates;
+	U64 n_parents;              // number of distinct parents in this chunk
 	CpuState* test_in;
 	CpuState* target_out;
 } FilterOptions;
