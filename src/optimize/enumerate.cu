@@ -106,39 +106,6 @@ void enum_make_meta_host(EnumOpcodePool* pool, EnumMeta* out, U32* out_n) {
 	*out_n = n;
 }
 
-__device__ __forceinline__ void
-opt_build_inst(EnumMeta* m, U32 rd, U32 rs1, U32 rs2_or_imm_idx, B32 is_imm, Instruction* out) {
-	Instruction in;
-	in.op = (InstructionOpcode)m->op;
-#pragma unroll
-	for(U32 k = 0; k < 4; ++k) { in.operands[k].imm = 0; }
-
-	in.operands[m->dst_slot].reg = (Reg)rd;
-	if(m->src_slot >= 0) { in.operands[m->src_slot].reg = (Reg)rs1; }
-	if(!is_imm && m->src2_slot >= 0) { in.operands[m->src2_slot].reg = (Reg)rs2_or_imm_idx; }
-	if(is_imm && m->imm_slot >= 0) { in.operands[m->imm_slot].imm = (U64)c_imms[rs2_or_imm_idx]; }
-
-	*out = in;
-}
-
-__device__ __forceinline__ U64
-pack_emit_tuple(U32 parent_local_id, U32 op_idx, U32 rd, U32 rs1, U32 rs2_or_imm_idx, B32 is_imm) {
-	// 64-bit packed encoding consumed
-	// bits:
-	// - 0-31  parent_local_id
-	// - 32-39 op_idx
-	// - 40-44 rd
-	// - 45-49 rs1
-	// - 50-57 rs2_or_imm_idx
-	// - 58    is_imm
-	U64 t = (U64)parent_local_id & 0xFFFFFFFFull;
-	t |= ((U64)op_idx & 0xFFull) << 32;
-	t |= ((U64)rd & 0x1Full) << 40;
-	t |= ((U64)rs1 & 0x1Full) << 45;
-	t |= ((U64)rs2_or_imm_idx & 0xFFull) << 50;
-	t |= ((U64)(is_imm ? 1u : 0u)) << 58;
-	return t;
-}
 
 template<B32 EMIT, B32 LAST>
 __device__ __forceinline__ U32 opt_try_one(
@@ -155,7 +122,7 @@ __device__ __forceinline__ U32 opt_try_one(
 	U32 parent_local_id,
 	EnumStateHeader* dst_hdr,
 	EnumStateCode* dst_code,
-	U64* dst_tuples,
+	U64* dst_instructions,
 	U64 write_base,
 	U32* write_local,
 	U64 cap_states,
@@ -185,8 +152,8 @@ __device__ __forceinline__ U32 opt_try_one(
 		++(*write_local);
 		if constexpr(LAST) {
 			if(slot < cap_cands) {
-				dst_tuples[slot] =
-					pack_emit_tuple(parent_local_id, op_idx, rd, rs1, rs2_or_imm_idx, is_imm);
+				UnpackedInstruction inst = {parent_local_id, op_idx, rd, rs1, rs2_or_imm_idx, is_imm};
+				dst_instructions[slot] = instruction_pack(inst);
 			}
 		} else {
 			if(slot < cap_states) {
@@ -200,7 +167,8 @@ __device__ __forceinline__ U32 opt_try_one(
 				EnumStateCode nc;
 #pragma unroll
 				for(U32 k = 0; k < MaxProgramLen; ++k) { nc.code[k] = src_code->code[k]; }
-				opt_build_inst(m, rd, rs1, rs2_or_imm_idx, is_imm, &nc.code[src_hdr->idx]);
+				UnpackedInstruction inst = {0, 0, rd, rs1, rs2_or_imm_idx, is_imm};
+				nc.code[src_hdr->idx] = enum_build_inst(m, inst, c_imms);
 				dst_code[slot] = nc;
 			}
 		}
@@ -218,7 +186,7 @@ __device__ U32 opt_expand_one(
 	U32 parent_local_id,
 	EnumStateHeader* dst_hdr,
 	EnumStateCode* dst_code,
-	U64* dst_tuples,
+	U64* dst_instructions,
 	U64 write_base,
 	U64 cap_states,
 	U64 cap_cands
@@ -279,7 +247,7 @@ __device__ U32 opt_expand_one(
 								parent_local_id,
 								dst_hdr,
 								dst_code,
-								dst_tuples,
+								dst_instructions,
 								write_base,
 								&write_local,
 								cap_states,
@@ -309,7 +277,7 @@ __device__ U32 opt_expand_one(
 								parent_local_id,
 								dst_hdr,
 								dst_code,
-								dst_tuples,
+								dst_instructions,
 								write_base,
 								&write_local,
 								cap_states,
@@ -335,7 +303,7 @@ __device__ U32 opt_expand_one(
 							parent_local_id,
 							dst_hdr,
 							dst_code,
-							dst_tuples,
+							dst_instructions,
 							write_base,
 							&write_local,
 							cap_states,
@@ -363,7 +331,7 @@ __device__ U32 opt_expand_one(
 							parent_local_id,
 							dst_hdr,
 							dst_code,
-							dst_tuples,
+							dst_instructions,
 							write_base,
 							&write_local,
 							cap_states,
@@ -413,13 +381,13 @@ __global__ void opt_emit_kernel_upper(
 	);
 }
 
-__global__ void opt_emit_tuples_kernel(
+__global__ void opt_emi_insntructions_kernel(
 	EnumStateHeader* __restrict__ src_hdr_front,
 	U32 n_src,
 	U64* __restrict__ d_offsets,
 	U64 base_adjust,
 	EnumLayer e,
-	U64* __restrict__ dst_tuples,
+	U64* __restrict__ dst_instructions,
 	U64 cap_cands
 ) {
 	U32 tid = blockIdx.x * blockDim.x + threadIdx.x;
@@ -427,7 +395,7 @@ __global__ void opt_emit_tuples_kernel(
 
 	EnumStateHeader src_hdr = src_hdr_front[tid];
 	U64 base = d_offsets[tid] - base_adjust;
-	opt_expand_one<true, true>(&e, &src_hdr, 0, tid, 0, 0, dst_tuples, base, 0, cap_cands);
+	opt_expand_one<true, true>(&e, &src_hdr, 0, tid, 0, 0, dst_instructions, base, 0, cap_cands);
 }
 
 I32 enum_make(Enum* e, U64 batch_size) {
@@ -458,7 +426,7 @@ I32 enum_make(Enum* e, U64 batch_size) {
 	dmalloc(&e->d_front_b_code, capacity * sizeof(EnumStateCode));
 	dmalloc(&e->d_counts, capacity * sizeof(U32));
 	dmalloc(&e->d_offsets, capacity * sizeof(U64));
-	dmalloc(&e->d_tuples, capacity * sizeof(U64));
+	dmalloc(&e->d_instructions, capacity * sizeof(U64));
 	e->scan_tmp_bytes = 0;
 	device_exclusive_sum(0, &e->scan_tmp_bytes, (U32*)e->d_counts, (U64*)e->d_offsets, (I32)capacity);
 	dmalloc(&e->d_scan_tmp, e->scan_tmp_bytes);
@@ -468,7 +436,7 @@ I32 enum_make(Enum* e, U64 batch_size) {
 
 void enum_free(Enum* e) {
 	if(e->d_scan_tmp) { cudaFree(e->d_scan_tmp); }
-	if(e->d_tuples) { cudaFree(e->d_tuples); }
+	if(e->d_instructions) { cudaFree(e->d_instructions); }
 	if(e->d_offsets) { cudaFree(e->d_offsets); }
 	if(e->d_counts) { cudaFree(e->d_counts); }
 	if(e->d_front_b_code) { cudaFree(e->d_front_b_code); }
@@ -685,15 +653,15 @@ U64 enum_emit_batch(Enum* e) {
 
 	if(emitted > 0) {
 		U32 threads = 256;
-		U64* d_tuples = (U64*)e->d_tuples;
+		U64* d_instructions = (U64*)e->d_instructions;
 		EnumStateHeader* d_hdr = (EnumStateHeader*)e->d_last_front_hdr;
 
-		// emit packed tuples per cand
+		// emit packed instructions per cand
 		U32 emit_blocks = (U32)((k + threads - 1) / threads);
-		opt_emit_tuples_kernel<<<emit_blocks, threads>>>(
-			d_hdr + cursor, (U32)k, d_offsets + cursor, base_off, lctx, d_tuples, cap
+		opt_emi_insntructions_kernel<<<emit_blocks, threads>>>(
+			d_hdr + cursor, (U32)k, d_offsets + cursor, base_off, lctx, d_instructions, cap
 		);
-		check_cuda(cudaGetLastError(), "enum emit tuples kernel");
+		check_cuda(cudaGetLastError(), "enum emit instructions kernel");
 		check_cuda(cudaDeviceSynchronize(), "enum emit sync");
 	}
 

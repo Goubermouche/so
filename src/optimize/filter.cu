@@ -246,7 +246,7 @@ extern __shared__ U8 g_smem[];
 
 template<U32 PROG_LEN>
 __global__ __launch_bounds__(FilterSimThreadsPerBlock, 2) void opt_filter_kernel(
-	U64* __restrict__ tuples,
+	U64* __restrict__ instructions,
 	EnumStateCode* __restrict__ parent_code,
 	U8* __restrict__ pass_count,
 	U64 n_candidates,
@@ -296,13 +296,14 @@ __global__ __launch_bounds__(FilterSimThreadsPerBlock, 2) void opt_filter_kernel
 		U32 rs2_or_imm_idx = 0;
 		B32 is_imm = false;
 		if(cand_id < n_candidates) {
-			t = tuples[cand_id];
-			parent_local_id = (U32)(t & 0xFFFFFFFFull);
-			op_idx = (U32)((t >> 32) & 0xFFull);
-			rd_raw = (U32)((t >> 40) & 0x1Full);
-			rs1_raw = (U32)((t >> 45) & 0x1Full);
-			rs2_or_imm_idx = (U32)((t >> 50) & 0xFFull);
-			is_imm = (B32)((t >> 58) & 0x1ull);
+			t = instructions[cand_id];
+			UnpackedInstruction f = instruction_unpack(t);
+			parent_local_id = f.parent_local_id;
+			op_idx = f.op_idx;
+			rd_raw = f.rd;
+			rs1_raw = f.rs1;
+			rs2_or_imm_idx = f.rs2_or_imm_idx;
+			is_imm = f.is_imm;
 		}
 
 		// slot 0
@@ -515,7 +516,7 @@ void filter_mark_tests_dirty(Filter* filter) { filter->tests_dirty = true; }
 
 void filter_run(Filter* filter, FilterOptions* opt, U8** out_pass_counts) {
 	*out_pass_counts = filter->h_pass_count;
-	if(opt->tuples == 0 || opt->n_candidates == 0) return;
+	if(opt->instructions == 0 || opt->n_candidates == 0) return;
 
 	U32 active_count = filter_upload_slot_idx(opt->active_mask);
 	if(active_count == 0 || active_count > FilterMaxActiveRegs) {
@@ -562,7 +563,7 @@ void filter_run(Filter* filter, FilterOptions* opt, U8** out_pass_counts) {
 
 #define LAUNCH(N)                                                                                  \
 	opt_filter_kernel<N><<<grid, block, shmem_bytes>>>(                                              \
-		opt->tuples + done,                                                                            \
+		opt->instructions + done,                                                                      \
 		opt->parent_code,                                                                              \
 		(U8*)filter->d_pass_count,                                                                     \
 		this_chunk,                                                                                    \

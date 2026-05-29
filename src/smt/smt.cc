@@ -1,8 +1,5 @@
 #include "smt/smt.h"
-#include "extensions/rv32i/smt.h"
-#include "extensions/rv32m/smt.h"
-#include "extensions/rv64i/smt.h"
-#include "extensions/rv64m/smt.h"
+#include "extensions/smt.h"
 #include "util/type.h"
 
 // thread-local Z3 error capture
@@ -241,6 +238,7 @@ SMT_State smt_run(Z3_context ctx, SMT_State* in, Program* p) {
 			}
 		}
 
+		// build solver
 		SMT_Decode dec = {};
 		dec.op = op;
 		dec.d = info->dst_slot >= 0 ? ins.operands[info->dst_slot].reg : 0;
@@ -248,12 +246,7 @@ SMT_State smt_run(Z3_context ctx, SMT_State* in, Program* p) {
 		dec.s2 = info->src2_slot >= 0 ? ins.operands[info->src2_slot].reg : 0;
 		dec.imm = imm;
 
-		// build solver
-		B32 handled = false;
-		if(!handled) handled = ext_rv32i_smt(ctx, &regs, &dec);
-		if(!handled) handled = ext_rv64i_smt(ctx, &regs, &dec);
-		if(!handled) handled = ext_rv32m_smt(ctx, &regs, &dec);
-		if(!handled) handled = ext_rv64m_smt(ctx, &regs, &dec);
+		B32 handled = ext_smt(ctx, &regs, &dec);
 
 		Z3_dec_ref(ctx, imm);
 		Assert(handled, "smt: unknown InstructionOpcode\n");

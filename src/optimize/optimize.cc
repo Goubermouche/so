@@ -164,35 +164,19 @@ B32 optimizer_run_length(Optimizer* optimizer, U32 len) {
 void optimizer_reconstruct_survivor(Optimizer* optimizer, U64 i, U32 len, Instruction* out_inst) {
 	Enum* e = &optimizer->enumerate;
 
-	// fetch the tuple for this cand
-	U64 tuple = 0;
-	dtoh_memcpy(&tuple, (U64*)e->d_tuples + i, sizeof(U64));
-	// decode
-	U32 parent_local_id = (U32)(tuple & 0xFFFFFFFFull);
-	U32 op_idx = (U32)((tuple >> 32) & 0xFFull);
-	U32 rd = (U32)((tuple >> 40) & 0x1Full);
-	U32 rs1 = (U32)((tuple >> 45) & 0x1Full);
-	U32 rs2_or_imm_idx = (U32)((tuple >> 50) & 0xFFull);
-	B32 is_imm = (B32)((tuple >> 58) & 0x1ull);
+	// fetch + decode the instruction for this cand
+	U64 packed = 0;
+	dtoh_memcpy(&packed, (U64*)e->d_instructions + i, sizeof(U64));
+	UnpackedInstruction inst = instruction_unpack(packed);
 
 	// pull parent code (slot-0 will be overwritten by the built instruction)
 	EnumStateCode parent_code;
-	EnumStateCode* d_parent_code = (EnumStateCode*)e->d_last_front_code + e->out_parent_base + parent_local_id;
+	EnumStateCode* d_parent_code = (EnumStateCode*)e->d_last_front_code + e->out_parent_base + inst.parent_local_id;
 	dtoh_memcpy(&parent_code, d_parent_code, sizeof(EnumStateCode));
 
-	// build slot-0 instruction from the tuple + meta + imm pool (host copies)
-	EnumMeta& m = optimizer->cur_meta[op_idx];
-	Instruction built;
-	built.op = (InstructionOpcode)m.op;
-	for(U32 k = 0; k < 4; ++k) { built.operands[k].imm = 0; }
-	built.operands[m.dst_slot].reg = (Reg)rd;
-	if(m.src_slot >= 0) { built.operands[m.src_slot].reg = (Reg)rs1; }
-	if(!is_imm && m.src2_slot >= 0) { built.operands[m.src2_slot].reg = (Reg)rs2_or_imm_idx; }
-	if(is_imm && m.imm_slot >= 0) {
-		built.operands[m.imm_slot].imm = (U64)optimizer->cur_imms.vals[rs2_or_imm_idx];
-	}
-
-	out_inst[0] = built;
+	// build slot-0 instruction from the packed instruction + meta + imm pool (host copies)
+	EnumMeta& m = optimizer->cur_meta[inst.op_idx];
+	out_inst[0] = enum_build_inst(&m, inst, optimizer->cur_imms.vals);
 	for(U32 k = 1; k < len; ++k) { out_inst[k] = parent_code.code[k]; }
 }
 
@@ -206,7 +190,7 @@ B32 optimizer_filter_batch(Optimizer* optimizer, U32 len) {
 	cfg.live_in_mask = optimizer->live_in;
 	cfg.active_mask = optimizer->cur_active_mask;
 	cfg.prog_len = len;
-	cfg.tuples = (U64*)e->d_tuples;
+	cfg.instructions = (U64*)e->d_instructions;
 	cfg.parent_code = (EnumStateCode*)e->d_last_front_code + e->out_parent_base;
 	cfg.n_candidates = p_cnt;
 	cfg.test_in = optimizer->test_in;
@@ -246,7 +230,7 @@ B32 optimizer_filter_batch(Optimizer* optimizer, U32 len) {
 				U32 slot = 16 + (optimizer->counterexample_count % 16);
 				optimizer->counterexample_count++;
 				optimizer->test_in[slot] = res.counterexample;
-				optimizer->target_out[slot] = filter_run_host(optimizer->prog, &res.counterexample);
+				optimizer->target_out[slot] = ext_run_program(optimizer->prog, &res.counterexample);
 				filter_mark_tests_dirty(&optimizer->filter);
 				return false;
 			}
@@ -329,7 +313,7 @@ void optimizer_init_tests(Optimizer* optimizer) {
 
 		in.regs[0] = 0; // x0 invariant
 		optimizer->test_in[t] = in;
-		optimizer->target_out[t] = filter_run_host(optimizer->prog, &in);
+		optimizer->target_out[t] = ext_run_program(optimizer->prog, &in);
 	}
 
 	filter_mark_tests_dirty(&optimizer->filter);

@@ -53,7 +53,7 @@ typedef struct EnumLayer {
 	U64 src_avail; // regs readable as sources at this layer
 	U64 scratch_mask;
 	U32 max_scratch;
-	B32 is_last_layer; // last (bottom) layer emits tuples, not new states
+	B32 is_last_layer; // last (bottom) layer emits instructions, not new states
 } EnumLayer;
 
 typedef struct EnumOptions {
@@ -77,7 +77,7 @@ typedef struct Enum {
 	void* d_front_b_code;
 	void* d_counts;
 	void* d_offsets;
-	void* d_tuples; // last-layer packed (op, rd, rs1, rs2/imm, parent) U64 per cand
+	void* d_instructions; // last-layer packed (op, rd, rs1, rs2/imm, parent) U64 per cand
 	void* d_scan_tmp;
 	U64 scan_tmp_bytes;
 	// last layer
@@ -90,7 +90,7 @@ typedef struct Enum {
 	EnumLayer last_layer_ctx;
 	// output:
 	U64 out_n_cands;
-	U64 out_parent_base;		 // parent index offset for tuples in this chunk
+	U64 out_parent_base;		 // parent index offset for instructions in this chunk
 	U64 out_n_parents_chunk; // number of parents covered by this chunk
 } Enum;
 
@@ -110,5 +110,21 @@ U64 enum_find_chunk_fit(U64* d_offsets, U64 cursor, U64 n_front, U64 total, U64 
 void enum_make_meta_host(EnumOpcodePool* pool, EnumMeta* out, U32* out_n);
 void enum_make_opcode_pool(EnumOpcodePool* pool, U32 ext_mask);
 void enum_make_imm_pool(EnumImmPool* pool, Program* prog);
+
+HostDevice Instruction enum_build_inst(EnumMeta* m, UnpackedInstruction inst, const I64* imms) {
+	Instruction in;
+	in.op = (InstructionOpcode)m->op;
+	for(U32 k = 0; k < 4; ++k) { in.operands[k].imm = 0; }
+
+	in.operands[m->dst_slot].reg = (Reg)inst.rd;
+	if(m->src_slot >= 0) { in.operands[m->src_slot].reg = (Reg)inst.rs1; }
+	if(!inst.is_imm && m->src2_slot >= 0) {
+		in.operands[m->src2_slot].reg = (Reg)inst.rs2_or_imm_idx;
+	}
+	if(inst.is_imm && m->imm_slot >= 0) {
+		in.operands[m->imm_slot].imm = (U64)imms[inst.rs2_or_imm_idx];
+	}
+	return in;
+}
 
 #endif // OPT_ENUMERATE_CUH

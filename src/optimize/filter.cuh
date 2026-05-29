@@ -2,10 +2,7 @@
 #define OPT_DRIVER_CUH
 
 #include "cpu/program.h"
-#include "extensions/rv32i/run.cuh"
-#include "extensions/rv32m/run.cuh"
-#include "extensions/rv64i/run.cuh"
-#include "extensions/rv64m/run.cuh"
+#include "extensions/run.cuh"
 #include "optimize/enumerate.cuh"
 
 #define FilterTestCount 32
@@ -37,7 +34,7 @@ typedef struct FilterOptions {
 	U64 live_in_mask;
 	U64 active_mask;
 	U32 prog_len;
-	U64* tuples;                // per-cand U64 (parent_local_id, op, rd, rs1, rs2/imm, is_imm)
+	PackedInstruction* instructions;
 	EnumStateCode* parent_code; // indexed by parent_local_id
 	U64 n_candidates;
 	CpuState* test_in;
@@ -53,28 +50,5 @@ U32 filter_upload_slot_idx(U64 active_mask);
 U64 filter_pack_mask(U64 raw_mask);
 void filter_init_decode_info();
 void filter_upload_meta(EnumMeta* h_meta, U32 n_meta, I64* h_imms, U32 n_imms);
-
-HostDevice void filter_run_lane(U64 regs[32], Instruction* prog, U32 prog_len) {
-	regs[0] = 0;
-
-	for(U32 i = 0; i < prog_len; ++i) {
-		Instruction* in = &prog[i];
-		U32 op = (U32)in->op;
-
-		if(op == InstructionOpcode_Nop) { continue; }
-
-		if(ext_rv32i_run(op, regs, in)) { continue; };
-		if(ext_rv64i_run(op, regs, in)) { continue; };
-		if(ext_rv32m_run(op, regs, in)) { continue; };
-		if(ext_rv64m_run(op, regs, in)) { continue; };
-	}
-}
-
-inline CpuState filter_run_host(Program* prog, CpuState* in) {
-	CpuState out = *in;
-	out.regs[0] = 0;
-	filter_run_lane(out.regs, prog->instructions, prog->size);
-	return out;
-}
 
 #endif // #ifndef OPT_DRIVER_CUH
